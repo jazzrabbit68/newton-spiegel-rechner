@@ -429,8 +429,8 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
 # STREAMLIT APP
 # ═════════════════════════════════════════════════════════════════════════════
 
-st.set_page_config(page_title="Newton-Spiegel Rechner", layout="wide", page_icon="🔭")
-st.title("🔭 Newton-Spiegel Rechner")
+st.set_page_config(page_title="Newton-Spiegel Rechner", layout="wide")
+st.title("Newton-Spiegel Rechner")
 st.caption("Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
 # ── Seitenleiste: Eingaben ────────────────────────────────────────────────────
@@ -466,43 +466,42 @@ Qp_V   = perceived_quality(D, f, lam, V_slider)
 
 verdict_text, verdict_color = beurteilung(S_real)
 
-# ── Ergebnisse oben ──────────────────────────────────────────────────────────
-st.markdown(f"<div style='background:#f0f0f0;padding:10px 16px;border-radius:8px;"
-            f"border-left:5px solid {'#2e7d32' if verdict_color=='green' else '#e65100' if verdict_color=='orange' else '#c62828'};'>"
-            f"{verdict_text}</div>", unsafe_allow_html=True)
-st.write("")
+# ── Ergebnisse kompakt ───────────────────────────────────────────────────────
+border = {'green': '#2e7d32', 'orange': '#e65100', 'red': '#c62828'}[verdict_color]
+st.markdown(
+    f"<div style='background:#f0f0f0;padding:7px 14px;border-radius:6px;"
+    f"border-left:4px solid {border};font-size:0.85em;margin-bottom:8px'>"
+    f"{verdict_text}</div>", unsafe_allow_html=True)
 
-# Karten Zeile 1: Grunddaten
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("f/D", f"{r['N']:.1f}")
-c2.metric("Strehl", f"{S_real:.4f}")
-c3.metric("D_eff Kontrast", f"{r['Deff_k']:.1f} mm", delta=f"-{r['loss_k']:.1f} mm")
-c4.metric("D_eff Schärfe", f"{r['Deff_s']:.1f} mm", delta=f"-{r['loss_s']:.1f} mm")
-c5.metric("V_krit", f"{Vk['Vk_sph']:.0f}×")
+def row(label, val, sub=""):
+    sub_html = f"<span style='color:#888;font-size:0.8em'> {sub}</span>" if sub else ""
+    return f"<td style='padding:2px 14px 2px 0;white-space:nowrap'><b>{label}</b></td><td style='padding:2px 20px 2px 0;white-space:nowrap'>{val}{sub_html}</td>"
 
-# Karten Zeile 2: Q-Indizes
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Q₀.₂", f"{r['Q02']:.4f}")
-c2.metric("Q₀.₄", f"{r['Q04']:.4f}")
-c3.metric("Q₀.₆", f"{r['Q06']:.4f}")
-c4.metric("Q_vis", f"{r['Qvis']:.4f}")
-
-# Karten Zeile 3: Schärfe bei gewählter Vergrößerung
-st.subheader(f"Schärfe bei {V_slider}×")
-c1, c2 = st.columns(2)
-c1.metric("D_eff Sphäre", f"{rv['Deff_sph']:.1f} mm")
-c2.metric("Verlust", f"{rv['verlust']:.1f} mm",
-          delta=f"-{rv['verlust']:.1f} mm" if rv['verlust'] > 0 else None,
-          delta_color="inverse")
-
-# Karten Zeile 4: Wahrnehmung
-def qcolor(q): return "normal" if q >= 0.9 else "off"
-st.subheader("Wahrgenommener Kontrast Q_perc (CSF-gewichtet)")
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Q_perc bei 30×",   f"{Qp_30:.3f}")
-c2.metric("Q_perc bei 80×",   f"{Qp_80:.3f}")
-c3.metric("Q_perc bei 160×",  f"{Qp_160:.3f}")
-c4.metric(f"Q_perc bei {V_slider}×", f"{Qp_V:.3f}")
+st.markdown(f"""
+<table style='font-size:0.88em;border-collapse:collapse;width:100%'>
+<tr>
+  {row("f/D", f"{r['N']:.1f}")}
+  {row("Strehl", f"{S_real:.4f}")}
+  {row("D_eff Kontrast", f"{r['Deff_k']:.1f} mm", f"−{r['loss_k']:.1f} mm")}
+  {row("D_eff Schärfe", f"{r['Deff_s']:.1f} mm", f"−{r['loss_s']:.1f} mm")}
+  {row("V_krit", f"{Vk['Vk_sph']:.0f}×")}
+</tr>
+<tr>
+  {row("Q₀.₂", f"{r['Q02']:.4f}")}
+  {row("Q₀.₄", f"{r['Q04']:.4f}")}
+  {row("Q₀.₆", f"{r['Q06']:.4f}")}
+  {row("Q_vis", f"{r['Qvis']:.4f}")}
+  {row(f"D_eff Sphäre ({V_slider}×)", f"{rv['Deff_sph']:.1f} mm", f"−{rv['verlust']:.1f} mm")}
+</tr>
+<tr>
+  {row("Q_perc 30×",  f"{Qp_30:.3f}")}
+  {row("Q_perc 80×",  f"{Qp_80:.3f}")}
+  {row("Q_perc 160×", f"{Qp_160:.3f}")}
+  {row(f"Q_perc {V_slider}×", f"{Qp_V:.3f}")}
+  <td></td><td></td>
+</tr>
+</table>
+""", unsafe_allow_html=True)
 
 st.divider()
 
