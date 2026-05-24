@@ -507,7 +507,8 @@ c4.metric(f"Q_perc bei {V_slider}×", f"{Qp_V:.3f}")
 st.divider()
 
 # ── Diagramme ─────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+st.subheader("Diagramme")
+diagramm = st.selectbox("Diagramm wählen", [
     "Strehl vs. f/D",
     "Eff. Öffnung vs. f/D",
     "D_eff vs. Öffnung",
@@ -516,23 +517,35 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Wahrnehmung",
 ])
 
-with tab1:
-    st.pyplot(fig_strehl(D, f, lam, S_slide), use_container_width=True)
+if diagramm == "Strehl vs. f/D":
+    fig = fig_strehl(D, f, lam, S_slide)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
 
-with tab2:
-    st.pyplot(fig_oeffnung(D, f, lam, S_slide), use_container_width=True)
+elif diagramm == "Eff. Öffnung vs. f/D":
+    fig = fig_oeffnung(D, f, lam, S_slide)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
 
-with tab3:
-    st.pyplot(fig_deff_D(D, r["N"], S_slide), use_container_width=True)
+elif diagramm == "D_eff vs. Öffnung":
+    fig = fig_deff_D(D, r["N"], S_slide)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
 
-with tab4:
-    st.pyplot(fig_beugung(D, f), use_container_width=True)
+elif diagramm == "Beugungsgrenze":
+    fig = fig_beugung(D, f)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
 
-with tab5:
-    st.pyplot(fig_mtf(D, f, lam, S_slide, V_slider), use_container_width=True)
+elif diagramm == "MTF":
+    fig = fig_mtf(D, f, lam, S_slide, V_slider)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
 
-with tab6:
-    st.pyplot(fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real), use_container_width=True)
+elif diagramm == "Wahrnehmung":
+    fig = fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
 
 st.divider()
 st.caption("Formeln: Maréchal-Näherung · MTF via Pupillen-Autokorrelation · CSF nach van Meeteren · "
