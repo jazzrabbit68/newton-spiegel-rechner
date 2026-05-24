@@ -166,6 +166,7 @@ def beurteilung(strehl):
 
 def ax_fmt(ax):
     ax.grid(True, color="#ddd", lw=0.5)
+    ax.tick_params(axis="both", labelsize=6)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -186,17 +187,17 @@ def fig_strehl(D, f, lam, S_slide):
     ax.axvline(N_akt, color="#ccc", lw=0.8, ls=":")
     ax.scatter([N_akt], [S_akt], color=ACC, s=60, zorder=5)
     ax.annotate(f"f/{N_akt:.1f}  S={S_akt:.3f}", xy=(N_akt, S_akt),
-                xytext=(8, 10), textcoords="offset points", fontsize=7, color="#333",
+                xytext=(8, 10), textcoords="offset points", fontsize=6, color="#333",
                 arrowprops=dict(arrowstyle="-", color="#aaa"))
     if S_slide > S_akt + 0.01:
         ax.axhline(S_slide, color=COR, lw=1.5, ls="-.", label=f"Schieber S={S_slide:.3f}")
     ax.set_xlim(3, 15); ax.set_ylim(0, 1.08)
-    ax.set_xlabel("Öffnungsverhältnis f/D", fontsize=7)
-    ax.set_ylabel("Strehl-Quotient", fontsize=7)
-    ax.set_title(f"Strehl vs. f/D  (D={D:.0f}mm, λ={lam:.0f}nm)", fontsize=7)
+    ax.set_xlabel("Öffnungsverhältnis f/D", fontsize=6)
+    ax.set_ylabel("Strehl-Quotient", fontsize=6)
+    ax.set_title(f"Strehl vs. f/D  (D={D:.0f}mm, λ={lam:.0f}nm)", fontsize=6)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"f/{x:.0f}" if x == int(x) else ""))
     ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
-    ax.legend(fontsize=7, loc="lower right"); ax_fmt(ax)
+    ax.legend(fontsize=6, loc="lower right"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
 def fig_oeffnung(D, f, lam, S_slide):
@@ -221,12 +222,12 @@ def fig_oeffnung(D, f, lam, S_slide):
         ax.scatter([N_akt], [r_sl["Deff_s"]], color=COR, s=120, marker="*", zorder=6,
                    label=f"Schieber Schärfe {r_sl['Deff_s']:.0f}mm")
     ax.set_xlim(3, 15)
-    ax.set_xlabel("Öffnungsverhältnis f/D", fontsize=7)
-    ax.set_ylabel("Effektive Öffnung [mm]", fontsize=7)
-    ax.set_title(f"Eff. Öffnung vs. f/D  (D={D:.0f}mm, λ={lam:.0f}nm)", fontsize=7)
+    ax.set_xlabel("Öffnungsverhältnis f/D", fontsize=6)
+    ax.set_ylabel("Effektive Öffnung [mm]", fontsize=6)
+    ax.set_title(f"Eff. Öffnung vs. f/D  (D={D:.0f}mm, λ={lam:.0f}nm)", fontsize=6)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"f/{x:.0f}" if x == int(x) else ""))
     ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
-    ax.legend(fontsize=7, loc="lower right"); ax_fmt(ax)
+    ax.legend(fontsize=6, loc="lower right"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
 def fig_deff_D(D_akt, N_akt, S_slide):
@@ -243,14 +244,14 @@ def fig_deff_D(D_akt, N_akt, S_slide):
             loss_pct.append((1-S**0.25)*100)
         col = colors_N[N]
         ax.plot(D_arr, loss_pct, color=col, lw=2, label=f"f/{N}")
-        ax.text(D_arr[-1]+3, loss_pct[-1], f"f/{N}", color=col, fontsize=7, va="center", fontweight="bold")
+        ax.text(D_arr[-1]+3, loss_pct[-1], f"f/{N}", color=col, fontsize=6, va="center", fontweight="bold")
     f_akt = D_akt*N_akt
     Wp_a = D_akt**4/(1024.0*f_akt**3*550e-6); Wb_a=Wp_a/4
     Wrms_a = Wb_a/(1.5*math.sqrt(5)); S_a = math.exp(-(2*math.pi*Wrms_a)**2)
     loss_a = (1-S_a**0.25)*100
     ax.scatter([D_akt], [loss_a], color=ACC, s=80, zorder=6)
     ax.annotate(f"D={D_akt:.0f}mm f/{N_akt:.1f}  -{loss_a:.0f}%",
-                xy=(D_akt, loss_a), xytext=(D_akt+15, loss_a+5), fontsize=7,
+                xy=(D_akt, loss_a), xytext=(D_akt+15, loss_a+5), fontsize=6,
                 color=ACC, fontweight="bold",
                 arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.85))
@@ -258,7 +259,7 @@ def fig_deff_D(D_akt, N_akt, S_slide):
         loss_sl = (1-S_slide**0.25)*100
         ax.scatter([D_akt], [loss_sl], color=GRN, s=80, marker="*", zorder=7)
         ax.annotate(f"Schieber S={S_slide:.2f}  -{loss_sl:.0f}%",
-                    xy=(D_akt, loss_sl), xytext=(D_akt+15, loss_sl-6), fontsize=7,
+                    xy=(D_akt, loss_sl), xytext=(D_akt+15, loss_sl-6), fontsize=6,
                     color=GRN, fontweight="bold",
                     arrowprops=dict(arrowstyle="-", color=GRN, lw=0.8),
                     bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=GRN, alpha=0.85))
@@ -267,10 +268,10 @@ def fig_deff_D(D_akt, N_akt, S_slide):
     ax.axhline(20, color="#BA7517", lw=1.5, ls="--", label="20% Verlust")
     ax.axhline(50, color="#c62828", lw=1.0, ls=":",  label="50% Verlust")
     ax.set_xlim(50, 420); ax.set_ylim(0, min(100, max(90, loss_a+15)))
-    ax.set_xlabel("Öffnung D [mm]", fontsize=7)
-    ax.set_ylabel("Öffnungsverlust [%]", fontsize=7)
-    ax.set_title("Öffnungsverlust vs. Öffnung", fontsize=7)
-    ax.legend(fontsize=7, loc="upper left"); ax_fmt(ax)
+    ax.set_xlabel("Öffnung D [mm]", fontsize=6)
+    ax.set_ylabel("Öffnungsverlust [%]", fontsize=6)
+    ax.set_title("Öffnungsverlust vs. Öffnung", fontsize=6)
+    ax.legend(fontsize=6, loc="upper left"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
 def fig_beugung(D_akt, f_akt):
@@ -286,9 +287,9 @@ def fig_beugung(D_akt, f_akt):
     ax.fill_between(f_arr, 0,    D_95, color="#2e7d32", alpha=0.10)
     ax.fill_between(f_arr, D_95, D_80, color="#f9a825", alpha=0.12)
     ax.fill_between(f_arr, D_80, 300,  color="#c62828", alpha=0.07)
-    ax.text(300, 40,  "S ≥ 0.95  (sehr gut)",            color="#2e7d32", fontsize=7)
-    ax.text(300, 155, "0.80 ≤ S < 0.95  (gut)",          color="#c8860a", fontsize=7)
-    ax.text(300, 255, "S < 0.80  (nicht beugungsbegrenzt)", color="#c62828", fontsize=7)
+    ax.text(300, 40,  "S ≥ 0.95  (sehr gut)",            color="#2e7d32", fontsize=6)
+    ax.text(300, 155, "0.80 ≤ S < 0.95  (gut)",          color="#c8860a", fontsize=6)
+    ax.text(300, 255, "S < 0.80  (nicht beugungsbegrenzt)", color="#c62828", fontsize=6)
     ax.plot(f_arr, D_95, color="#1565c0", lw=2,   label="S=0.95")
     ax.plot(f_arr, D_80, color="#2e7d32", lw=2.5, label="S=0.80 (Rayleigh)")
     ax.plot(f_arr, D_50, color="#BA7517", lw=1.5, ls="--", label="S=0.50")
@@ -297,19 +298,19 @@ def fig_beugung(D_akt, f_akt):
         ax.plot(f_arr, D_fN, color="#ccc", lw=0.8, ls="--")
         y_label = 1900.0 / N
         if y_label < 285:
-            ax.text(1920, y_label, f"f/{N}", color="#999", fontsize=7, va="center")
+            ax.text(1920, y_label, f"f/{N}", color="#999", fontsize=6, va="center")
     ax.scatter([f_akt], [D_akt], color=ACC, s=100, zorder=7)
     x_off = -200 if f_akt > 1500 else 80
     ax.annotate(f"D={D_akt:.0f}mm  f/{f_akt/D_akt:.1f}",
                 xy=(f_akt, D_akt), xytext=(f_akt+x_off, D_akt+25),
-                fontsize=7, color=ACC, fontweight="bold",
+                fontsize=6, color=ACC, fontweight="bold",
                 arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.85))
     ax.set_xlim(200, 2000); ax.set_ylim(0, 300)
-    ax.set_xlabel("Brennweite f [mm]", fontsize=7)
-    ax.set_ylabel("Öffnung D [mm]", fontsize=7)
-    ax.set_title("Beugungsgrenze sphärischer Spiegel  (λ=550nm)", fontsize=7)
-    ax.legend(fontsize=7, loc="upper left"); ax_fmt(ax)
+    ax.set_xlabel("Brennweite f [mm]", fontsize=6)
+    ax.set_ylabel("Öffnung D [mm]", fontsize=6)
+    ax.set_title("Beugungsgrenze sphärischer Spiegel  (λ=550nm)", fontsize=6)
+    ax.legend(fontsize=6, loc="upper left"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
 def fig_mtf(D, f, lam, S_slide, V):
@@ -353,14 +354,14 @@ def fig_mtf(D, f, lam, S_slide, V):
     if ms_s:
         ax.bar(x + w/2, ms_s, w, label=f"Schieber (S={S_slide:.2f})", color=GRN, alpha=0.75)
     for i, (mp_v, ms_v) in enumerate(zip(mp_vals, ms_vals)):
-        ax.text(i-w/2, mp_v+0.02, f"{mp_v:.2f}", ha="center", fontsize=7, color="#444")
-        ax.text(i+w/2, ms_v+0.02, f"{ms_v:.2f}", ha="center", fontsize=7, color=COR, fontweight="bold")
+        ax.text(i-w/2, mp_v+0.02, f"{mp_v:.2f}", ha="center", fontsize=6, color="#444")
+        ax.text(i+w/2, ms_v+0.02, f"{ms_v:.2f}", ha="center", fontsize=6, color=COR, fontweight="bold")
     ax.axhline(0.2, color="#BA7517", lw=2.0, ls="-", zorder=5)
     ax.text(0.01, 0.215, "20%-Schwelle", transform=ax.get_yaxis_transform(),
-            fontsize=7, fontweight="bold", color="#BA7517")
+            fontsize=6, fontweight="bold", color="#BA7517")
     ax.set_ylim(0, 1.18)
-    ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=7)
-    ax.set_title(f"MTF je Detail — D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=7)
+    ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=6)
+    ax.set_title(f"MTF je Detail — D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=6)
     # CSF-Overlay
     if detail_as:
         csf_vals = [csf(3600.0/(2.0*d_as*V)) for d_as in detail_as]
@@ -369,14 +370,14 @@ def fig_mtf(D, f, lam, S_slide, V):
         ax2.plot(x, csf_vals, color=csf_col, lw=2.2, ls="-.", marker="o", ms=6, zorder=8,
                  label=f"CSF  ({V:.0f}×)")
         for i, cv in enumerate(csf_vals):
-            ax2.text(i, cv+0.03, f"{cv:.2f}", ha="center", fontsize=7, color=csf_col, fontweight="bold")
+            ax2.text(i, cv+0.03, f"{cv:.2f}", ha="center", fontsize=6, color=csf_col, fontweight="bold")
         ax2.set_ylim(0, 1.35)
-        ax2.set_ylabel("Augenempfindlichkeit CSF", fontsize=7, color=csf_col)
+        ax2.set_ylabel("Augenempfindlichkeit CSF", fontsize=6, color=csf_col)
         ax2.tick_params(axis="y", labelcolor=csf_col)
         ax2.spines["right"].set_color(csf_col)
-        ax2.legend(fontsize=7, loc="upper left", bbox_to_anchor=(0.0, 0.88))
-    ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=7, linespacing=1.3)
-    ax.legend(fontsize=7, loc="upper right"); ax_fmt(ax)
+        ax2.legend(fontsize=6, loc="upper left", bbox_to_anchor=(0.0, 0.88))
+    ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=6, linespacing=1.3)
+    ax.legend(fontsize=6, loc="upper right"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
 def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
@@ -404,24 +405,24 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
         ax.axvline(V_mark, color=col, lw=1.2, ls=ls, alpha=0.6)
         ax.scatter([V_mark], [q_m], color=col, s=50, zorder=6)
         ax.annotate(f"{V_mark}×\n{q_m:.2f}", xy=(V_mark, q_m),
-                    xytext=(V_mark+7, q_m-0.05), fontsize=7, color=col, fontweight="bold",
+                    xytext=(V_mark+7, q_m-0.05), fontsize=6, color=col, fontweight="bold",
                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=col, alpha=0.80))
     q_v = perceived_quality(D, f_sl if has_slide else f, lam, V_slider)
     ax.axvline(V_slider, color=ACC, lw=1.8, ls="-", alpha=0.9)
     ax.scatter([V_slider], [q_v], color=ACC, s=90, zorder=7)
     x_off = -65 if V_slider > 200 else 12
     ax.annotate(f"V={V_slider:.0f}×\nQ={q_v:.3f}", xy=(V_slider, q_v),
-                xytext=(V_slider+x_off, q_v+0.04), fontsize=7, color=ACC, fontweight="bold",
+                xytext=(V_slider+x_off, q_v+0.04), fontsize=6, color=ACC, fontweight="bold",
                 arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.88))
     for q_thresh, col, label in [(0.9, GRN, "Q=0.90 (sehr gut)"), (0.7, "#BA7517", "Q=0.70 (spürbar)")]:
         ax.axhline(q_thresh, color=col, lw=1.0, ls=":", alpha=0.7)
-        ax.text(32, q_thresh+0.008, label, fontsize=7, color=col, alpha=0.85)
+        ax.text(32, q_thresh+0.008, label, fontsize=6, color=col, alpha=0.85)
     ax.set_xlim(30, 250); ax.set_ylim(0, 1.12)
-    ax.set_xlabel("Vergrößerung V  [×]", fontsize=7)
-    ax.set_ylabel("Wahrgenommener Qualitätsindex Q_perc", fontsize=7)
-    ax.set_title(f"Wahrgenommener Kontrast (CSF-gewichtet)  —  D={D:.0f}mm  f/{f/D:.1f}", fontsize=7)
-    ax.legend(fontsize=7, loc="lower right"); ax_fmt(ax)
+    ax.set_xlabel("Vergrößerung V  [×]", fontsize=6)
+    ax.set_ylabel("Wahrgenommener Qualitätsindex Q_perc", fontsize=6)
+    ax.set_title(f"Wahrgenommener Kontrast (CSF-gewichtet)  —  D={D:.0f}mm  f/{f/D:.1f}", fontsize=6)
+    ax.legend(fontsize=6, loc="lower right"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
 
