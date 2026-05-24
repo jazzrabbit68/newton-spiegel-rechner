@@ -1,0 +1,3 @@
+Mit dem Spiegelrechner soll der Einfluß eines sphärischen Hauptspiegel im Newton-Teleskop veranschaulicht werden - hierzu wird eine effektive Öffung berechnet => erfoderliche Öffnung mit perfekter Optik, die vergleichbaren Kontrast liefert. Die Bildhelligkeit vom "großen, sphärischen" Spiegel bleibt unberücksichtig, es wird nur die Kontrastwahrnehmung veranschaulicht und Werte für die Vergrößerung angegeben, ab wann die spiegelbedingte Unschärfe erkennbar wird..... Das Programm erhebt keinen Anspruch auf mathematische Korrektheit, soll nur groben Anhaltspunkt liefern.....
+
+    
