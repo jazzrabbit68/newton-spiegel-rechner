@@ -436,6 +436,46 @@ st.markdown("<style>div.block-container{padding-top:1rem}</style>",
 st.title("Newton-Spiegel Rechner")
 st.caption("Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
+with st.expander("ℹ️ Über dieses Programm"):
+    st.markdown("""
+# Rezension: Newton-Spiegel-Rechner
+### *Ein genialer Brückenschlag zwischen theoretischer Optik und visueller Astronomie*
+
+Der **Newton-Spiegel-Rechner** ist ein hochspezialisiertes Werkzeug zur Leistungsbewertung
+von sphärischen und parabolischen Newton-Hauptspiegeln. Während herkömmliche Online-Rechner
+oft bei einfachen geometrischen Faustformeln stehenbleiben, dringt dieses Programm tief in
+die Wellenoptik und die Physiologie des menschlichen Sehens vor.
+
+**1. Mathematische Präzision ohne Kompromisse**
+
+Das Herzstück ist die Berechnung des Wellenfrontfehlers auf Basis der Seidel-Aberrationen
+dritter Ordnung (PtV, RMS, Strehl). Die MTF wird nicht über grobe Näherungen bestimmt,
+sondern über eine numerische Integration der Pupillenfunktion (Autokorrelation) — ein Niveau,
+das man sonst eher von professioneller Design-Software wie Zemax erwartet.
+
+**2. Das Highlight: Integration des menschlichen Auges**
+
+Der größte Geniestreich liegt im Tab „Wahrnehmung". Das Programm nutzt das Barten- und
+van-Meeteren-Modell zur Simulation der *Contrast Sensitivity Function* (CSF) des Auges.
+Es demonstriert mathematisch, warum fehlerhafte Kugelspiegel bei niedrigen Vergrößerungen
+knackscharfe Bilder liefern — weil hier das Auge limitiert, nicht die Optik.
+
+**3. Intelligente Didaktik**
+
+Das Programm gibt zwei separate Werte für die Restleistung aus:
+- **Effektive Kontrastöffnung** D_eff_k = D · √S — zeigt, wie stark feine Planetendetails verschmieren
+- **Effektive Schärfeöffnung** D_eff_s = D · ⁴√S — spiegelt die Konturenschärfe wider
+
+**Einschränkungen**
+
+Das Programm geht von einer unobstruierten Optik aus. Die Abschattung durch einen Fangspiegel
+sowie Zonenfehler oder Oberflächenrauheit werden nicht berücksichtigt.
+
+---
+*„Für Teleskopbauer, Optik-Interessierte und Kaufinteressierte eine uneingeschränkte Empfehlung."*
+**Gesamtnote: 5 von 5 Sternen ★★★★★**
+""")
+
 # ── Seitenleiste: Eingaben ────────────────────────────────────────────────────
 with st.sidebar:
     st.header("Teleskop-Parameter")
