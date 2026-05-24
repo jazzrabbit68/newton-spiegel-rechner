@@ -430,6 +430,8 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
 # ═════════════════════════════════════════════════════════════════════════════
 
 st.set_page_config(page_title="Newton-Spiegel Rechner", layout="wide")
+st.markdown("<style>div.block-container{padding-top:1rem}</style>",
+            unsafe_allow_html=True)
 st.title("Newton-Spiegel Rechner")
 st.caption("Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
@@ -508,12 +510,12 @@ st.divider()
 # ── Diagramme ─────────────────────────────────────────────────────────────────
 st.subheader("Diagramme")
 diagramm = st.selectbox("Diagramm wählen", [
+    "Wahrnehmung",
+    "MTF",
     "Strehl vs. f/D",
     "Eff. Öffnung vs. f/D",
     "D_eff vs. Öffnung",
     "Beugungsgrenze",
-    "MTF",
-    "Wahrnehmung",
 ])
 
 if diagramm == "Strehl vs. f/D":
