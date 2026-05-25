@@ -1,0 +1,340 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    @page {
+        size: A4;
+        margin: 20mm 15mm;
+        @bottom-right {
+            content: counter(page);
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 9pt;
+            color: #777;
+        }
+        @bottom-left {
+            content: "Technische Dokumentation (Vollversion): Newton-Spiegel-Rechner";
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 9pt;
+            color: #777;
+        }
+    }
+    
+    body {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        color: #333333;
+        line-height: 1.5;
+        font-size: 10.5pt;
+        background-color: #ffffff;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .header-banner {
+        background-color: #534AB7;
+        color: #ffffff;
+        margin: -20mm -15mm 25px -15mm;
+        padding: 30px 15mm 25px 15mm;
+        border-bottom: 4px solid #D85A30;
+    }
+    
+    .header-banner h1 {
+        margin: 0;
+        font-size: 22pt;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+    
+    .header-banner .subtitle {
+        margin: 5px 0 0 0;
+        font-size: 12pt;
+        color: #e8e8e8;
+        font-weight: 300;
+    }
+    
+    h2 {
+        color: #534AB7;
+        font-size: 14pt;
+        border-left: 4px solid #D85A30;
+        padding-left: 10px;
+        margin-top: 25px;
+        margin-bottom: 12px;
+        page-break-after: avoid;
+    }
+    
+    h3 {
+        color: #2e7d32;
+        font-size: 11.5pt;
+        margin-top: 18px;
+        margin-bottom: 6px;
+        page-break-after: avoid;
+    }
+    
+    p {
+        margin-top: 0;
+        margin-bottom: 10px;
+        text-align: justify;
+    }
+    
+    ul {
+        margin-top: 0;
+        margin-bottom: 12px;
+        padding-left: 20px;
+    }
+    
+    li {
+        margin-bottom: 6px;
+    }
+    
+    .math-block {
+        text-align: center;
+        margin: 12px 0;
+        font-size: 11pt;
+        background-color: #f8f9fa;
+        padding: 10px;
+        border-radius: 4px;
+        border: 1px solid #e8e8e8;
+        page-break-inside: avoid;
+    }
+    
+    .math {
+        font-family: 'Times New Roman', Times, serif;
+        font-style: italic;
+        font-weight: bold;
+        color: #2b2b2b;
+    }
+    
+    .callout {
+        background-color: #f5f5f5;
+        border-left: 3.5px solid #534AB7;
+        padding: 10px 12px;
+        margin: 15px 0;
+        border-radius: 0 4px 4px 0;
+        page-break-inside: avoid;
+    }
+    
+    .callout-title {
+        font-weight: bold;
+        color: #534AB7;
+        margin-bottom: 4px;
+        font-size: 10pt;
+    }
+    
+    .diagram-box {
+        background-color: #fdfdfd;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 15px;
+        margin: 15px 0;
+        page-break-inside: avoid;
+    }
+    
+    .diagram-title {
+        font-weight: bold;
+        color: #534AB7;
+        font-size: 11pt;
+        margin-bottom: 8px;
+        border-bottom: 1px dashed #e2e8f0;
+        padding-bottom: 4px;
+    }
+    
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 15px 0;
+        font-size: 10pt;
+        page-break-inside: avoid;
+    }
+    
+    th {
+        background-color: #534AB7;
+        color: white;
+        font-weight: bold;
+        text-align: left;
+        padding: 8px 10px;
+        border: 1px solid #534AB7;
+    }
+    
+    td {
+        padding: 8px 10px;
+        border: 1px solid #e0e0e0;
+    }
+    
+    tr:nth-child(even) td {
+        background-color: #fcfcfc;
+    }
+    
+    .footer-note {
+        margin-top: 30px;
+        font-size: 9pt;
+        color: #666;
+        border-top: 1px solid #e0e0e0;
+        padding-top: 8px;
+    }
+</style>
+</head>
+<body>
+
+<div class="header-banner">
+    <h1>Technische Gesamtdokumentation</h1>
+    <div class="subtitle">Newton-Spiegel-Rechner: Mathematisch-Physikalische Modelle & Graphische Analysen</div>
+</div>
+
+<p>Diese umfassende Dokumentation vereint die vollständigen mathematischen und optischen Herleitungen des Programms <code>newton_spiegel_rechner.py</code> mit einer detaillierten Interpretation der interaktiven grafischen Benutzeroberfläche. Die Software dient der Simulation und quantitativen Analyse von Abbildungsfehlern bei sphärischen Hauptspiegeln unter Einbeziehung des menschlichen Sehvermögens.</p>
+
+<h2>1. Optische Grundlagen & Wellenfrontfehler</h2>
+<p>Im Gegensatz zu idealen Parabolspiegeln weisen sphärische Spiegel die sogenannte <strong>sphärische Aberration</strong> (Öffnungsfehler) auf. Das Programm quantifiziert diesen aus dem Wellenfrontfehler resultierenden Kontrast- und Schärfeverlust. Alle wellenoptischen Berechnungen im Code werden standardmäßig für eine optimierte Wellenlänge von <span class="math">&lambda; = 550 nm</span> (grün-gelb, maximale spektrale Empfindlichkeit des Auges am Tag) durchgeführt.</p>
+
+<h3>1.1 Wellenfrontfehler (Peak-to-Valley & RMS)</h3>
+<p>Der maximale Wellenfrontfehler (<span class="math">W<sub>PtV</sub></span>) wird zunächst für den paraxialen Fokus berechnet und anschließend auf den Punkt des besten Fokus (Schnittweite der geringsten Verwirrung, <em>Best Focus</em>) optimiert.</p>
+
+<ul>
+    <li><strong>Öffnungsverhältnis (<span class="math">N</span>):</strong>
+        <div class="math-block"><span class="math">N = f / D</span></div>
+        <em>wobei <span class="math">f</span> die Brennweite und <span class="math">D</span> die Öffnung (Durchmesser) in mm ist.</em>
+    </li>
+    <li><strong>Paraxialer Wellenfrontfehler (<span class="math">W<sub>p</sub></span> in Einheiten von &lambda;):</strong>
+        <div class="math-block"><span class="math">W<sub>p</sub> = D<sup>4</sup> / (1024 &middot; f<sup>3</sup> &middot; &lambda;<sub>mm</sub>)</span></div>
+        <em>Im Code wird die Wellenlänge von Nanometern in Millimeter umgerechnet (<span class="math">&lambda;<sub>mm</sub> = &lambda; &middot; 10<sup>-6</sup></span>).</em>
+    </li>
+    <li><strong>Wellenfrontfehler im besten Fokus (<span class="math">W<sub>b</sub></span>):</strong>
+        Durch eine Defokussierung zur Mitte des optischen Kaustik-Bereichs lässt sich der Wellenfrontfehler vierteln:
+        <div class="math-block"><span class="math">W<sub>b</sub> = W<sub>p</sub> / 4.0</span></div>
+    </li>
+    <li><strong>RMS-Wellenfrontfehler (<span class="math">W<sub>rms</sub></span>):</strong>
+        Für die exakte optische Qualitätsbestimmung ist der quadratische Mittelwert des Fehlers über die gesamte Pupillenfläche entscheidend. Bei primärer sphärischer Aberration gilt der mathematische Zusammenhang:
+        <div class="math-block"><span class="math">W<sub>rms</sub> = W<sub>b</sub> / (1.5 &middot; &radic;5) &asymp; W<sub>b</sub> / 3.3541</span></div>
+    </li>
+</ul>
+
+<h3>1.2 Strehl-Quotient (<span class="math">S</span>)</h3>
+<p>Der Strehl-Quotient beschreibt das Verhältnis der Peak-Intensität im Beugungsscheibchen des realen Systems zur Intensität eines fehlerfreien, perfekt beugungsbegrenzten Systems. Er wird über die **Mar&eacute;chal-N&auml;herung** berechnet:</p>
+<div class="math-block"><span class="math">S = exp(-(2&pi; &middot; W<sub>rms</sub>)<sup>2</sup>)</span></div>
+
+<div class="callout">
+    <div class="callout-title">Optisches Kriterium (Rayleigh-Grenze)</div>
+    Ein System gilt als "beugungsbegrenzt", wenn der Strehl-Wert <span class="math">S &ge; 0.80</span> beträgt. Dies entspricht einem Wellenfrontfehler von <span class="math">W<sub>b</sub> &le; 0.25 &lambda;</span> (&lambda;/4 Peak-to-Valley). Ein perfekter Spiegel besitzt einen Strehl-Wert von <span class="math">1.0</span>.
+</div>
+
+<h2>2. Schärfe und geometrische Aberration</h2>
+<p>Neben dem wellenoptischen Kontrastverlust mindert die Sphäre die geometrische Schärfe, da Lichtstrahlen aus den äußeren Randbereichen des Spiegels weiter vorne fokussieren als achsnahe Strahlen.</p>
+
+<h3>2.1 Der Airy-Radius (<span class="math">r<sub>Airy</sub></span>)</h3>
+<p>Der Radius des beugungsbedingten idealen Beugungsscheibchens (erste Nullstelle der Airy-Funktion) im Bogensekunden-Maß (<span class="math">''</span>) beträgt:</p>
+<div class="math-block"><span class="math">r<sub>Airy</sub> = 1.22 &middot; (&lambda;<sub>mm</sub> / D) &middot; 206265</span></div>
+<p><em>Der mathematische Faktor 206265 rechnet den Radiant in Bogensekunden um.</em></p>
+
+<h3>2.2 Geometrischer Unschärfefleck (Blur)</h3>
+<p>Der durch die sphärische Aberration erzeugte Unschärfefleck (Blur) im besten Fokus im Verhältnis zum Airy-Scheibchen berechnet sich über:</p>
+<div class="math-block"><span class="math">blur<sub>Airy</sub> = W<sub>b</sub> / 2.44</span></div>
+<div class="math-block"><span class="math">blur<sub>as</sub> = blur<sub>Airy</sub> &middot; 2.0 &middot; r<sub>Airy</sub> &emsp; [ 	ext{in Bogensekunden} ]</span></div>
+
+<h3>2.3 Effektives Auflösungsvermögen (<span class="math">&theta;<sub>eff</sub></span>)</h3>
+<p>Das theoretische Auflösungsvermögen eines perfekten Teleskops wird im Code über die empirische **Dawes-Grenze** definiert:</p>
+<div class="math-block"><span class="math">&theta;<sub>ideal</sub> = 116.0 / D</span></div>
+<p>Das reale Auflösungsvermögen der Sphäre ergibt sich aus der quadratischen Überlagerung der Dawes-Grenze und dem Aberrations-Blur:</p>
+<div class="math-block"><span class="math">&theta;<sub>eff</sub> = &radic;(&theta;<sub>ideal</sub><sup>2</sup> + blur<sub>as</sub><sup>2</sup>)</span></div>
+
+<h2>3. Effektive Öffnungen (<span class="math">D<sub>eff</sub></span>)</h2>
+<p>Um den Leistungsverlust für den Beobachter greifbar zu machen, rechnet das Programm den Kontrast- und Schärfeverlust in eine **äquivalente effektive Öffnung** um. Das bedeutet: Ein großer sphärischer Spiegel leistet visuell nur so viel wie ein kleinerer, perfekter Parabolspiegel.</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Metrik</th>
+            <th>Formel</th>
+            <th>Physikalische Beschreibung</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Effektive Öffnung (Kontrast)</strong></td>
+            <td><span class="math">D<sub>eff, k</sub> = D &middot; S<sup>0.25</sup></span></td>
+            <td>Skaliert die globale Kontrastleistung basierend auf der vierten Wurzel des Strehl-Werts.</td>
+        </tr>
+        <tr>
+            <td><strong>Effektive Öffnung (Schärfe)</strong></td>
+            <td><span class="math">D<sub>eff, s</sub> = 116.0 / &theta;<sub>eff</sub></span></td>
+            <td>Invertiert das reale Auflösungsvermögen zur Bestimmung des effektiven Limits.</td>
+        </tr>
+        <tr>
+            <td><strong>Effektive Öffnung (Visuell)</strong></td>
+            <td><span class="math">D<sub>eff, vis</sub> = D &middot; Q<sub>vis</sub><sup>0.25</sup></span></td>
+            <td>Kombiniert den MTF-Kurvenformverlust und den absoluten Energieverlust für Planetenstrukturen.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h2>4. MTF-Modell & Visueller Qualitätsindex (<span class="math">Q<sub>vis</sub></span>)</h2>
+<p>Die Modulationsübertragungsfunktion (MTF) beschreibt den Kontrastübertrag des Teleskops in Abhängigkeit von der Ortsfrequenz (Detailgröße).</p>
+
+<h3>4.1 Mathematische Berechnung der Sphären-MTF</h3>
+<p>Die ideale MTF eines runden Teleskops ohne Obstruktion ist analytisch bekannt:</p>
+<div class="math-block"><span class="math">MTF<sub>para</sub>(f) = (2 / &pi;) &middot; [arccos(f) - f &middot; &radic;(1 - f<sup>2</sup>)]</span></div>
+<p><em>wobei f die normierte Ortsfrequenz von 0 (grobe Strukturen) bis 1 (Grenzfrequenz) ist.</em></p>
+<p>Für die <strong>Sphäre</strong> berechnet die Funktion <code>mtf_sph_rel</code> den relativen Formverlust über ein 1D-Autokorrelationsintegral der gestörten Pupillenfunktion entlang der x-Achse (<span class="math">n = 80</span> Schritte):</p>
+<div class="math-block"><span class="math">&Delta;W = 2&pi; &middot; W<sub>b</sub> &middot; [(x + f/2)<sup>4</sup> - (x + f/2)<sup>2</sup> - (x - f/2)<sup>4</sup> + (x - f/2)<sup>2</sup>]</span></div>
+<div class="math-block"><span class="math">MTF<sub>sph, rel</sub>(f) = &radic;[(&sum; cos(&Delta;W) &middot; h)<sup>2</sup> + (&sum; sin(&Delta;W) &middot; h)<sup>2</sup>] / &sum; h</span></div>
+
+<h3>4.2 Visueller Qualitätsindex (<span class="math">Q<sub>vis</sub></span>)</h3>
+<p>Zur Beurteilung der Leistung bei Planetenbeobachtungen nutzt der Code eine heuristische Gewichtung dreier kritischer Ortsfrequenzen (grobe, mittlere und feine Details):</p>
+<div class="math-block"><span class="math">Q<sub>shape</sub> = 0.4 &middot; MTF<sub>sph, rel</sub>(0.2) + 0.4 &middot; MTF<sub>sph, rel</sub>(0.4) + 0.2 &middot; MTF<sub>sph, rel</sub>(0.6)</span></div>
+<p>Der absolute visuelle Index kombiniert den reinen Formverlust mit dem globalen Energieverlust (Strehl):</p>
+<div class="math-block"><span class="math">Q<sub>vis</sub> = S &middot; Q<sub>shape</sub></span></div>
+
+<h2>5. Wahrnehmungsmodell & Vergrößerungsabhängigkeit</h2>
+<p>Ein zentrales Feature des Programms ist die Erkenntnis, dass Abbildungsfehler bei niedrigen Vergrößerungen nicht auffallen, da das menschliche Auge das Bild limitiert, nicht das Teleskop.</p>
+
+<h3>5.1 Auflösungslimit des Auges</h3>
+<p>Das Auge hat eine Kontrastschwelle für Planetendetails von ca. 1' (60''). Auf den Objektraum am Himmel zurückgerechnet bedeutet das:</p>
+<div class="math-block"><span class="math">&theta;<sub>Auge</sub> = eye_res_as / V</span></div>
+<p>Daraus resultiert die **kritische Vergrößerung (<span class="math">V<sub>krit</sub></span>)**, unterhalb derer das Auge der Flaschenhals ist:</p>
+<div class="math-block"><span class="math">V<sub>krit</sub> = eye_res_as / &theta;<sub>eff</sub></span></div>
+
+<h3>5.2 Wahrgenommener Qualitätsindex (<span class="math">Q<sub>perc</sub></span>) unter CSF</h3>
+<p>Um die tatsächliche visuelle Wahrnehmung zu simulieren, implementiert der Code die **Contrast Sensitivity Function (CSF)** des Auges (nach <em>van Meeteren / Watson-Ahumada</em>). Die Ortsfrequenz im Augenraum (<span class="math">&nu;<sub>cpd</sub></span> in <em>cycles per degree</em>) hängt von der Vergrößerung <span class="math">V</span> ab. Über einen stetigen Übergangsschalter <span class="math">w</span> wird der vergrößerungsabhängige Index ermittelt:</p>
+<div class="math-block"><span class="math">w = 1.0 / [1.0 + (V<sub>krit</sub> / V)<sup>2</sup>]</span></div>
+<div class="math-block"><span class="math">Q<sub>perc</sub>(V) = Q<sub>raw</sub> + (1.0 - Q<sub>raw</sub>) &middot; (1.0 - w)</span></div>
+
+<h2>6. Beschreibung der grafischen Analysen (Diagramme)</h2>
+<p>Die im Programm integrierten Matplotlib-Diagramme visualisieren die oben hergeleiteten mathematischen Modelle interaktiv.</p>
+
+<div class="diagram-box">
+    <div class="diagram-title">Diagramm 1: Modulationsübertragungsfunktion (MTF)</div>
+    <p><strong>Fokus:</strong> <em>Der absolute Kontrastverlust über alle Detailgrößen hinweg.</em></p>
+    <p>Dieses Diagramm zeigt, wie viel Kontrast (0% bis 100%) das Teleskop bei verschiedenen feinen Strukturen noch übertragen kann.</p>
+    <ul>
+        <li><strong>Schwarze, gestrichelte Linie (Parabolspiegel / Ideal):</strong> Stellt das theoretische Maximum für eine perfekte, fehlerfreie Optik dar.</li>
+        <li><strong>Farbige, durchgezogene Linie (Sphärischer Spiegel):</strong> Visualisiert die reale Kontrastübertragungsfunktion der berechneten Sphäre. Die Farbe wechselt dynamisch auf Basis des Strehl-Werts (Grün = Beugungsbegrenzt, Orange = Sichtbarer Fehler, Rot = Kritischer Fehler).</li>
+        <li>Der schattierte Raum zwischen beiden Kurven kennzeichnet den reinen optischen Kontrastverlust.</li>
+    </ul>
+</div>
+
+<div class="diagram-box">
+    <div class="diagram-title">Diagramm 2: Kontrastverlust nach dem Wahrnehmungsmodell (CSF)</div>
+    <p><strong>Fokus:</strong> <em>Der physiologische Kontrast – wie das Auge den Fehler real wahrnimmt.</em></p>
+    <p>Dieses Diagramm kombiniert die optische MTF-Kurve des Teleskops mit der frequenzabhängigen Kontrastempfindlichkeit des menschlichen Auges.</p>
+    <ul>
+        <li><strong>Schwarze, gestrichelte Kurve (Auge + Ideal-Teleskop):</strong> Modelliert die Netzhautwahrnehmung bei einem fehlerfreien Teleskop unter der gewählten Vergrößerung.</li>
+        <li><strong>Farbige Kurve (Auge + Sphären-Teleskop):**</strong> Zeigt die vom Auge registrierte Kontrastminderung durch den sphärischen Fehler.</li>
+        <li><strong>Effekt des Sliders:**</strong> Bei geringer Vergrößerung liegen beide Kurven eng zusammen, da das Auge feine Fehler nicht auflöst. Bei hoher Vergrößerung bricht die Kurve der Sphäre massiv ein, da der Abbildungsfehler nun vollflächig vergrößert wird.</li>
+    </ul>
+</div>
+
+<div class="diagram-box">
+    <div class="diagram-title">Diagramm 3: Visuelle Qualität vs. Vergrößerung</div>
+    <p><strong>Fokus:</strong> <em>Die Leistungskurve über den gesamten Vergrößerungsbereich.</em></p>
+    <p>Das Diagramm prognostiziert die visuelle Güte des Teleskops über einen weiten Vergrößerungsbereich von 30&times; bis 250&times;.</p>
+    <ul>
+        <li><strong>Qualitätszonen:**</strong> Zwei horizontale Referenzlinien unterteilen den Graphen. Die grüne Linie (Q = 0.90) beschreibt die Grenze zu exzellenter Abbildung. Die braune Linie (Q = 0.70) markiert die Schwelle, ab der Schärfe- und Kontrastverluste störend ins Auge fallen.</li>
+        <li><strong>Dynamische Annotation:**</strong> Ein interaktiver Messpunkt fährt auf der Leistungskurve mit und blendet eine "Fahne" mit der exakten Vergrößerung und dem dazugehörigen Qualitätsindex <span class="math">Q<sub>perc</sub></span> ein. So lässt sich unmittelbar ablesen, ab welcher Vergrößerung der Spiegel einbricht.</li>
+    </ul>
+</div>
+
+<div class="footer-note">
+    Technische Gesamtdokumentation (Vollversion) &middot; Generiert aus Programmanalyse von <code>newton_spiegel_rechner.py</code> &middot; Alle mathematischen und visuellen Modelle vollständig abgebildet.
+</div>
+
+</body>
+</html>
