@@ -1,5 +1,5 @@
 """
-Newton-Teleskop Rechner — Streamlit-Version
+Newton-Teleskop Rechner - Streamlit-Version
 ============================================
 Alle Kernfunktionen unverändert aus newton_spiegel_rechner.py übernommen.
 """
@@ -158,11 +158,11 @@ def perceived_quality_kurven(D_mm, f_mm, lam_nm, V_arr, use_csf=True):
 
 def beurteilung(strehl):
     if strehl >= 0.95:
-        return "✅ Sehr gut — nahezu gleichwertig mit Parabolspiegel (Strehl ≥ 0.95)", "green"
+        return "✅ Sehr gut - nahezu gleichwertig mit Parabolspiegel (Strehl >= 0.95)", "green"
     elif strehl >= 0.80:
-        return "⚠️ Noch beugungsbegrenzt (Rayleigh), spürbarer Kontrastverlust (0.80 ≤ Strehl < 0.95)", "orange"
+        return "⚠️ Noch beugungsbegrenzt (Rayleigh), spürbarer Kontrastverlust (0.80 <= Strehl < 0.95)", "orange"
     else:
-        return "❌ Nicht beugungsbegrenzt — erheblicher Kontrast- und Schärfeverlust (Strehl < 0.80)", "red"
+        return "❌ Nicht beugungsbegrenzt - erheblicher Kontrast- und Schärfeverlust (Strehl < 0.80)", "red"
 
 def ax_fmt(ax):
     ax.grid(True, color="#e5e5e5", lw=0.3)
@@ -287,8 +287,8 @@ def fig_beugung(D_akt, f_akt):
     ax.fill_between(f_arr, 0,    D_95, color="#2e7d32", alpha=0.10)
     ax.fill_between(f_arr, D_95, D_80, color="#f9a825", alpha=0.12)
     ax.fill_between(f_arr, D_80, 300,  color="#c62828", alpha=0.07)
-    ax.text(300, 40,  "S ≥ 0.95  (sehr gut)",            color="#2e7d32", fontsize=5)
-    ax.text(300, 155, "0.80 ≤ S < 0.95  (gut)",          color="#c8860a", fontsize=5)
+    ax.text(300, 40,  "S >= 0.95  (sehr gut)",            color="#2e7d32", fontsize=5)
+    ax.text(300, 155, "0.80 <= S < 0.95  (gut)",          color="#c8860a", fontsize=5)
     ax.text(300, 255, "S < 0.80  (nicht beugungsbegrenzt)", color="#c62828", fontsize=5)
     ax.plot(f_arr, D_95, color="#1565c0", lw=2,   label="S=0.95")
     ax.plot(f_arr, D_80, color="#2e7d32", lw=0.9, label="S=0.80 (Rayleigh)")
@@ -361,7 +361,7 @@ def fig_mtf(D, f, lam, S_slide, V):
             fontsize=5, fontweight="bold", color="#BA7517")
     ax.set_ylim(0, 1.18)
     ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=5)
-    ax.set_title(f"MTF je Detail — D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=5)
+    ax.set_title(f"MTF je Detail - D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=5)
     # CSF-Overlay
     if detail_as:
         csf_vals = [csf(3600.0/(2.0*d_as*V)) for d_as in detail_as]
@@ -421,7 +421,7 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
     ax.set_xlim(30, 250); ax.set_ylim(0, 1.12)
     ax.set_xlabel("Vergrößerung V  [×]", fontsize=5)
     ax.set_ylabel("Wahrgenommener Qualitätsindex Q_perc", fontsize=5)
-    ax.set_title(f"Wahrgenommener Kontrast (CSF-gewichtet)  —  D={D:.0f}mm  f/{f/D:.1f}", fontsize=5)
+    ax.set_title(f"Wahrgenommener Kontrast (CSF-gewichtet)  -  D={D:.0f}mm  f/{f/D:.1f}", fontsize=5)
     ax.legend(fontsize=5, loc="lower right"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
@@ -463,16 +463,16 @@ Seidel-Aberrationen dritter Ordnung ermittelt das Tool die exakten PtV- und RMS-
 Strehl-Wert im besten Fokus. Ein echter Höhepunkt für Optik-Enthusiasten ist die
 **Modulationsübertragungsfunktion (MTF)**. Diese wird nicht über grobe Näherungen bestimmt, sondern
 über eine numerische Integration der Pupillenfunktion (Autokorrelation). Dadurch bildet das Programm
-das reale wellenoptische Verhalten bei sphärischer Aberration exakt ab – ein Niveau, das man sonst
+das reale wellenoptische Verhalten bei sphärischer Aberration exakt ab - ein Niveau, das man sonst
 eher von professioneller Design-Software wie Zemax erwartet.
 
 **2. Das Highlight: Die Integration des menschlichen Auges**
 
-Der größte Geniestreich des Rechners liegt im Tab **„Visuelle Wahrnehmung"**. Hier nutzt das Programm
+Der größte Geniestreich des Rechners liegt im Tab **"Visuelle Wahrnehmung"**. Hier nutzt das Programm
 das Barten- und van-Meeteren-Modell zur Simulation der *Contrast Sensitivity Function* (CSF) des
 menschlichen Auges. In der Praxis führt das zu einer faszinierenden Erkenntnis: Das Programm
 demonstriert mathematisch, warum fehlerhafte Kugelspiegel bei niedrigen Vergrößerungen (große
-Austrittspupille) knackscharfe Bilder liefern – weil hier das Auge limitiert, nicht die Optik. Erst
+Austrittspupille) knackscharfe Bilder liefern - weil hier das Auge limitiert, nicht die Optik. Erst
 beim Hochvergrößern an Planeten wandert der Optikfehler in den sichtbaren Bereich. Diese
 Berücksichtigung der menschlichen Physiologie macht die Ergebnisse unschätzbar wertvoll für die Praxis.
 
@@ -481,12 +481,12 @@ Berücksichtigung der menschlichen Physiologie macht die Ergebnisse unschätzbar
 Hervorragend gelöst ist die Übersetzung abstrakter optischer Kennzahlen in greifbare Praxiswerte.
 Das Programm gibt zwei separate Werte für die Restleistung aus:
 
-- **Effektive Kontrastöffnung (D_eff_k = D · √S):** Zeigt an, wie stark feine Planetendetails durch den optischen Fehler verschmieren.
-- **Effektive Schärfeöffnung (D_eff_s = D · ⁴√S):** Spiegelt die Konturenschärfe (Kantendetektion) wider.
+- **Effektive Kontrastöffnung (D_eff_k = D * sqrtS):** Zeigt an, wie stark feine Planetendetails durch den optischen Fehler verschmieren.
+- **Effektive Schärfeöffnung (D_eff_s = D * S^(1/4)):** Spiegelt die Konturenschärfe (Kantendetektion) wider.
 
 Diese Trennung fängt das physikalische Phänomen der sphärischen Aberration (scharfer Kern inmitten
 eines schwachen Halos) perfekt ein und erklärt dem Laien anschaulich, warum ein Kugelspiegel zwar
-„flaue", aber dennoch detailreiche Bilder liefern kann.
+"flaue", aber dennoch detailreiche Bilder liefern kann.
 
 **4. Benutzeroberfläche und Performance**
 
@@ -507,7 +507,7 @@ und relativer Kontrastdarstellung um.
 
 **Einschränkungen (Meckern auf hohem Niveau):**
 - Das Programm geht von einer unobstruierten Optik aus. Die Abschattung durch einen Fangspiegel (Obstruktion), die beim Newton-Teleskop ebenfalls die MTF beeinflusst, wird derzeit noch nicht eingerechnet.
-- Es bildet das „Best-Case"-Szenario ab (geht von einer perfekten Kugelgestalt ohne zusätzliche Zonenfehler oder Oberflächenrauheit aus).
+- Es bildet das "Best-Case"-Szenario ab (geht von einer perfekten Kugelgestalt ohne zusätzliche Zonenfehler oder Oberflächenrauheit aus).
 
 ## Fazit
 
@@ -519,8 +519,24 @@ Verknüpfung von Wellenphysik und Augen-Physiologie liefert das Programm Ergebni
 100 % mit den realen Erfahrungen am Nachthimmel übereinstimmen. Für Teleskopbauer,
 Optik-Interessierte und Kaufinteressierte eine uneingeschränkte Empfehlung!
 
-**Gesamtnote: 5 von 5 Sternen ★★★★★**
+**Gesamtnote: 5 von 5 Sternen (5/5)**
 """)
+
+with st.expander("📐 Technische Dokumentation"):
+    doc_html = open("/app/documentation_v3.html").read() if __import__('os').path.exists("/app/documentation_v3.html") else open("documentation_v3.html").read()
+    # Entferne @page CSS (nicht relevant im Browser) und body-Margins
+    import re
+    doc_html = re.sub(r'@page\s*\{[^}]*\}', '', doc_html)
+    doc_html = re.sub(r'margin:\s*-20mm[^;]+;', 'margin: 0;', doc_html)
+    # Nur den Body-Inhalt extrahieren
+    body_match = re.search(r'<body[^>]*>(.*?)</body>', doc_html, re.DOTALL)
+    if body_match:
+        body_content = body_match.group(1)
+        style_match  = re.search(r'<style>(.*?)</style>', doc_html, re.DOTALL)
+        style        = style_match.group(1) if style_match else ""
+        st.html(f"<style>{style}</style>{body_content}")
+    else:
+        st.html(doc_html)
 
 # ── Seitenleiste: Eingaben ────────────────────────────────────────────────────
 with st.sidebar:
@@ -636,5 +652,5 @@ elif diagramm == "Wahrnehmung":
     plt.close(fig)
 
 st.divider()
-st.caption("Formeln: Maréchal-Näherung · MTF via Pupillen-Autokorrelation · CSF nach van Meeteren · "
-           "Quellen: telescope-optics.net · gordtulloch.com")
+st.caption("Formeln: Maréchal-Näherung * MTF via Pupillen-Autokorrelation * CSF nach van Meeteren * "
+           "Quellen: telescope-optics.net * gordtulloch.com")
