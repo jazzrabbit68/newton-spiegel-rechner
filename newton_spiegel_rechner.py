@@ -66,13 +66,22 @@ def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
     S      = math.exp(-(2 * math.pi * Wrms) ** 2)       # Strehl (Maréchal)
     Deff_k = D_mm * S**0.25                              # D_eff = D * S^(1/4)
 
-    # Schärfe
+    # Schärfe: visuell relevante Größen
     r_airy_as   = 1.22 * lam_mm / D_mm * 206265.0
-    blur_airy   = Wb / 2.44
-    blur_as     = blur_airy * 2.0 * r_airy_as
-    theta_ideal = 116.0 / D_mm
-    theta_eff   = math.sqrt(theta_ideal**2 + blur_as**2)
-    Deff_s      = 116.0 / theta_eff
+    theta_ideal = 116.0 / D_mm                         # Dawes-Grenze ["]
+    # theta_eff für visuelle Wahrnehmung: Strehl-basiert
+    # Begründung: Beobachter sieht PSF, nicht geometrischen Lichtkegel
+    # theta_eff = Dawes / sqrt(S)  (aus Deff = D*sqrt(S) -> theta = 116/Deff)
+    theta_eff   = theta_ideal / math.sqrt(max(S, 1e-6))
+    # Geometrischer Blur (für Information, nicht für V_krit)
+    d_blur_mm   = D_mm**3 / (64.0 * f_mm**2)
+    d_blur_as   = d_blur_mm / f_mm * 206265.0
+    # Auflösungsverlust aus geometrischem Blur (gibt an wie stark der Strahl aufgeweitet wird)
+    theta_geo   = math.sqrt(theta_ideal**2 + d_blur_as**2)
+    aufl_verlust_pct = (1.0 - theta_ideal / theta_geo) * 100.0
+    # Kritische Vergrößerung: V_krit = D_mm * 0.7 * sqrt(S)
+    # (Strehl-gewichtete nutzbare Max-Vergrößerung, empirisch nach Suiter)
+    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-6))
 
     # ── Visueller Qualitätsindex Q_vis ─────────────────────────────
     #
@@ -123,9 +132,9 @@ def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
         N=N, D_inch=D_inch,
         Wp=Wp, Wb=Wb, Wrms=Wrms,
         strehl=S, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
-        r_airy_as=r_airy_as, blur_airy=blur_airy, blur_as=blur_as,
+        r_airy_as=r_airy_as, d_blur_mm=d_blur_mm, d_blur_as=d_blur_as,
         theta_ideal=theta_ideal, theta_eff=theta_eff,
-        Deff_s=Deff_s, loss_s=D_mm - Deff_s,
+        aufl_verlust_pct=aufl_verlust_pct, V_krit_vis=V_krit_vis,
         Q02=Q02, Q04=Q04, Q06=Q06, Qshape=Qshape,
         Qvis=Qvis, Deff_vis=Deff_vis,
         loss_vis=D_mm - Deff_vis,
@@ -159,20 +168,16 @@ def berechne_vergr(D_mm: float, f_mm: float, lam_nm: float,
 def v_kritisch(D_mm: float, f_mm: float, lam_nm: float,
                eye_res_as: float = 60.0) -> dict:
     """
-    Kritische Vergrößerung ab der Schärfeverlust durch Sphärenfehler spürbar wird.
-
-    V_krit = eye_res_as / theta
-      V_krit_sph  = eye_res_as / theta_eff    (eff. Auflösung der Sphäre)
-      V_krit_para = eye_res_as / theta_ideal   (Dawes-Grenze des Paraboloids)
-      V_max       = D / 0.5mm  (Faustformel D*2)
-      V_min       = D / 7.0mm  (volle Augenpupille)
+    Kritische Vergrößerung: V_krit = D_mm * 0.7 * sqrt(Strehl)
+    (Strehl-gewichtete nutzbare Max-Vergrößerung nach Suiter)
     """
     r = berechne(D_mm, f_mm, lam_nm)
-    Vk_sph  = eye_res_as / r["theta_eff"]
-    Vk_para = eye_res_as / r["theta_ideal"]
-    Vmax    = D_mm / 0.5
-    Vmin    = D_mm / 7.0
-    return dict(Vk_sph=Vk_sph, Vk_para=Vk_para, Vmax=Vmax, Vmin=Vmin)
+    return dict(
+        Vk_sph  = r["V_krit_vis"],
+        Vk_para = D_mm * 0.7,
+        Vmax    = D_mm / 0.5,
+        Vmin    = D_mm / 7.0,
+    )
 
 
 
@@ -192,13 +197,13 @@ def kurven_vergr(D_mm, f_mm, lam_nm, eye_res_as=60.0,
 def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=400):
     """Strehl und eff. Öffnungen als Funktion von N."""
     ns = np.linspace(N_min, N_max, schritte)
-    strehls, deff_ks, deff_ss = [], [], []
+    strehls, deff_ks, aufl_verluste = [], [], []
     for n in ns:
         r = berechne(D_mm, D_mm * n, lam_nm)
         strehls.append(r["strehl"])
         deff_ks.append(r["Deff_k"])
-        deff_ss.append(r["Deff_s"])
-    return ns, np.array(strehls), np.array(deff_ks), np.array(deff_ss)
+        aufl_verluste.append(r["aufl_verlust_pct"])
+    return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste)
 
 
 def strehl_to_f(S: float, D_mm: float, lam_nm: float = 550.0) -> float:
@@ -217,14 +222,15 @@ def strehl_to_f(S: float, D_mm: float, lam_nm: float = 550.0) -> float:
     return D_mm * N
 
 
-def v_kritisch_strehl(D_mm: float, strehl: float, theta_eff: float,
+def v_kritisch_strehl(D_mm: float, strehl: float, theta_eff: float = None,
                       eye_res_as: float = 60.0) -> dict:
     """V_krit für beliebigen Strehl-Wert (für Schieber-Vergleich)."""
-    Vk_sph  = eye_res_as / theta_eff
-    Vk_para = eye_res_as / (116.0 / D_mm)
-    Vmax    = D_mm / 0.5
-    Vmin    = D_mm / 7.0
-    return dict(Vk_sph=Vk_sph, Vk_para=Vk_para, Vmax=Vmax, Vmin=Vmin)
+    return dict(
+        Vk_sph  = D_mm * 0.7 * math.sqrt(max(strehl, 1e-6)),
+        Vk_para = D_mm * 0.7,
+        Vmax    = D_mm / 0.5,
+        Vmin    = D_mm / 7.0,
+    )
 
 
 def mtf_para(f: float) -> float:
@@ -351,15 +357,8 @@ def perceived_quality(D_mm: float, f_mm: float, lam_nm: float,
     denom = _trapz(mp_arr    * weight, nu)
     Q_raw = float(num / denom) if denom > 1e-12 else 0.0
 
-    # Kritische Vergrößerung der Sphäre
-    lam_mm    = lam_nm * 1e-6
-    Wp        = D_mm**4 / (1024.0 * f_mm**3 * lam_mm)
-    Wb        = Wp / 4.0
-    r_airy    = 1.22 * lam_mm / D_mm * 206265.0
-    blur_as   = (Wb / 2.44) * 2.0 * r_airy
-    dawes     = 116.0 / D_mm
-    theta_eff = math.sqrt(dawes**2 + blur_as**2)
-    V_krit    = 60.0 / theta_eff
+    # Kritische Vergrößerung: Strehl-basiert (konsistent mit v_kritisch)
+    V_krit = D_mm * 0.7 * math.sqrt(max(strehl, 1e-6))
 
     # Übergangsgewicht
     w = 1.0 / (1.0 + (V_krit / V) ** 2)
@@ -489,7 +488,7 @@ class App(tk.Tk):
                 ("D_eff visuell [mm]",          "rDeff_vis"),
             ]),
             ("Schärfe bei gewählter Vergrößerung", [
-                ("D_eff Sphäre [mm]",                 "rDeffSph"),
+                ("Aufl.verlust gg. Paraboloid [%]",    "rAuflVerlust"),
                 ("Verlust bei dieser Vergr. [mm]",    "rVerlustV"),
             ]),
             ("Wahrgenommener Kontrast Q_perc (CSF-gewichtet)", [
@@ -634,16 +633,11 @@ class App(tk.Tk):
         S_slide = S_real + (S_pct / 100.0) * (1.0 - S_real)
         S_slide = min(max(S_slide, S_real), 1.0)
 
-        # Hypothetischer verbesserter Spiegel mit gleichem D, aber besserem Strehl
-        # D_eff_kontrast  = D * sqrt(S_slide)
-        # D_eff_schaerfe: Blur skaliert mit sqrt(1 - S_slide) / sqrt(1 - S_real) * blur_real
-        blur_scale = math.sqrt(max(1.0 - S_slide, 0)) / math.sqrt(max(1.0 - S_real, 1e-9))
-        blur_slide = r_real["blur_as"] * blur_scale
-        theta_ideal = r_real["theta_ideal"]
-        theta_eff_slide = math.sqrt(theta_ideal**2 + blur_slide**2)
+        # Hypothetischer verbesserter Spiegel: f_slide aus S_slide
+        f_slide = strehl_to_f(S_slide, D, lam) if S_slide > S_real + 0.01 else f
+        r_slide = berechne(D, f_slide, lam)
         Deff_k_slide = D * S_slide**0.25
-        Deff_s_slide = 116.0 / theta_eff_slide if theta_eff_slide > 0 else D
-        Vk_slide = v_kritisch_strehl(D, S_slide, theta_eff_slide, eye)
+        Vk_slide = v_kritisch_strehl(D, S_slide)
 
         # Schieber-Beschriftungen
         for name, (lbl, unit) in self._slider_labels.items():
@@ -705,7 +699,10 @@ class App(tk.Tk):
         rv2["rDeff_vis"].config(text=f"{r['Deff_vis']:.1f} mm")
         rv2["rVkrit2"].config(text=f"{Vk['Vk_sph']:.0f}× → {Vk_slide['Vk_sph']:.0f}×",
                               fg="#534AB7")
-        rv2["rDeffSph"].config( text=f"{rv['Deff_sph']:.1f} mm")
+        avp = r_real["aufl_verlust_pct"]
+        rv2["rAuflVerlust"].config(
+            text=f"{avp:.1f}%  (Blur {r_real['d_blur_as']:.1f}\")",
+            fg="#c62828" if avp > 80 else "#e65100" if avp > 40 else "#2e7d32")
         rv2["rVerlustV"].config(text=f"{rv['verlust']:.1f} mm",
                                 fg="#c62828" if rv["verlust"] > 5 else "#333")
 
@@ -733,8 +730,8 @@ class App(tk.Tk):
                             fg=_qcolor(Qp_V))
 
         self._diagramm_strehl(D, f, lam, r["N"], S_real, S_slide)
-        self._diagramm_oeffnung(D, f, lam, r["N"], r["Deff_k"], r["Deff_s"], S_slide,
-                                Deff_k_slide, Deff_s_slide)
+        self._diagramm_oeffnung(D, f, lam, r["N"], r["Deff_k"],
+                                S_sph=S_real, Dk_slide=Deff_k_slide)
         self._diagramm_deff_D(D, r["N"], S_slide)
         self._diagramm_beugung(D, f)
         self._diagramm_mtf(D, f, lam, S_slide, V=V_slider)
@@ -779,39 +776,64 @@ class App(tk.Tk):
        # fig.tight_layout(); canvas.draw()
         fig.tight_layout(); canvas.draw_idle()
 
-    def _diagramm_oeffnung(self, D, f, lam, N_akt, Dk_akt, Ds_akt, S_sph=None, Dk_slide=None, Ds_slide=None):
+    def _diagramm_oeffnung(self, D, f, lam, N_akt, Dk_akt, Ds_akt=None, S_sph=None, Dk_slide=None, Ds_slide=None):
         fig, ax, canvas = self._tab_oeff
         ax.cla()
-        ns, _, deff_ks, deff_ss = kurven_N(D, lam)
-        # Schraffur: Verlust gegenüber Paraboloid
+        for ax2_old in fig.get_axes()[1:]:
+            fig.delaxes(ax2_old)
+
+        ns, _, deff_ks, aufl_verluste = kurven_N(D, lam)
+        r_akt = berechne(D, f, lam)
+        avp_akt = r_akt["aufl_verlust_pct"]
+
+        # Linke Achse: Deff_k
         ax.fill_between(ns, deff_ks, D, color=ACC, alpha=0.10,
                         label="Kontrast-Verlust gg. Paraboloid")
-        ax.fill_between(ns, deff_ss, D, color=COR, alpha=0.10,
-                        label="Schärfe-Verlust gg. Paraboloid")
-        ax.axhline(D, color="#555", lw=1.5, ls="-",
-                   label=f"Paraboloid = {D:.0f}mm")
+        ax.axhline(D, color="#555", lw=1.5, ls="-", label=f"Paraboloid = {D:.0f}mm")
         ax.plot(ns, deff_ks, color=ACC, lw=2, label="Eff. Öffnung (Kontrast)")
-        ax.plot(ns, deff_ss, color=COR, lw=2, label="Eff. Öffnung (Schärfe)")
         ax.axvline(N_akt, color="#ccc", lw=0.8, ls=":")
         ax.scatter([N_akt], [Dk_akt], color=ACC, s=60, zorder=5)
-        ax.scatter([N_akt], [Ds_akt], color=COR, s=60, zorder=5)
-        if Dk_slide is not None:
-            ax.scatter([N_akt], [Dk_slide], color=ACC, s=120, zorder=6,
-                       marker="*", label=f"Verbessert Kont. {Dk_slide:.0f}mm")
-        if Ds_slide is not None:
-            ax.scatter([N_akt], [Ds_slide], color=COR, s=120, zorder=6,
-                       marker="*", label=f"Verbessert Schärfe {Ds_slide:.0f}mm")
+        ax.annotate(f"D_eff={Dk_akt:.0f}mm",
+                    xy=(N_akt, Dk_akt), xytext=(N_akt+0.3, Dk_akt-15),
+                    fontsize=8, color=ACC)
+        if Dk_slide is not None and Dk_slide > Dk_akt + 1:
+            ax.scatter([N_akt], [Dk_slide], color=GRN, s=120, zorder=6,
+                       marker="*", label=f"Schieber D_eff={Dk_slide:.0f}mm")
+
         ax.set_xlim(3, 15)
         ax.set_xlabel("Öffnungsverhältnis f/D", fontsize=10)
-        ax.set_ylabel("Effektive Öffnung [mm]", fontsize=10)
-        ax.set_title(f"Eff. Öffnung vs. f/D  (D={D:.0f}mm, λ={lam:.0f}nm)",
-                     fontsize=10)
+        ax.set_ylabel("Effektive Öffnung Kontrast [mm]", fontsize=10, color=ACC)
+        ax.tick_params(axis="y", labelcolor=ACC)
         ax.xaxis.set_major_formatter(
             ticker.FuncFormatter(lambda x, _: f"f/{x:.0f}" if x == int(x) else ""))
         ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
-        ax.legend(fontsize=9, loc="lower right"); self._ax_fmt(ax)
-       # fig.tight_layout(); canvas.draw()
-        fig.tight_layout(); canvas.draw_idle()
+
+        # Rechte Achse: Auflösungsverlust %
+        ax2 = ax.twinx()
+        ax2.set_facecolor("none")
+        ax2.fill_between(ns, aufl_verluste, 0, color=COR, alpha=0.08)
+        ax2.plot(ns, aufl_verluste, color=COR, lw=2,
+                 label="Aufl.verlust gg. Paraboloid [%]")
+        ax2.scatter([N_akt], [avp_akt], color=COR, s=60, zorder=5)
+        ax2.annotate(f"{avp_akt:.0f}%",
+                     xy=(N_akt, avp_akt), xytext=(N_akt+0.3, avp_akt+2),
+                     fontsize=8, color=COR, fontweight="bold")
+        ax2.axhline(50, color=COR, lw=0.8, ls=":", alpha=0.5)
+        ax2.set_ylabel("Auflösungsverlust [%]", fontsize=10, color=COR)
+        ax2.set_ylim(0, 105)
+        ax2.tick_params(axis="y", labelcolor=COR)
+        ax2.spines["right"].set_color(COR)
+
+        # Gemeinsame Legende
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(lines1+lines2, labels1+labels2, fontsize=9, loc="center right")
+
+        ax.set_title(f"Eff. Öffnung & Aufl.verlust vs. f/D  (D={D:.0f}mm)",
+                     fontsize=10)
+        self._ax_fmt(ax)
+        fig.tight_layout()
+        canvas.draw_idle()
 
     def _diagramm_deff_D(self, D_akt, N_akt, S_slide=None):
         fig, ax, canvas = self._tab_deff_D

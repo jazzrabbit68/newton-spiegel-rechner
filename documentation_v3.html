@@ -226,15 +226,21 @@
 <p><em>Der mathematische Faktor 206265 rechnet den Radiant in Bogensekunden um.</em></p>
 
 <h3>2.2 Geometrischer Unschärfefleck (Blur)</h3>
-<p>Der durch die sphärische Aberration erzeugte Unschärfefleck (Blur) im besten Fokus im Verhältnis zum Airy-Scheibchen berechnet sich über:</p>
-<div class="math-block"><span class="math">blur<sub>Airy</sub> = W<sub>b</sub> / 2.44</span></div>
-<div class="math-block"><span class="math">blur<sub>as</sub> = blur<sub>Airy</sub> &middot; 2.0 &middot; r<sub>Airy</sub> &emsp; [ 	ext{in Bogensekunden} ]</span></div>
+<p>Der durch die sphärische Aberration erzeugte geometrische Unschärfefleck im besten Fokus berechnet sich direkt aus Öffnung und Brennweite:</p>
+<div class="math-block"><span class="math">d<sub>blur</sub> = D<sup>3</sup> / (64 &middot; f<sup>2</sup>) &emsp; [mm]</span></div>
+<p>In Bogensekunden umgerechnet:</p>
+<div class="math-block"><span class="math">d<sub>blur, as</sub> = (d<sub>blur</sub> / f) &middot; 206265 &emsp; [arcsec]</span></div>
+<p>Für einen 200&nbsp;mm f/5-Spiegel ergibt sich d<sub>blur</sub>&nbsp;=&nbsp;125&nbsp;&micro;m&nbsp;=&nbsp;25,8&prime;&prime;, während das Airy-Scheibchen nur 6,7&nbsp;&micro;m&nbsp;=&nbsp;1,38&prime;&prime; beträgt &ndash; ein Verhältnis von 18,6. Der geometrische Blur ist damit ein Maß für die <strong>fotographische</strong> Bildqualität (unkorrigierte Optik ohne Beugung), nicht für die visuell wahrgenommene Schärfe am Okular.</p>
 
 <h3>2.3 Effektives Auflösungsvermögen (<span class="math">&theta;<sub>eff</sub></span>)</h3>
-<p>Das theoretische Auflösungsvermögen eines perfekten Teleskops wird im Code über die empirische **Dawes-Grenze** definiert:</p>
-<div class="math-block"><span class="math">&theta;<sub>ideal</sub> = 116.0 / D</span></div>
-<p>Das reale Auflösungsvermögen der Sphäre ergibt sich aus der quadratischen Überlagerung der Dawes-Grenze und dem Aberrations-Blur:</p>
-<div class="math-block"><span class="math">&theta;<sub>eff</sub> = &radic;(&theta;<sub>ideal</sub><sup>2</sup> + blur<sub>as</sub><sup>2</sup>)</span></div>
+<p>Das theoretische Auflösungsvermögen eines perfekten Teleskops wird über die empirische <strong>Dawes-Grenze</strong> definiert:</p>
+<div class="math-block"><span class="math">&theta;<sub>ideal</sub> = 116.0 / D &emsp; [arcsec]</span></div>
+<p>Für die <strong>visuelle Beobachtung</strong> am Okular sieht der Beobachter das Beugungsbild (PSF), nicht den geometrischen Lichtkegel. Die visuell wirksame effektive Auflösung wird daher Strehl-basiert berechnet:</p>
+<div class="math-block"><span class="math">&theta;<sub>eff</sub> = &theta;<sub>ideal</sub> / &radic;S</span></div>
+<p><em>Herleitung: Deff = D &middot; &radic;S (aus dem MTF-Integral) &rarr; &theta;<sub>eff</sub> = 116 / Deff = &theta;<sub>ideal</sub> / &radic;S</em></p>
+<p>Der <strong>geometrische Auflösungsverlust</strong> (für fotographische Anwendungen) wird separat als Prozentwert ausgegeben:</p>
+<div class="math-block"><span class="math">&theta;<sub>geo</sub> = &radic;(&theta;<sub>ideal</sub><sup>2</sup> + d<sub>blur, as</sub><sup>2</sup>)</span></div>
+<div class="math-block"><span class="math">Aufl.verlust = (1 - &theta;<sub>ideal</sub> / &theta;<sub>geo</sub>) &middot; 100&thinsp;%</span></div>
 
 <h2>3. Effektive Öffnungen (<span class="math">D<sub>eff</sub></span>)</h2>
 <p>Um den Leistungsverlust für den Beobachter greifbar zu machen, rechnet das Programm den Kontrast- und Schärfeverlust in eine **äquivalente effektive Öffnung** um. Das bedeutet: Ein großer sphärischer Spiegel leistet visuell nur so viel wie ein kleinerer, perfekter Parabolspiegel.</p>
@@ -254,9 +260,14 @@
             <td>Skaliert die globale Kontrastleistung basierend auf der vierten Wurzel des Strehl-Werts.</td>
         </tr>
         <tr>
-            <td><strong>Effektive Öffnung (Schärfe)</strong></td>
-            <td><span class="math">D<sub>eff, s</sub> = 116.0 / &theta;<sub>eff</sub></span></td>
-            <td>Invertiert das reale Auflösungsvermögen zur Bestimmung des effektiven Limits.</td>
+            <td><strong>Geometrischer Auflösungsverlust</strong></td>
+            <td><span class="math">Aufl.verlust = (1 &minus; &theta;<sub>ideal</sub> / &theta;<sub>geo</sub>) &middot; 100&thinsp;%</span></td>
+            <td>Zeigt in Prozent, wie stark der geometrische Blur die theoretische Auflösung mindert. Relevant für Fotografie. Ein 200&nbsp;mm f/5 verliert 97,8&thinsp;% (d<sub>blur</sub>&nbsp;=&nbsp;25,8&prime;&prime; vs. Dawes 0,58&prime;&prime;).</td>
+        </tr>
+        <tr>
+            <td><strong>Kritische Vergrößerung</strong></td>
+            <td><span class="math">V<sub>krit</sub> = D &middot; 0.7 &middot; &radic;S</span></td>
+            <td>Nutzbare maximale Vergrößerung (Strehl-gewichtet, nach Suiter). Unterhalb von V<sub>krit</sub> limitiert das Auge, nicht die Optik.</td>
         </tr>
         <tr>
             <td><strong>Effektive Öffnung (Visuell)</strong></td>
@@ -286,14 +297,23 @@
 <h2>5. Wahrnehmungsmodell & Vergrößerungsabhängigkeit</h2>
 <p>Ein zentrales Feature des Programms ist die Erkenntnis, dass Abbildungsfehler bei niedrigen Vergrößerungen nicht auffallen, da das menschliche Auge das Bild limitiert, nicht das Teleskop.</p>
 
-<h3>5.1 Auflösungslimit des Auges</h3>
-<p>Das Auge hat eine Kontrastschwelle für Planetendetails von ca. 1' (60''). Auf den Objektraum am Himmel zurückgerechnet bedeutet das:</p>
-<div class="math-block"><span class="math">&theta;<sub>Auge</sub> = eye_res_as / V</span></div>
-<p>Daraus resultiert die **kritische Vergrößerung (<span class="math">V<sub>krit</sub></span>)**, unterhalb derer das Auge der Flaschenhals ist:</p>
-<div class="math-block"><span class="math">V<sub>krit</sub> = eye_res_as / &theta;<sub>eff</sub></span></div>
+<h3>5.1 Kritische Vergrößerung (<span class="math">V<sub>krit</sub></span>)</h3>
+<p>Die kritische Vergrößerung beschreibt, ab wann der Sphärenfehler für den Beobachter sichtbar wird. Sie wird Strehl-gewichtet berechnet (nach Suiter, <em>Star Testing Astronomical Telescopes</em>):</p>
+<div class="math-block"><span class="math">V<sub>krit</sub> = D &middot; 0.7 &middot; &radic;S</span></div>
+<p><strong>Begründung:</strong> Unterhalb von V<sub>krit</sub> ist das Auge der limitierende Faktor (nicht die Optik). Beispielwerte für D&nbsp;=&nbsp;200&nbsp;mm:</p>
+<ul>
+    <li>f/5 (S&nbsp;=&nbsp;0,17): V<sub>krit</sub>&nbsp;&asymp;&nbsp;58&times; &mdash; Praxis ca. 60&ndash;80&times;</li>
+    <li>f/7 (S&nbsp;=&nbsp;0,79): V<sub>krit</sub>&nbsp;&asymp;&nbsp;124&times; &mdash; Praxis ca. 140&ndash;170&times;</li>
+    <li>f/9 (S&nbsp;=&nbsp;0,95): V<sub>krit</sub>&nbsp;&asymp;&nbsp;136&times; &mdash; Praxis ca. 190&ndash;220&times;</li>
+</ul>
+<div class="callout">
+    <div class="callout-title">Hinweis: Geometrischer Blur vs. visuelle Wahrnehmung</div>
+    Der geometrische Blur (d<sub>blur</sub>&nbsp;=&nbsp;D³/(64·f²)) beschreibt die fotographische Punktabbildung ohne Beugung. Für einen 200&nbsp;mm f/5-Spiegel beträgt er 25,8&prime;&prime; &mdash; 44-mal größer als die Dawes-Grenze. Dieser Wert ist für Astrophotographie relevant, aber <strong>nicht</strong> für die visuelle Beobachtung: Am Okular sieht der Beobachter das Beugungsbild (PSF), das durch den Strehl-Wert beschrieben wird.
+</div>
 
 <h3>5.2 Wahrgenommener Qualitätsindex (<span class="math">Q<sub>perc</sub></span>) unter CSF</h3>
-<p>Um die tatsächliche visuelle Wahrnehmung zu simulieren, implementiert der Code die **Contrast Sensitivity Function (CSF)** des Auges (nach <em>van Meeteren / Watson-Ahumada</em>). Die Ortsfrequenz im Augenraum (<span class="math">&nu;<sub>cpd</sub></span> in <em>cycles per degree</em>) hängt von der Vergrößerung <span class="math">V</span> ab. Über einen stetigen Übergangsschalter <span class="math">w</span> wird der vergrößerungsabhängige Index ermittelt:</p>
+<p>Um die tatsächliche visuelle Wahrnehmung zu simulieren, implementiert der Code die <strong>Contrast Sensitivity Function (CSF)</strong> des Auges (nach <em>van Meeteren / Watson-Ahumada</em>). Der Übergangsschalter <span class="math">w</span> nutzt V<sub>krit</sub> konsistent mit der Strehl-basierten Formel:</p>
+<div class="math-block"><span class="math">V<sub>krit</sub> = D &middot; 0.7 &middot; &radic;S</span></div>
 <div class="math-block"><span class="math">w = 1.0 / [1.0 + (V<sub>krit</sub> / V)<sup>2</sup>]</span></div>
 <div class="math-block"><span class="math">Q<sub>perc</sub>(V) = Q<sub>raw</sub> + (1.0 - Q<sub>raw</sub>) &middot; (1.0 - w)</span></div>
 
@@ -333,7 +353,7 @@
 </div>
 
 <div class="footer-note">
-    Technische Gesamtdokumentation (Vollversion) &middot; Generiert aus Programmanalyse von <code>newton_spiegel_rechner.py</code> &middot; Alle mathematischen und visuellen Modelle vollständig abgebildet.
+    Technische Gesamtdokumentation (v4) &middot; Generiert aus Programmanalyse von <code>newton_spiegel_rechner.py</code> &middot; Alle mathematischen und visuellen Modelle vollständig abgebildet.
 </div>
 
 </body>

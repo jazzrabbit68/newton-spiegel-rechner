@@ -46,9 +46,9 @@ def berechne(D_mm, f_mm, lam_nm):
     return dict(
         N=N, D_inch=D_inch, Wp=Wp, Wb=Wb, Wrms=Wrms,
         strehl=S, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
-        r_airy_as=r_airy_as, blur_airy=blur_airy, blur_as=blur_as,
+        r_airy_as=r_airy_as, W040=W040, rms_spot_as=rms_spot_as,
         theta_ideal=theta_ideal, theta_eff=theta_eff,
-        Deff_s=Deff_s, loss_s=D_mm - Deff_s,
+        aufl_verlust_pct=aufl_verlust_pct,
         Q02=Q02, Q04=Q04, Q06=Q06, Qshape=Qshape,
         Qvis=Qvis, Deff_vis=Deff_vis, loss_vis=D_mm - Deff_vis,
     )
