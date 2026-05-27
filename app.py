@@ -594,7 +594,6 @@ st.markdown(f"""
   {row("f/D", f"{r['N']:.1f}")}
   {row("Strehl", f"{S_real:.4f}")}
   {row("D_eff Kontrast", f"{r['Deff_k']:.1f} mm", f"−{r['loss_k']:.1f} mm")}
-  {row("D_eff Schärfe", f"{r['Deff_s']:.1f} mm", f"−{r['loss_s']:.1f} mm")}
   {row("V_krit", f"{Vk['Vk_sph']:.0f}×")}
 </tr>
 <tr>
