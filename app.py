@@ -44,13 +44,15 @@ def berechne(D_mm, f_mm, lam_nm):
     Qvis = S * Qshape
     Deff_vis = D_mm * Qvis**0.25
     return dict(
-        N=N, D_inch=D_inch, Wp=Wp, Wb=Wb, Wrms=Wrms,
+        N=N, D_inch=D_inch,
+        Wp=Wp, Wb=Wb, Wrms=Wrms,
         strehl=S, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
-        r_airy_as=r_airy_as, W040=W040, rms_spot_as=rms_spot_as,
+        r_airy_as=r_airy_as, d_blur_mm=d_blur_mm, d_blur_as=d_blur_as,
         theta_ideal=theta_ideal, theta_eff=theta_eff,
-        aufl_verlust_pct=aufl_verlust_pct,
+        aufl_verlust_pct=aufl_verlust_pct, V_krit_vis=V_krit_vis,
         Q02=Q02, Q04=Q04, Q06=Q06, Qshape=Qshape,
-        Qvis=Qvis, Deff_vis=Deff_vis, loss_vis=D_mm - Deff_vis,
+        Qvis=Qvis, Deff_vis=Deff_vis,
+        loss_vis=D_mm - Deff_vis,
     )
 
 def berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as=16.0):
