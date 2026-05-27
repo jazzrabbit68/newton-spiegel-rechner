@@ -32,10 +32,10 @@ def berechne(D_mm, f_mm, lam_nm):
     S      = math.exp(-(2 * math.pi * Wrms) ** 2)
     Deff_k = D_mm * S**0.25
     r_airy_as   = 1.22 * lam_mm / D_mm * 206265.0
-    blur_airy   = Wb / 2.44
-    blur_as     = blur_airy * 2.0 * r_airy_as
+    d_blur_mm   = D_mm**3 / (64.0 * f_mm**2)
+    d_blur_as   = d_blur_mm / f_mm * 206265.0
     theta_ideal = 116.0 / D_mm
-    theta_eff   = math.sqrt(theta_ideal**2 + blur_as**2)
+    theta_eff   = theta_ideal / math.sqrt(max(S, 1e-6))
     Deff_s      = 116.0 / theta_eff
     Q02 = mtf_sph_rel(0.2, Wb)
     Q04 = mtf_sph_rel(0.4, Wb)
@@ -43,6 +43,10 @@ def berechne(D_mm, f_mm, lam_nm):
     Qshape = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
     Qvis = S * Qshape
     Deff_vis = D_mm * Qvis**0.25
+    theta_geo   = math.sqrt(theta_ideal**2 + d_blur_as**2)
+    aufl_verlust_pct = (1.0 - theta_ideal / theta_geo) * 100.0
+    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-6))
+
     return dict(
         N=N, D_inch=D_inch,
         Wp=Wp, Wb=Wb, Wrms=Wrms,
