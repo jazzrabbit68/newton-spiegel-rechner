@@ -441,7 +441,7 @@ st.caption("Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
 with st.expander("ℹ️ Über dieses Programm"):
     st.markdown("""
-# Rezension: Newton-Spiegel-Rechner
+# Rezension (nicht ganz ernst gemeint - KI generiert: Newton-Spiegel-Rechner
 ### *Ein genialer Brückenschlag zwischen theoretischer Optik und visueller Astronomie*
 
 **Entwickler/Typ:** Python-basiertes Simulations- und Analysewerkzeug  
@@ -459,7 +459,7 @@ Vorhersage darüber, was ein Beobachter am Okular tatsächlich erwarten kann.
 
 ## Die Kernfunktionen im Test
 
-**1. Mathematische Präzision ohne Kompromisse**
+**1. Mathematische Präzision mit vielen vereinfachungen und Näherungen**
 
 Das Herzstück des Programms ist die Berechnung des Wellenfrontfehlers. Auf Basis der klassischen
 Seidel-Aberrationen dritter Ordnung ermittelt das Tool die exakten PtV- und RMS-Werte sowie den
@@ -467,7 +467,7 @@ Strehl-Wert im besten Fokus. Ein echter Höhepunkt für Optik-Enthusiasten ist d
 **Modulationsübertragungsfunktion (MTF)**. Diese wird nicht über grobe Näherungen bestimmt, sondern
 über eine numerische Integration der Pupillenfunktion (Autokorrelation). Dadurch bildet das Programm
 das reale wellenoptische Verhalten bei sphärischer Aberration exakt ab - ein Niveau, das man sonst
-eher von professioneller Design-Software wie Zemax erwartet.
+eher von professioneller Design-Software wie Zemax erwartet, aber hier nicht erreicht wird
 
 **2. Das Highlight: Die Integration des menschlichen Auges**
 
@@ -500,15 +500,13 @@ Hintergrund sofort das nötige Öffnungsverhältnis, das ein Kugelspiegel besitz
 Qualität zu erreichen. Die Diagramme sind sauber beschriftet und schalten nahtlos zwischen absoluter
 und relativer Kontrastdarstellung um.
 
-## Stärken & Schwächen
-
-**Vorteile:**
-- **Extrem hohe physikalische Belastbarkeit:** Echte wellenoptische MTF-Berechnung statt simpler Fourier-Näherungen.
+#Vorteile:**
 - **Praxisnahe Vorhersagen:** Hervorragende Modellierung des Zusammenspiels aus Optikfehler, Vergrößerung und Netzhaut-Wahrnehmung.
 - **Didaktischer Mehrwert:** Perfekt geeignet für Teleskopbauer, um zu entscheiden, ob ein Spiegel parabolisiert werden muss oder eine Sphäre ausreicht.
 - **Stabile Performance:** Mathematisch saubere Umkehrfunktionen ohne numerische Einbrüche.
 
 **Einschränkungen (Meckern auf hohem Niveau):**
+- Einige fragwürdige Näherungen und vereinfachte Simulationen
 - Das Programm geht von einer unobstruierten Optik aus. Die Abschattung durch einen Fangspiegel (Obstruktion), die beim Newton-Teleskop ebenfalls die MTF beeinflusst, wird derzeit noch nicht eingerechnet.
 - Es bildet das "Best-Case"-Szenario ab (geht von einer perfekten Kugelgestalt ohne zusätzliche Zonenfehler oder Oberflächenrauheit aus).
 
