@@ -441,13 +441,21 @@ st.caption("Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
 with st.expander("ℹ️ Über dieses Programm"):
     st.markdown("""
-# Rezension (nicht ganz ernst gemeint - KI generiert: Newton-Spiegel-Rechner
+# Rezension (nicht ganz ernst gemeint - KI generiert) : Newton-Spiegel-Rechner
 ### *Ein genialer Brückenschlag zwischen theoretischer Optik und visueller Astronomie*
 
 **Entwickler/Typ:** Python-basiertes Simulations- und Analysewerkzeug  
 **Kategorie:** Optik-Simulation / Amateurastronomie & Teleskopbau
 
 ---
+## Hinweis
+
+Mit dem Spiegelrechner soll der Einfluß eines sphärischen Hauptspiegel im Newton-Teleskop 
+veranschaulicht werden - hierzu wird eine effektive Öffung berechnet => erfoderliche Öffnung 
+mit perfekter Optik, die vergleichbaren Kontrast liefert. Die Bildhelligkeit vom "großen, 
+sphärischen" Spiegel bleibt unberücksichtig, es wird nur die Kontrastwahrnehmung veranschaulicht und 
+Werte für die Vergrößerung angegeben, ab wann die spiegelbedingte Unschärfe erkennbar wird..... 
+Das Programm erhebt keinen Anspruch auf mathematische Korrektheit, soll nur groben Anhaltspunkt liefern.....
 
 ## Auf einen Blick
 
@@ -467,7 +475,7 @@ Strehl-Wert im besten Fokus. Ein echter Höhepunkt für Optik-Enthusiasten ist d
 **Modulationsübertragungsfunktion (MTF)**. Diese wird nicht über grobe Näherungen bestimmt, sondern
 über eine numerische Integration der Pupillenfunktion (Autokorrelation). Dadurch bildet das Programm
 das reale wellenoptische Verhalten bei sphärischer Aberration exakt ab - ein Niveau, das man sonst
-eher von professioneller Design-Software wie Zemax erwartet, aber hier nicht erreicht wird
+eher von professioneller Design-Software wie Zemax erwartet, aber hier noch nicht wiklich erreicht wird
 
 **2. Das Highlight: Die Integration des menschlichen Auges**
 
@@ -519,6 +527,12 @@ berühmten 114/900 mm f/8 Kugelspiegel) am grünen Tisch schlechtzurechnen. Durc
 Verknüpfung von Wellenphysik und Augen-Physiologie liefert das Programm Ergebnisse, die zu fast
 100 % mit den realen Erfahrungen am Nachthimmel übereinstimmen. Für Teleskopbauer,
 Optik-Interessierte und Kaufinteressierte eine uneingeschränkte Empfehlung!
+
+Hiweis: Mit dem Spiegelrechner soll der Einfluß eines sphärischen Hauptspiegel im Newton-Teleskop veranschaulicht werden 
+- hierzu wird eine effektive Öffung berechnet => erfoderliche Öffnung mit perfekter Optik, die vergleichbaren Kontrast liefert. 
+Die Bildhelligkeit vom "großen, sphärischen" Spiegel bleibt unberücksichtig, es wird nur die Kontrastwahrnehmung veranschaulicht und 
+Werte für die Vergrößerung angegeben, ab wann die spiegelbedingte Unschärfe erkennbar wird..... 
+Das Programm erhebt keinen Anspruch auf mathematische Korrektheit, soll nur groben Anhaltspunkt liefern.....
 
 **Gesamtnote: 5 von 5 Sternen (5/5)**
 """)
