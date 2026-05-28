@@ -32,10 +32,12 @@ def berechne(D_mm, f_mm, lam_nm):
     S      = math.exp(-(2 * math.pi * Wrms) ** 2)
     Deff_k = D_mm * S**0.25
     r_airy_as   = 1.22 * lam_mm / D_mm * 206265.0
-    d_blur_mm   = D_mm**3 / (64.0 * f_mm**2)
-    d_blur_as   = d_blur_mm / f_mm * 206265.0
     theta_ideal = 116.0 / D_mm
     theta_eff   = theta_ideal / math.sqrt(max(S, 1e-6))
+    d_blur_mm   = D_mm**3 / (64.0 * f_mm**2)
+    d_blur_as   = d_blur_mm / f_mm * 206265.0
+    theta_geo   = math.sqrt(theta_ideal**2 + d_blur_as**2)
+    aufl_verlust_pct = (1.0 - theta_ideal / theta_geo) * 100.0
     Deff_s      = 116.0 / theta_eff
     Q02 = mtf_sph_rel(0.2, Wb)
     Q04 = mtf_sph_rel(0.4, Wb)
@@ -43,20 +45,15 @@ def berechne(D_mm, f_mm, lam_nm):
     Qshape = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
     Qvis = S * Qshape
     Deff_vis = D_mm * Qvis**0.25
-    theta_geo   = math.sqrt(theta_ideal**2 + d_blur_as**2)
-    aufl_verlust_pct = (1.0 - theta_ideal / theta_geo) * 100.0
-    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-6))
-
     return dict(
-        N=N, D_inch=D_inch,
-        Wp=Wp, Wb=Wb, Wrms=Wrms,
+        N=N, D_inch=D_inch, Wp=Wp, Wb=Wb, Wrms=Wrms,
         strehl=S, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
         r_airy_as=r_airy_as, d_blur_mm=d_blur_mm, d_blur_as=d_blur_as,
         theta_ideal=theta_ideal, theta_eff=theta_eff,
-        aufl_verlust_pct=aufl_verlust_pct, V_krit_vis=V_krit_vis,
+        aufl_verlust_pct=aufl_verlust_pct,
+        Deff_s=Deff_s, loss_s=D_mm - Deff_s,
         Q02=Q02, Q04=Q04, Q06=Q06, Qshape=Qshape,
-        Qvis=Qvis, Deff_vis=Deff_vis,
-        loss_vis=D_mm - Deff_vis,
+        Qvis=Qvis, Deff_vis=Deff_vis, loss_vis=D_mm - Deff_vis,
     )
 
 def berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as=16.0):
@@ -594,6 +591,7 @@ st.markdown(f"""
   {row("f/D", f"{r['N']:.1f}")}
   {row("Strehl", f"{S_real:.4f}")}
   {row("D_eff Kontrast", f"{r['Deff_k']:.1f} mm", f"−{r['loss_k']:.1f} mm")}
+  {row("D_eff Schärfe", f"{r['Deff_s']:.1f} mm", f"−{r['loss_s']:.1f} mm")}
   {row("V_krit", f"{Vk['Vk_sph']:.0f}×")}
 </tr>
 <tr>
