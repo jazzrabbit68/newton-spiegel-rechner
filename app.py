@@ -441,7 +441,6 @@ st.caption("Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
 with st.expander("ℹ️ Über dieses Programm"):
     st.markdown("""
-# Whitepaper
 
 ## Physikalisch motiviertes Wahrnehmungs- und Qualitätsmodell für sphärische Newton-Spiegelteleskope
 
