@@ -38,6 +38,7 @@ def berechne(D_mm, f_mm, lam_nm):
     d_blur_as   = d_blur_mm / f_mm * 206265.0
     theta_geo   = math.sqrt(theta_ideal**2 + d_blur_as**2)
     aufl_verlust_pct = (1.0 - theta_ideal / theta_geo) * 100.0
+    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-6))
     Deff_s      = 116.0 / theta_eff
     Q02 = mtf_sph_rel(0.2, Wb)
     Q04 = mtf_sph_rel(0.4, Wb)
@@ -50,7 +51,7 @@ def berechne(D_mm, f_mm, lam_nm):
         strehl=S, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
         r_airy_as=r_airy_as, d_blur_mm=d_blur_mm, d_blur_as=d_blur_as,
         theta_ideal=theta_ideal, theta_eff=theta_eff,
-        aufl_verlust_pct=aufl_verlust_pct,
+        aufl_verlust_pct=aufl_verlust_pct, V_krit_vis=V_krit_vis,
         Deff_s=Deff_s, loss_s=D_mm - Deff_s,
         Q02=Q02, Q04=Q04, Q06=Q06, Qshape=Qshape,
         Qvis=Qvis, Deff_vis=Deff_vis, loss_vis=D_mm - Deff_vis,
@@ -71,19 +72,19 @@ def berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as=16.0):
 def v_kritisch(D_mm, f_mm, lam_nm, eye_res_as=16.0):
     r = berechne(D_mm, f_mm, lam_nm)
     return dict(
-        Vk_sph  = eye_res_as / r["theta_eff"],
-        Vk_para = eye_res_as / r["theta_ideal"],
+        Vk_sph  = r["V_krit_vis"],
+        Vk_para = D_mm * 0.7,
         Vmax    = D_mm / 0.5,
         Vmin    = D_mm / 7.0,
     )
 
 def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=400):
     ns = np.linspace(N_min, N_max, schritte)
-    strehls, deff_ks, deff_ss = [], [], []
+    strehls, deff_ks, aufl_verluste = [], [], []
     for n in ns:
         r = berechne(D_mm, D_mm * n, lam_nm)
-        strehls.append(r["strehl"]); deff_ks.append(r["Deff_k"]); deff_ss.append(r["Deff_s"])
-    return ns, np.array(strehls), np.array(deff_ks), np.array(deff_ss)
+        strehls.append(r["strehl"]); deff_ks.append(r["Deff_k"]); aufl_verluste.append(r["aufl_verlust_pct"])
+    return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste)
 
 def strehl_to_f(S, D_mm, lam_nm=550.0):
     lam_mm = lam_nm * 1e-6
@@ -93,7 +94,8 @@ def strehl_to_f(S, D_mm, lam_nm=550.0):
     Wb   = Wrms * 1.5 * math.sqrt(5)
     Wp   = Wb * 4.0
     f3   = D_mm**4 / (1024.0 * Wp * lam_mm)
-    return D_mm * (f3 ** (1.0/3.0)) / D_mm
+    N    = (f3 ** (1.0/3.0)) / D_mm
+    return D_mm * N
 
 def mtf_para(f):
     if f <= 0: return 1.0
@@ -149,10 +151,8 @@ def perceived_quality(D_mm, f_mm, lam_nm, V, n_pts=28, use_csf=True):
     lam_mm    = lam_nm * 1e-6
     Wp        = D_mm**4 / (1024.0 * f_mm**3 * lam_mm)
     Wb        = Wp / 4.0
-    r_airy    = 1.22 * lam_mm / D_mm * 206265.0
-    blur_as   = (Wb / 2.44) * 2.0 * r_airy
-    theta_eff = math.sqrt((116.0/D_mm)**2 + blur_as**2)
-    V_krit    = 60.0 / theta_eff
+    # Kritische Vergrößerung: Strehl-basiert (konsistent mit v_kritisch)
+    V_krit    = D_mm * 0.7 * math.sqrt(max(strehl, 1e-6))
     w = 1.0 / (1.0 + (V_krit / V) ** 2)
     return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
 
@@ -161,11 +161,11 @@ def perceived_quality_kurven(D_mm, f_mm, lam_nm, V_arr, use_csf=True):
 
 def beurteilung(strehl):
     if strehl >= 0.95:
-        return "✅ Sehr gut - nahezu gleichwertig mit Parabolspiegel (Strehl >= 0.95)", "green"
+        return "✓ Sehr gut — nahezu gleichwertig mit Parabolspiegel (Strehl ≥ 0.95)", "#2e7d32"
     elif strehl >= 0.80:
-        return "⚠️ Noch beugungsbegrenzt (Rayleigh), spürbarer Kontrastverlust (0.80 <= Strehl < 0.95)", "orange"
+        return ("⚠  Noch beugungsbegrenzt (Rayleigh), spürbarer Kontrastverlust bei Planeten  (0.80 ≤ Strehl < 0.95)"), "#e65100"
     else:
-        return "❌ Nicht beugungsbegrenzt - erheblicher Kontrast- und Schärfeverlust (Strehl < 0.80)", "red"
+        return ("✗  Nicht beugungsbegrenzt — erheblicher Kontrast- und Schärfeverlust, Parabolspiegel dringend empfohlen (Strehl < 0.80)"), "#c62828"
 
 def ax_fmt(ax):
     ax.grid(True, color="#e5e5e5", lw=0.3)
@@ -785,7 +785,7 @@ Qp_V   = perceived_quality(D, f, lam, V_slider)
 verdict_text, verdict_color = beurteilung(S_real)
 
 # ── Ergebnisse kompakt ───────────────────────────────────────────────────────
-border = {'green': '#2e7d32', 'orange': '#e65100', 'red': '#c62828'}[verdict_color]
+border = verdict_color  # already a hex color string
 st.markdown(
     f"<div style='background:#f0f0f0;padding:7px 14px;border-radius:6px;"
     f"border-left:4px solid {border};font-size:0.85em;margin-bottom:8px'>"
