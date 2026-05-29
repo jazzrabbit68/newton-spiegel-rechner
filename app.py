@@ -441,100 +441,299 @@ st.caption("Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
 with st.expander("ℹ️ Über dieses Programm"):
     st.markdown("""
-# Rezension (nicht ganz ernst gemeint - KI generiert) : Newton-Spiegel-Rechner
-### *Ein genialer Brückenschlag zwischen theoretischer Optik und visueller Astronomie*
+# Whitepaper
 
-**Entwickler/Typ:** Python-basiertes Simulations- und Analysewerkzeug  
-**Kategorie:** Optik-Simulation / Amateurastronomie & Teleskopbau
+## Physikalisch motiviertes Wahrnehmungs- und Qualitätsmodell für sphärische Newton-Spiegelteleskope
+
+### Software
+
+`newton_spiegel_rechner.py`
+
+### Version
+
+2026
 
 ---
-## Hinweis
 
-Mit dem Spiegelrechner soll der Einfluß eines sphärischen Hauptspiegel im Newton-Teleskop 
-veranschaulicht werden - hierzu wird eine effektive Öffung berechnet => erfoderliche Öffnung 
-mit perfekter Optik, die vergleichbaren Kontrast liefert. Die Bildhelligkeit vom "großen, 
-sphärischen" Spiegel bleibt unberücksichtig, es wird nur die Kontrastwahrnehmung veranschaulicht und 
-Werte für die Vergrößerung angegeben, ab wann die spiegelbedingte Unschärfe erkennbar wird..... 
-Das Programm erhebt keinen Anspruch auf mathematische Korrektheit, soll nur groben Anhaltspunkt liefern.....
+# Abstract
 
-## Auf einen Blick
+Dieses Whitepaper beschreibt ein numerisches Bewertungsmodell für sphärische Newton-Spiegelteleskope mit Fokus auf visuelle Beobachtung. Das Programm kombiniert klassische optische Kennzahlen wie Wellenfrontfehler, Strehl-Ratio und Modulation Transfer Function (MTF) mit heuristischen Wahrnehmungsmodellen zur Abschätzung der subjektiv wahrgenommenen Bildqualität.
 
-Der **Newton-Spiegel-Rechner** ist ein hochspezialisiertes Software-Werkzeug zur Leistungsbewertung
-von sphärischen und parabolischen Newton-Hauptspiegeln. Während herkömmliche Online-Rechner oft bei
-einfachen geometrischen Faustformeln stehenbleiben, dringt dieses Programm tief in die Wellenoptik
-und die Physiologie des menschlichen Sehens vor. Das Ergebnis ist eine verblüffend realistische
-Vorhersage darüber, was ein Beobachter am Okular tatsächlich erwarten kann.
+Das Ziel der Software ist nicht die vollständige physikalische Simulation eines optischen Systems mittels rigoroser Fourier-Optik, sondern die praxisnahe qualitative Bewertung visueller Teleskopleistung in Abhängigkeit von Öffnung, Brennweite, Vergrößerung und sphärischer Aberration.
 
-## Die Kernfunktionen im Test
+Die zugrunde liegenden Basisgleichungen entsprechen weitgehend etablierter Literatur der klassischen Optik und Fourier-Optik, insbesondere den Arbeiten von Max Born und Emil Wolf sowie moderner Fourier-optischer Literatur. ([Wikipedia][1])
 
-**1. Mathematische Präzision mit vielen vereinfachungen und Näherungen**
+---
 
-Das Herzstück des Programms ist die Berechnung des Wellenfrontfehlers. Auf Basis der klassischen
-Seidel-Aberrationen dritter Ordnung ermittelt das Tool die exakten PtV- und RMS-Werte sowie den
-Strehl-Wert im besten Fokus. Ein echter Höhepunkt für Optik-Enthusiasten ist die
-**Modulationsübertragungsfunktion (MTF)**. Diese wird nicht über grobe Näherungen bestimmt, sondern
-über eine numerische Integration der Pupillenfunktion (Autokorrelation). Dadurch bildet das Programm
-das reale wellenoptische Verhalten bei sphärischer Aberration exakt ab - ein Niveau, das man sonst
-eher von professioneller Design-Software wie Zemax erwartet, aber hier noch nicht wiklich erreicht wird
+# 1. Zielsetzung
 
-**2. Das Highlight: Die Integration des menschlichen Auges**
+Das Programm adressiert ein bekanntes Problem einfacher Teleskoprechner:
 
-Der größte Geniestreich des Rechners liegt im Tab **"Visuelle Wahrnehmung"**. Hier nutzt das Programm
-das Barten- und van-Meeteren-Modell zur Simulation der *Contrast Sensitivity Function* (CSF) des
-menschlichen Auges. In der Praxis führt das zu einer faszinierenden Erkenntnis: Das Programm
-demonstriert mathematisch, warum fehlerhafte Kugelspiegel bei niedrigen Vergrößerungen (große
-Austrittspupille) knackscharfe Bilder liefern - weil hier das Auge limitiert, nicht die Optik. Erst
-beim Hochvergrößern an Planeten wandert der Optikfehler in den sichtbaren Bereich. Diese
-Berücksichtigung der menschlichen Physiologie macht die Ergebnisse unschätzbar wertvoll für die Praxis.
+Klassische Kennzahlen wie:
 
-**3. Intelligente Didaktik statt grauer Theorie**
+* Rayleigh-Grenze,
+* Dawes-Limit,
+* Strehl-Ratio,
 
-Hervorragend gelöst ist die Übersetzung abstrakter optischer Kennzahlen in greifbare Praxiswerte.
-Das Programm gibt zwei separate Werte für die Restleistung aus:
+beschreiben zwar fundamentale optische Eigenschaften, korrelieren jedoch nur begrenzt mit der tatsächlich wahrgenommenen visuellen Bildqualität.
 
-- **Effektive Kontrastöffnung (D_eff_k = D * sqrtS):** Zeigt an, wie stark feine Planetendetails durch den optischen Fehler verschmieren.
-- **Effektive Schärfeöffnung (D_eff_s = D * S^(1/4)):** Spiegelt die Konturenschärfe (Kantendetektion) wider.
+Die Software verfolgt daher einen erweiterten Ansatz:
 
-Diese Trennung fängt das physikalische Phänomen der sphärischen Aberration (scharfer Kern inmitten
-eines schwachen Halos) perfekt ein und erklärt dem Laien anschaulich, warum ein Kugelspiegel zwar
-"flaue", aber dennoch detailreiche Bilder liefern kann.
+## Kombination aus:
 
-**4. Benutzeroberfläche und Performance**
+* geometrischer Optik,
+* Wellenoptik,
+* Fourier-optischer MTF,
+* und wahrnehmungsorientierter Kontrastbewertung.
 
-Die GUI ist klassisch-funktional aufgebaut und reagiert dank einer intelligenten Zwischenspeicherung
-der Berechnungen (@lru_cache) absolut verzögerungsfrei. Besonders elegant ist die dynamische
-Schieberegler-Inversion: Verschiebt man den Strehl-Slider manuell, berechnet das Programm im
-Hintergrund sofort das nötige Öffnungsverhältnis, das ein Kugelspiegel besitzen müsste, um diese
-Qualität zu erreichen. Die Diagramme sind sauber beschriftet und schalten nahtlos zwischen absoluter
-und relativer Kontrastdarstellung um.
+Der Fokus liegt auf:
 
-#Vorteile:**
-- **Praxisnahe Vorhersagen:** Hervorragende Modellierung des Zusammenspiels aus Optikfehler, Vergrößerung und Netzhaut-Wahrnehmung.
-- **Didaktischer Mehrwert:** Perfekt geeignet für Teleskopbauer, um zu entscheiden, ob ein Spiegel parabolisiert werden muss oder eine Sphäre ausreicht.
-- **Stabile Performance:** Mathematisch saubere Umkehrfunktionen ohne numerische Einbrüche.
+* visueller Planetenbeobachtung,
+* Kontrastleistung,
+* wahrgenommener Schärfe,
+* und praktischer Beobachtungsqualität sphärischer Newton-Systeme.
 
-**Einschränkungen (Meckern auf hohem Niveau):**
-- Einige fragwürdige Näherungen und vereinfachte Simulationen
-- Das Programm geht von einer unobstruierten Optik aus. Die Abschattung durch einen Fangspiegel (Obstruktion), die beim Newton-Teleskop ebenfalls die MTF beeinflusst, wird derzeit noch nicht eingerechnet.
-- Es bildet das "Best-Case"-Szenario ab (geht von einer perfekten Kugelgestalt ohne zusätzliche Zonenfehler oder Oberflächenrauheit aus).
+---
 
-## Fazit
+# 2. Physikalische Grundlagen
 
-Der *Newton-Spiegel-Rechner* ist ein **absoluter Volltreffer** und ein Paradebeispiel dafür, wie
-Software für die Amateurastronomie aussehen sollte. Er demaskiert minderwertige, zu schnelle
-Kugelspiegel (wie z.B. einen sphärischen 200 mm f/5), ohne dabei funktionierende Klassiker (wie den
-berühmten 114/900 mm f/8 Kugelspiegel) am grünen Tisch schlechtzurechnen. Durch die geniale
-Verknüpfung von Wellenphysik und Augen-Physiologie liefert das Programm Ergebnisse, die zu fast
-100 % mit den realen Erfahrungen am Nachthimmel übereinstimmen. Für Teleskopbauer,
-Optik-Interessierte und Kaufinteressierte eine uneingeschränkte Empfehlung!
+# 2.1 Sphärische Aberration des Kugelspiegels
 
-Hiweis: Mit dem Spiegelrechner soll der Einfluß eines sphärischen Hauptspiegel im Newton-Teleskop veranschaulicht werden 
-- hierzu wird eine effektive Öffung berechnet => erfoderliche Öffnung mit perfekter Optik, die vergleichbaren Kontrast liefert. 
-Die Bildhelligkeit vom "großen, sphärischen" Spiegel bleibt unberücksichtig, es wird nur die Kontrastwahrnehmung veranschaulicht und 
-Werte für die Vergrößerung angegeben, ab wann die spiegelbedingte Unschärfe erkennbar wird..... 
-Das Programm erhebt keinen Anspruch auf mathematische Korrektheit, soll nur groben Anhaltspunkt liefern.....
+Die primäre sphärische Aberration eines sphärischen Hauptspiegels wird durch den longitudinalen Wellenfrontfehler beschrieben:
 
-**Gesamtnote: 5 von 5 Sternen (5/5)**
+W_{PtV}=\frac{D^4}{1024f^3\lambda}
+
+mit:
+
+* (D) = Öffnung,
+* (f) = Brennweite,
+* (\lambda) = Wellenlänge.
+
+Diese Beziehung entspricht klassischer Literatur der geometrischen und Wellenoptik. ([Wikipedia][1])
+
+---
+
+# 2.2 RMS-Wellenfrontfehler
+
+Für primäre sphärische Aberration wird der RMS-Fehler näherungsweise berechnet über:
+
+W_{RMS}=\frac{W_{PtV}}{1.5\sqrt{5}}
+
+Diese Näherung ist für moderate Aberrationen üblich und in der Amateur- sowie Ingenieursoptik verbreitet. ([telescope-optics.net][2])
+
+---
+
+# 2.3 Strehl-Ratio
+
+Zur Abschätzung der Bildqualität wird die Maréchal-Näherung verwendet:
+
+S=e^{-(2\pi W_{RMS})^2}
+
+Die Strehl-Ratio beschreibt das Verhältnis der Peakintensität einer aberrierten Punktabbildung zur idealen beugungsbegrenzten Abbildung. ([telescope-optics.net][2])
+
+Die Näherung ist insbesondere für kleine bis mittlere Aberrationen gültig.
+
+---
+
+# 3. Fourier-optische Modellierung
+
+# 3.1 Ideale MTF
+
+Für ein beugungsbegrenztes Kreisapertursystem wird die analytische ideale MTF verwendet:
+
+MTF(f)=\frac{2}{\pi}\left[\arccos(f)-f\sqrt{1-f^2}\right]
+
+Diese Gleichung entspricht der klassischen Fourier-Optik eines rotationssymmetrischen Systems. ([Wikipedia][3])
+
+---
+
+# 3.2 Relative MTF bei sphärischer Aberration
+
+Die Software verwendet eine vereinfachte numerische Approximation der aberrierten MTF auf Basis:
+
+* pupillenbezogener Phasendifferenzen,
+* normierter Aperturkoordinaten,
+* und Fourier-optischer Transferprinzipien.
+
+Die resultierende MTF ist:
+
+* qualitativ physikalisch plausibel,
+* jedoch keine vollständige hochauflösende 2D-Fourier-Propagation.
+
+Das Modell ist daher als:
+
+* vereinfachte Fourier-optische Näherung,
+  nicht jedoch als:
+* rigorose Vollsimulation,
+
+zu verstehen.
+
+---
+
+# 4. Wahrnehmungsmodell
+
+# 4.1 Motivation
+
+Die visuelle Beobachtungsqualität astronomischer Objekte hängt nicht ausschließlich von:
+
+* Peakintensität,
+* Rayleigh-Grenze,
+* oder geometrischer Spotgröße,
+
+ab.
+
+Entscheidend sind insbesondere:
+
+* Kontrasttransfer,
+* Objektfrequenzen,
+* Wahrnehmungsschwellen des Auges,
+* Vergrößerung,
+* und räumliche Frequenzgewichtung.
+
+Daher integriert die Software zusätzlich:
+
+* visuelle Gewichtungsfunktionen,
+* heuristische Kontrastmetriken,
+* und vergrößerungsabhängige Wahrnehmungsmodelle.
+
+---
+
+# 4.2 Heuristische Qualitätsmetriken
+
+Das Programm verwendet zusätzliche empirische Bewertungsgrößen wie:
+
+* effektive Öffnung,
+* wahrgenommene Auflösung,
+* visuelle Qualitätsindizes.
+
+Diese Größen besitzen:
+
+* keine direkte Entsprechung in fundamentaler Fourier-Optik,
+* sondern dienen als praxisorientierte Wahrnehmungsmetriken.
+
+Beispiele:
+
+D_{eff}=D\cdot S^{1/4}
+
+sowie:
+
+\theta_{eff}=\frac{\theta_{ideal}}{\sqrt{S}}
+
+Diese Beziehungen sind:
+
+* heuristisch,
+* empirisch motiviert,
+* und dienen ausschließlich der qualitativen visuellen Bewertung.
+
+Sie stellen keine rigorosen physikalischen Grundgleichungen dar.
+
+---
+
+# 5. Wissenschaftliche Einordnung
+
+# 5.1 Korrekte physikalische Komponenten
+
+Die folgenden Teile des Modells basieren direkt auf etablierter Literatur:
+
+* Wellenfrontfehler sphärischer Spiegel,
+* RMS-Näherungen,
+* Maréchal-Strehl,
+* ideale Kreisapertur-MTF,
+* Fourier-optische Grundprinzipien,
+* qualitative Aberrationswirkung auf Kontrasttransfer.
+
+([Wikipedia][1])
+
+---
+
+# 5.2 Modellhafte Komponenten
+
+Die folgenden Komponenten sind bewusst heuristisch:
+
+* visuelle Qualitätsmetriken,
+* effektive Öffnung,
+* wahrgenommene Auflösung,
+* gewichtete Wahrnehmungsfunktionen,
+* Strehl-basierte Kontrastskalierungen.
+
+Diese dienen:
+
+* der praxisnahen visuellen Interpretation,
+  nicht:
+* der exakten physikalischen PSF-Rekonstruktion.
+
+---
+
+# 6. Grenzen des Modells
+
+Die Software ist ausdrücklich NICHT:
+
+* eine vollständige Fourier-Optik-Simulation,
+* ein Zemax- oder OSLO-Ersatz,
+* eine hochpräzise PSF-Simulation,
+* oder ein vollständiges Wellenoptik-Raytracing.
+
+Nicht berücksichtigt werden u.a.:
+
+* Seeing,
+* thermische Effekte,
+* Kollimationsfehler,
+* Fertigungsfehler höherer Ordnung,
+* reale Beschichtungen,
+* Obstruktionseffekte im Detail,
+* vollständige 2D-PSF-Strukturen.
+
+---
+
+# 7. Praktischer Nutzen
+
+Trotz der Vereinfachungen besitzt das Modell hohe praktische Relevanz für:
+
+* Amateurastronomie,
+* qualitative Spiegelbewertung,
+* visuelle Vergleichsanalyse,
+* Abschätzung planetarer Beobachtungsleistung,
+* didaktische Darstellung optischer Zusammenhänge.
+
+Die Software ermöglicht:
+
+* schnelle Parameterstudien,
+* intuitive Visualisierung,
+* und praxisnahe Leistungsabschätzung.
+
+---
+
+# 8. Fazit
+
+Das Programm `newton_spiegel_rechner.py` kombiniert etablierte Grundlagen der klassischen und Fourier-basierten Optik mit heuristischen Wahrnehmungsmodellen zur qualitativen Bewertung visueller Newton-Teleskopleistung.
+
+Die fundamentalen optischen Gleichungen entsprechen weitgehend anerkannter Literatur. Die erweiterten visuellen Qualitätsmetriken sind hingegen bewusst empirisch und dienen der praxisnahen Interpretation wahrgenommener Bildqualität.
+
+Das Modell ist daher nicht als exakte physikalische Vollsimulation, sondern als:
+
+* physikalisch motiviertes,
+* qualitativ plausibles,
+* wahrnehmungsorientiertes Bewertungsmodell
+
+einzuordnen.
+
+---
+
+# Literatur
+
+* Principles of Optics ([Wikipedia][1])
+* [telescope-optics.net – Strehl Ratio](https://www.telescope-optics.net/Strehl.htm?utm_source=chatgpt.com) ([telescope-optics.net][2])
+* [Optikos – MTF and Fourier Optics](https://www.optikos.com/blog/how-to-measure-mtf/?utm_source=chatgpt.com) ([Optikos][4])
+* Fourieroptik ([Wikipedia][3])
+* Goodman, J.W.: *Introduction to Fourier Optics*
+* Suiter, H.R.: *Star Testing Astronomical Telescopes*
+* Rutten & van Venrooij: *Telescope Optics*
+
+[1]: https://en.wikipedia.org/wiki/Principles_of_Optics?utm_source=chatgpt.com "Principles of Optics"
+[2]: https://www.telescope-optics.net/Strehl.htm?utm_source=chatgpt.com "Strehl ratio"
+[3]: https://en.wikipedia.org/wiki/Fourier_optics?utm_source=chatgpt.com "Fourier optics"
+[4]: https://www.optikos.com/blog/how-to-measure-mtf/?utm_source=chatgpt.com "How to Measure MTF and other Properties of Lenses - Optikos"
+
 """)
 
 with st.expander("📐 Technische Dokumentation"):
