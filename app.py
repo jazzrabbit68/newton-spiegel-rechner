@@ -18,137 +18,98 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.1.0 (2026-05-30)"
+VERSION = "4.2.0 (2026-05-30)"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # KERNFUNKTIONEN (identisch mit newton_spiegel_rechner.py)
 # ═════════════════════════════════════════════════════════════════════════════
 
-def berechne(D_mm, f_mm, lam_nm):
-    N      = f_mm / D_mm
-    D_inch = D_mm / 25.4
+def _wellenfronten(D_mm, f_mm, lam_nm):
+    """Gemeinsame Basis: Wp, Wb, Wrms, Strehl — einmal berechnet, überall genutzt."""
     lam_mm = lam_nm * 1e-6
-    Wp     = D_mm**4 / (1024.0 * f_mm**3 * lam_mm)
-    Wb     = Wp / 4.0
-    Wrms   = Wb / (1.5 * math.sqrt(5))
-    S      = math.exp(-(2 * math.pi * Wrms) ** 2)
-    Deff_k = D_mm * S**0.25
-    r_airy_as   = 1.22 * lam_mm / D_mm * 206265.0
+    Wp   = D_mm**4 / (1024.0 * f_mm**3 * lam_mm)
+    Wb   = Wp / 4.0
+    Wrms = Wb / (1.5 * math.sqrt(5))
+    S    = math.exp(-(2 * math.pi * Wrms) ** 2)
+    return lam_mm, Wp, Wb, Wrms, S
+
+def _Wb_von_S(S):
+    """Wb direkt aus Strehl — Umkehrung der Maréchal-Näherung."""
+    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (2.0 * math.pi)
+    return Wrms * 1.5 * math.sqrt(5)
+
+def _kennzahlen_von_S(D_mm, S, Wb):
+    """Effektive Öffnungen und Vergrößerungsgrenzen aus S und Wb."""
+    sqrtS       = math.sqrt(max(S, 1e-9))
+    Deff_k      = D_mm * S**0.25
+    Deff_s      = D_mm * sqrtS              # = 116 / theta_eff
     theta_ideal = 116.0 / D_mm
-    theta_eff   = theta_ideal / math.sqrt(max(S, 1e-6))
-    d_blur_mm   = D_mm**3 / (64.0 * f_mm**2)
-    d_blur_as   = d_blur_mm / f_mm * 206265.0
-    theta_geo   = math.sqrt(theta_ideal**2 + d_blur_as**2)
-    aufl_verlust_pct = (1.0 - theta_ideal / theta_geo) * 100.0
-    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-6))
-    Deff_s      = 116.0 / theta_eff
-    Q02 = mtf_sph_rel(0.2, Wb)
-    Q04 = mtf_sph_rel(0.4, Wb)
-    Q06 = mtf_sph_rel(0.6, Wb)
-    Qshape = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
-    Qvis = S * Qshape
+    theta_eff   = theta_ideal / sqrtS
+    V_krit_vis  = D_mm * 0.7 * sqrtS
+    Q02 = mtf_sph_rel(0.2, Wb); Q04 = mtf_sph_rel(0.4, Wb); Q06 = mtf_sph_rel(0.6, Wb)
+    Qshape   = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
+    Qvis     = S * Qshape
     Deff_vis = D_mm * Qvis**0.25
-    return dict(
-        N=N, D_inch=D_inch, Wp=Wp, Wb=Wb, Wrms=Wrms,
-        strehl=S, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
-        r_airy_as=r_airy_as, d_blur_mm=d_blur_mm, d_blur_as=d_blur_as,
-        theta_ideal=theta_ideal, theta_eff=theta_eff,
-        aufl_verlust_pct=aufl_verlust_pct, V_krit_vis=V_krit_vis,
-        Deff_s=Deff_s, loss_s=D_mm - Deff_s,
-        Q02=Q02, Q04=Q04, Q06=Q06, Qshape=Qshape,
-        Qvis=Qvis, Deff_vis=Deff_vis, loss_vis=D_mm - Deff_vis,
+    return dict(strehl=S, Wb=Wb,
+                Deff_k=Deff_k,   loss_k=D_mm - Deff_k,
+                Deff_s=Deff_s,   loss_s=D_mm - Deff_s,
+                Deff_vis=Deff_vis, loss_vis=D_mm - Deff_vis,
+                theta_ideal=theta_ideal, theta_eff=theta_eff,
+                V_krit_vis=V_krit_vis,
+                Q02=Q02, Q04=Q04, Q06=Q06, Qshape=Qshape, Qvis=Qvis)
+
+def berechne(D_mm, f_mm, lam_nm):
+    lam_mm, Wp, Wb, Wrms, S = _wellenfronten(D_mm, f_mm, lam_nm)
+    r = _kennzahlen_von_S(D_mm, S, Wb)
+    # Geometrischer Blur (nur Fotografie, Wb bereits bekannt)
+    d_blur_mm = D_mm**3 / (64.0 * f_mm**2)
+    d_blur_as = d_blur_mm / f_mm * 206265.0
+    theta_geo = math.sqrt(r["theta_ideal"]**2 + d_blur_as**2)
+    r.update(
+        N=f_mm/D_mm, D_inch=D_mm/25.4, lam_mm=lam_mm,
+        Wp=Wp, Wrms=Wrms,
+        r_airy_as=1.22 * lam_mm / D_mm * 206265.0,
+        d_blur_mm=d_blur_mm, d_blur_as=d_blur_as,
+        aufl_verlust_pct=(1.0 - r["theta_ideal"] / theta_geo) * 100.0,
     )
+    return r
+
+def berechne_von_S(D_mm, S, lam_nm=550.0):
+    """Alle Kennzahlen direkt aus S — kein Umweg über strehl_to_f."""
+    return _kennzahlen_von_S(D_mm, S, _Wb_von_S(S))
 
 def berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as=16.0):
-    r  = berechne(D_mm, f_mm, lam_nm)
+    r = berechne(D_mm, f_mm, lam_nm)
     theta_auge = eye_res_as / V
     theta_para = max(r["theta_ideal"], theta_auge)
     theta_sph  = max(r["theta_eff"],   theta_auge)
-    Deff_para = min(D_mm, 116.0 / theta_para)
-    Deff_sph  = min(D_mm, 116.0 / theta_sph)
-    return dict(theta_auge=theta_auge,
-                theta_para=theta_para, theta_sph=theta_sph,
-                Deff_para=Deff_para, Deff_sph=Deff_sph,
-                verlust=Deff_para - Deff_sph, **r)
+    Deff_para  = min(D_mm, 116.0 / theta_para)
+    Deff_sph   = min(D_mm, 116.0 / theta_sph)
+    r.update(theta_auge=theta_auge, theta_para=theta_para, theta_sph=theta_sph,
+             Deff_para=Deff_para, Deff_sph=Deff_sph, verlust=Deff_para - Deff_sph)
+    return r
 
 def v_kritisch(D_mm, f_mm, lam_nm, eye_res_as=16.0):
     r = berechne(D_mm, f_mm, lam_nm)
-    return dict(
-        Vk_sph  = r["V_krit_vis"],
-        Vk_para = D_mm * 0.7,
-        Vmax    = D_mm / 0.5,
-        Vmin    = D_mm / 7.0,
-    )
+    return dict(Vk_sph=r["V_krit_vis"], Vk_para=D_mm*0.7,
+                Vmax=D_mm/0.5, Vmin=D_mm/7.0)
 
 def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=400):
     ns = np.linspace(N_min, N_max, schritte)
     strehls, deff_ks, aufl_verluste = [], [], []
     for n in ns:
         r = berechne(D_mm, D_mm * n, lam_nm)
-        strehls.append(r["strehl"]); deff_ks.append(r["Deff_k"]); aufl_verluste.append(r["aufl_verlust_pct"])
+        strehls.append(r["strehl"]); deff_ks.append(r["Deff_k"])
+        aufl_verluste.append(r["aufl_verlust_pct"])
     return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste)
 
 def strehl_to_f(S, D_mm, lam_nm=550.0):
-    lam_mm = lam_nm * 1e-6
-    if S >= 0.9999:
-        return D_mm * 50.0
-    Wrms = math.sqrt(-math.log(max(S, 1e-6))) / (2.0 * math.pi)
-    Wb   = Wrms * 1.5 * math.sqrt(5)
-    Wp   = Wb * 4.0
-    f3   = D_mm**4 / (1024.0 * Wp * lam_mm)
-    N    = (f3 ** (1.0/3.0)) / D_mm
-    return D_mm * N
-
-def _Wb_von_S(S):
-    """Wb direkt aus Strehl-Wert — Umkehrung der Maréchal-Näherung."""
-    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (2.0 * math.pi)
-    return Wrms * 1.5 * math.sqrt(5)
-
-def berechne_von_S(D_mm, S, lam_nm=550.0):
-    """Wie berechne(), aber S_slide direkt einsetzen statt Umweg über strehl_to_f."""
-    Wb          = _Wb_von_S(S)
-    lam_mm      = lam_nm * 1e-6
-    Deff_k      = D_mm * S**0.25
-    theta_ideal = 116.0 / D_mm
-    theta_eff   = theta_ideal / math.sqrt(max(S, 1e-9))
-    Deff_s      = 116.0 / theta_eff
-    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
-    Q02 = mtf_sph_rel(0.2, Wb)
-    Q04 = mtf_sph_rel(0.4, Wb)
-    Q06 = mtf_sph_rel(0.6, Wb)
-    Qshape = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
-    Qvis   = S * Qshape
-    Deff_vis = D_mm * Qvis**0.25
-    return dict(strehl=S, Wb=Wb, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
-                theta_ideal=theta_ideal, theta_eff=theta_eff,
-                Deff_s=Deff_s, loss_s=D_mm - Deff_s,
-                V_krit_vis=V_krit_vis,
-                Qvis=Qvis, Deff_vis=Deff_vis, loss_vis=D_mm - Deff_vis)
-
-def mtf_kurven_von_S(D_mm, S, lam_nm=550.0, n_pts=200):
-    """Wie mtf_kurven(), aber S direkt einsetzen."""
-    Wb         = _Wb_von_S(S)
-    fc         = D_mm / (lam_nm * 1e-6 * 206265)
-    freqs_norm = np.linspace(0, 1, n_pts)
-    freqs_as   = freqs_norm * fc
-    mp  = np.array([mtf_para(f)        for f in freqs_norm])
-    msr = np.array([mtf_sph_rel(f, Wb) for f in freqs_norm])
-    msa = msr * mp * S
-    return freqs_as, fc, mp, msa, msr, S
-
-def perceived_quality_von_S(D_mm, S, lam_nm, V, n_pts=28):
-    """Wie perceived_quality(), aber S direkt einsetzen."""
-    freqs_as, fc_scope, mp_arr, msa_arr, msr_arr, _ = mtf_kurven_von_S(D_mm, S, lam_nm, n_pts)
-    nu        = freqs_as / fc_scope
-    f_cpd_arr = freqs_as * 3600.0 / V
-    weight    = np.array([csf(fi) for fi in f_cpd_arr])
-    _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    num   = _trapz(msa_arr * weight, nu)
-    denom = _trapz(mp_arr  * weight, nu)
-    Q_raw = float(num / denom) if denom > 1e-12 else 0.0
-    V_krit = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
-    w = 1.0 / (1.0 + (V_krit / V) ** 2)
-    return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
+    """Äquivalente Brennweite zu einem Strehl-Wert (nur für Info-Anzeige)."""
+    if S >= 0.9999: return D_mm * 50.0
+    Wb  = _Wb_von_S(S)
+    Wp  = Wb * 4.0
+    f3  = D_mm**4 / (1024.0 * Wp * lam_nm * 1e-6)
+    return D_mm * (f3 ** (1.0/3.0)) / D_mm
 
 def mtf_para(f):
     if f <= 0: return 1.0
@@ -171,18 +132,27 @@ def mtf_sph_rel(f, Wb, n=80):
     if norm < 1e-10: return 0.0
     return math.sqrt(re**2 + im**2) / norm
 
-def mtf_kurven(D_mm, f_mm, lam_nm=550.0, n_pts=16):
-    Wp     = D_mm**4 / (1024.0 * f_mm**3 * (lam_nm*1e-6))
-    Wb     = Wp / 4.0
-    Wrms   = Wb / (1.5 * math.sqrt(5))
-    strehl = math.exp(-(2 * math.pi * Wrms)**2)
-    fc     = D_mm / (lam_nm * 1e-6 * 206265)
+def _mtf_arrays(Wb, S, fc, n_pts):
+    """MTF-Arrays aus Wb und S — gemeinsame Basis für mtf_kurven und mtf_kurven_von_S."""
     freqs_norm = np.linspace(0, 1, n_pts)
     freqs_as   = freqs_norm * fc
     mp  = np.array([mtf_para(f)        for f in freqs_norm])
     msr = np.array([mtf_sph_rel(f, Wb) for f in freqs_norm])
-    msa = msr * mp * strehl
-    return freqs_as, fc, mp, msa, msr, strehl
+    msa = msr * mp * S
+    return freqs_as, mp, msa, msr
+
+def mtf_kurven(D_mm, f_mm, lam_nm=550.0, n_pts=200):
+    _, _, Wb, _, S = _wellenfronten(D_mm, f_mm, lam_nm)
+    fc = D_mm / (lam_nm * 1e-6 * 206265)
+    freqs_as, mp, msa, msr = _mtf_arrays(Wb, S, fc, n_pts)
+    return freqs_as, fc, mp, msa, msr, S
+
+def mtf_kurven_von_S(D_mm, S, lam_nm=550.0, n_pts=200):
+    """Wie mtf_kurven(), aber S direkt einsetzen."""
+    Wb = _Wb_von_S(S)
+    fc = D_mm / (lam_nm * 1e-6 * 206265)
+    freqs_as, mp, msa, msr = _mtf_arrays(Wb, S, fc, n_pts)
+    return freqs_as, fc, mp, msa, msr, S
 
 def csf(f_cpd):
     f = max(f_cpd, 1e-6)
@@ -191,23 +161,24 @@ def csf(f_cpd):
 def mtf_eye(f_cpd):
     return float(np.exp(-(f_cpd / 30.0) ** 1.3))
 
-def perceived_quality(D_mm, f_mm, lam_nm, V, n_pts=28, use_csf=True):
-    freqs_as, fc_scope, mp_arr, msa_arr, msr_arr, strehl = mtf_kurven(D_mm, f_mm, lam_nm, n_pts)
+def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr, S, V, D_mm, use_csf=True):
+    """Gemeinsamer Q_perc-Kern — aus msa/mp-Arrays direkt, kein Doppelrechnen."""
     nu        = freqs_as / fc_scope
     f_cpd_arr = freqs_as * 3600.0 / V
     weight    = np.array([csf(fi) if use_csf else mtf_eye(fi) for fi in f_cpd_arr])
-    msa_scope = msr_arr * mp_arr * strehl
     _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    num   = _trapz(msa_scope * weight, nu)
-    denom = _trapz(mp_arr    * weight, nu)
-    Q_raw = float(num / denom) if denom > 1e-12 else 0.0
-    lam_mm    = lam_nm * 1e-6
-    Wp        = D_mm**4 / (1024.0 * f_mm**3 * lam_mm)
-    Wb        = Wp / 4.0
-    # Kritische Vergrößerung: Strehl-basiert (konsistent mit v_kritisch)
-    V_krit    = D_mm * 0.7 * math.sqrt(max(strehl, 1e-6))
-    w = 1.0 / (1.0 + (V_krit / V) ** 2)
+    Q_raw  = float(_trapz(msa_arr * weight, nu) / max(_trapz(mp_arr * weight, nu), 1e-12))
+    V_krit = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
+    w      = 1.0 / (1.0 + (V_krit / V) ** 2)
     return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
+
+def perceived_quality(D_mm, f_mm, lam_nm, V, n_pts=28, use_csf=True):
+    freqs_as, fc, mp, msa, _, S = mtf_kurven(D_mm, f_mm, lam_nm, n_pts)
+    return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf)
+
+def perceived_quality_von_S(D_mm, S, lam_nm, V, n_pts=28, use_csf=True):
+    freqs_as, fc, mp, msa, _, S = mtf_kurven_von_S(D_mm, S, lam_nm, n_pts)
+    return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf)
 
 def perceived_quality_kurven(D_mm, f_mm, lam_nm, V_arr, use_csf=True):
     return np.array([perceived_quality(D_mm, f_mm, lam_nm, V, use_csf=use_csf) for V in V_arr])
@@ -309,22 +280,21 @@ def fig_oeffnung(D, f, lam, S_slide):
 def fig_deff_D(D_akt, N_akt, S_slide):
     fig, ax = plt.subplots(figsize=(5, 2.8), dpi=120)
     fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
-    D_arr = np.linspace(50, 400, 300)
+    D_arr    = np.linspace(50, 400, 300)
     colors_N = {5:"#c62828", 6:"#D85A30", 7:"#c8a020", 8:"#2e7d32", 10:"#1565c0"}
     for N in [5, 6, 7, 8, 10]:
-        loss_pct = []
+        loss_pct, loss_qvis = [], []
         for D in D_arr:
-            Wp = D**4 / (1024.0*(D*N)**3*550e-6); Wb=Wp/4
-            S = math.exp(-(2*math.pi*Wb/(1.5*math.sqrt(5)*4))**2)
-            Wrms = Wb/(1.5*math.sqrt(5)); S = math.exp(-(2*math.pi*Wrms)**2)
-            loss_pct.append((1-S**0.25)*100)
+            r = berechne(D, D * N, 550.0)
+            loss_pct.append((1 - r["strehl"]**0.25) * 100)
+            loss_qvis.append((1 - r["Qvis"]**0.25) * 100)
         col = colors_N[N]
-        ax.plot(D_arr, loss_pct, color=col, lw=2, label=f"f/{N}")
+        ax.plot(D_arr, loss_pct,  color=col, lw=2,   label=f"f/{N}")
+        ax.plot(D_arr, loss_qvis, color=col, lw=1.2, ls="--", alpha=0.6)
         ax.text(D_arr[-1]+3, loss_pct[-1], f"f/{N}", color=col, fontsize=5, va="center", fontweight="bold")
-    f_akt = D_akt*N_akt
-    Wp_a = D_akt**4/(1024.0*f_akt**3*550e-6); Wb_a=Wp_a/4
-    Wrms_a = Wb_a/(1.5*math.sqrt(5)); S_a = math.exp(-(2*math.pi*Wrms_a)**2)
-    loss_a = (1-S_a**0.25)*100
+    r_akt  = berechne(D_akt, D_akt * N_akt, 550.0)
+    S_a    = r_akt["strehl"]
+    loss_a = (1 - S_a**0.25) * 100
     ax.scatter([D_akt], [loss_a], color=ACC, s=20, zorder=6)
     ax.annotate(f"D={D_akt:.0f}mm f/{N_akt:.1f}  -{loss_a:.0f}%",
                 xy=(D_akt, loss_a), xytext=(D_akt+15, loss_a+5), fontsize=5,
@@ -356,9 +326,8 @@ def fig_beugung(D_akt, f_akt):
     lam_mm = 550e-6
     f_arr  = np.linspace(200, 2000, 500)
     def D_grenz(S):
-        Wrms = math.sqrt(-math.log(S)) / (2*math.pi)
-        Wp   = Wrms * 1.5 * math.sqrt(5) * 4
-        return (Wp * 1024 * lam_mm) ** 0.25 * f_arr ** 0.75
+        Wb = _Wb_von_S(S)
+        return (Wb * 4.0 * 1024 * lam_mm) ** 0.25 * f_arr ** 0.75
     D_95 = D_grenz(0.95); D_80 = D_grenz(0.80); D_50 = D_grenz(0.50)
     ax.fill_between(f_arr, 0,    D_95, color="#2e7d32", alpha=0.10)
     ax.fill_between(f_arr, D_95, D_80, color="#f9a825", alpha=0.12)
@@ -508,300 +477,19 @@ st.title("Newton-Spiegel Rechner")
 st.caption(f"v{VERSION}  ·  Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
 with st.expander("ℹ️ Über dieses Programm"):
-    st.markdown("""
-
-## Physikalisch motiviertes Wahrnehmungs- und Qualitätsmodell für sphärische Newton-Spiegelteleskope
-
-### Software
-
-`newton_spiegel_rechner.py`
-
-### Version
-
-""" + f"`{VERSION}`" + """
-
----
-
-# Abstract
-
-Dieses Whitepaper beschreibt ein numerisches Bewertungsmodell für sphärische Newton-Spiegelteleskope mit Fokus auf visuelle Beobachtung. Das Programm kombiniert klassische optische Kennzahlen wie Wellenfrontfehler, Strehl-Ratio und Modulation Transfer Function (MTF) mit heuristischen Wahrnehmungsmodellen zur Abschätzung der subjektiv wahrgenommenen Bildqualität.
-
-Das Ziel der Software ist nicht die vollständige physikalische Simulation eines optischen Systems mittels rigoroser Fourier-Optik, sondern die praxisnahe qualitative Bewertung visueller Teleskopleistung in Abhängigkeit von Öffnung, Brennweite, Vergrößerung und sphärischer Aberration.
-
-Die zugrunde liegenden Basisgleichungen entsprechen weitgehend etablierter Literatur der klassischen Optik und Fourier-Optik, insbesondere den Arbeiten von Max Born und Emil Wolf sowie moderner Fourier-optischer Literatur. ([Wikipedia][1])
-
----
-
-# 1. Zielsetzung
-
-Das Programm adressiert ein bekanntes Problem einfacher Teleskoprechner:
-
-Klassische Kennzahlen wie:
-
-* Rayleigh-Grenze,
-* Dawes-Limit,
-* Strehl-Ratio,
-
-beschreiben zwar fundamentale optische Eigenschaften, korrelieren jedoch nur begrenzt mit der tatsächlich wahrgenommenen visuellen Bildqualität.
-
-Die Software verfolgt daher einen erweiterten Ansatz:
-
-## Kombination aus:
-
-* geometrischer Optik,
-* Wellenoptik,
-* Fourier-optischer MTF,
-* und wahrnehmungsorientierter Kontrastbewertung.
-
-Der Fokus liegt auf:
-
-* visueller Planetenbeobachtung,
-* Kontrastleistung,
-* wahrgenommener Schärfe,
-* und praktischer Beobachtungsqualität sphärischer Newton-Systeme.
-
----
-
-# 2. Physikalische Grundlagen
-
-# 2.1 Sphärische Aberration des Kugelspiegels
-
-Die primäre sphärische Aberration eines sphärischen Hauptspiegels wird durch den longitudinalen Wellenfrontfehler beschrieben:
-
-W_{PtV}=\frac{D^4}{1024f^3\lambda}
-
-mit:
-
-* (D) = Öffnung,
-* (f) = Brennweite,
-* (\lambda) = Wellenlänge.
-
-Diese Beziehung entspricht klassischer Literatur der geometrischen und Wellenoptik. ([Wikipedia][1])
-
----
-
-# 2.2 RMS-Wellenfrontfehler
-
-Für primäre sphärische Aberration wird der RMS-Fehler näherungsweise berechnet über:
-
-W_{RMS}=\frac{W_{PtV}}{1.5\sqrt{5}}
-
-Diese Näherung ist für moderate Aberrationen üblich und in der Amateur- sowie Ingenieursoptik verbreitet. ([telescope-optics.net][2])
-
----
-
-# 2.3 Strehl-Ratio
-
-Zur Abschätzung der Bildqualität wird die Maréchal-Näherung verwendet:
-
-S=e^{-(2\pi W_{RMS})^2}
-
-Die Strehl-Ratio beschreibt das Verhältnis der Peakintensität einer aberrierten Punktabbildung zur idealen beugungsbegrenzten Abbildung. ([telescope-optics.net][2])
-
-Die Näherung ist insbesondere für kleine bis mittlere Aberrationen gültig.
-
----
-
-# 3. Fourier-optische Modellierung
-
-# 3.1 Ideale MTF
-
-Für ein beugungsbegrenztes Kreisapertursystem wird die analytische ideale MTF verwendet:
-
-MTF(f)=\frac{2}{\pi}\left[\arccos(f)-f\sqrt{1-f^2}\right]
-
-Diese Gleichung entspricht der klassischen Fourier-Optik eines rotationssymmetrischen Systems. ([Wikipedia][3])
-
----
-
-# 3.2 Relative MTF bei sphärischer Aberration
-
-Die Software verwendet eine vereinfachte numerische Approximation der aberrierten MTF auf Basis:
-
-* pupillenbezogener Phasendifferenzen,
-* normierter Aperturkoordinaten,
-* und Fourier-optischer Transferprinzipien.
-
-Die resultierende MTF ist:
-
-* qualitativ physikalisch plausibel,
-* jedoch keine vollständige hochauflösende 2D-Fourier-Propagation.
-
-Das Modell ist daher als:
-
-* vereinfachte Fourier-optische Näherung,
-  nicht jedoch als:
-* rigorose Vollsimulation,
-
-zu verstehen.
-
----
-
-# 4. Wahrnehmungsmodell
-
-# 4.1 Motivation
-
-Die visuelle Beobachtungsqualität astronomischer Objekte hängt nicht ausschließlich von:
-
-* Peakintensität,
-* Rayleigh-Grenze,
-* oder geometrischer Spotgröße,
-
-ab.
-
-Entscheidend sind insbesondere:
-
-* Kontrasttransfer,
-* Objektfrequenzen,
-* Wahrnehmungsschwellen des Auges,
-* Vergrößerung,
-* und räumliche Frequenzgewichtung.
-
-Daher integriert die Software zusätzlich:
-
-* visuelle Gewichtungsfunktionen,
-* heuristische Kontrastmetriken,
-* und vergrößerungsabhängige Wahrnehmungsmodelle.
-
----
-
-# 4.2 Heuristische Qualitätsmetriken
-
-Das Programm verwendet zusätzliche empirische Bewertungsgrößen wie:
-
-* effektive Öffnung,
-* wahrgenommene Auflösung,
-* visuelle Qualitätsindizes.
-
-Diese Größen besitzen:
-
-* keine direkte Entsprechung in fundamentaler Fourier-Optik,
-* sondern dienen als praxisorientierte Wahrnehmungsmetriken.
-
-Beispiele:
-
-D_{eff}=D\cdot S^{1/4}
-
-sowie:
-
-\theta_{eff}=\frac{\theta_{ideal}}{\sqrt{S}}
-
-Diese Beziehungen sind:
-
-* heuristisch,
-* empirisch motiviert,
-* und dienen ausschließlich der qualitativen visuellen Bewertung.
-
-Sie stellen keine rigorosen physikalischen Grundgleichungen dar.
-
----
-
-# 5. Wissenschaftliche Einordnung
-
-# 5.1 Korrekte physikalische Komponenten
-
-Die folgenden Teile des Modells basieren direkt auf etablierter Literatur:
-
-* Wellenfrontfehler sphärischer Spiegel,
-* RMS-Näherungen,
-* Maréchal-Strehl,
-* ideale Kreisapertur-MTF,
-* Fourier-optische Grundprinzipien,
-* qualitative Aberrationswirkung auf Kontrasttransfer.
-
-([Wikipedia][1])
-
----
-
-# 5.2 Modellhafte Komponenten
-
-Die folgenden Komponenten sind bewusst heuristisch:
-
-* visuelle Qualitätsmetriken,
-* effektive Öffnung,
-* wahrgenommene Auflösung,
-* gewichtete Wahrnehmungsfunktionen,
-* Strehl-basierte Kontrastskalierungen.
-
-Diese dienen:
-
-* der praxisnahen visuellen Interpretation,
-  nicht:
-* der exakten physikalischen PSF-Rekonstruktion.
-
----
-
-# 6. Grenzen des Modells
-
-Die Software ist ausdrücklich NICHT:
-
-* eine vollständige Fourier-Optik-Simulation,
-* ein Zemax- oder OSLO-Ersatz,
-* eine hochpräzise PSF-Simulation,
-* oder ein vollständiges Wellenoptik-Raytracing.
-
-Nicht berücksichtigt werden u.a.:
-
-* Seeing,
-* thermische Effekte,
-* Kollimationsfehler,
-* Fertigungsfehler höherer Ordnung,
-* reale Beschichtungen,
-* Obstruktionseffekte im Detail,
-* vollständige 2D-PSF-Strukturen.
-
----
-
-# 7. Praktischer Nutzen
-
-Trotz der Vereinfachungen besitzt das Modell hohe praktische Relevanz für:
-
-* Amateurastronomie,
-* qualitative Spiegelbewertung,
-* visuelle Vergleichsanalyse,
-* Abschätzung planetarer Beobachtungsleistung,
-* didaktische Darstellung optischer Zusammenhänge.
-
-Die Software ermöglicht:
-
-* schnelle Parameterstudien,
-* intuitive Visualisierung,
-* und praxisnahe Leistungsabschätzung.
-
----
-
-# 8. Fazit
-
-Das Programm `newton_spiegel_rechner.py` kombiniert etablierte Grundlagen der klassischen und Fourier-basierten Optik mit heuristischen Wahrnehmungsmodellen zur qualitativen Bewertung visueller Newton-Teleskopleistung.
-
-Die fundamentalen optischen Gleichungen entsprechen weitgehend anerkannter Literatur. Die erweiterten visuellen Qualitätsmetriken sind hingegen bewusst empirisch und dienen der praxisnahen Interpretation wahrgenommener Bildqualität.
-
-Das Modell ist daher nicht als exakte physikalische Vollsimulation, sondern als:
-
-* physikalisch motiviertes,
-* qualitativ plausibles,
-* wahrnehmungsorientiertes Bewertungsmodell
-
-einzuordnen.
-
----
-
-# Literatur
-
-* Principles of Optics ([Wikipedia][1])
-* [telescope-optics.net – Strehl Ratio](https://www.telescope-optics.net/Strehl.htm?utm_source=chatgpt.com) ([telescope-optics.net][2])
-* [Optikos – MTF and Fourier Optics](https://www.optikos.com/blog/how-to-measure-mtf/?utm_source=chatgpt.com) ([Optikos][4])
-* Fourieroptik ([Wikipedia][3])
-* Goodman, J.W.: *Introduction to Fourier Optics*
-* Suiter, H.R.: *Star Testing Astronomical Telescopes*
-* Rutten & van Venrooij: *Telescope Optics*
-
-[1]: https://en.wikipedia.org/wiki/Principles_of_Optics?utm_source=chatgpt.com "Principles of Optics"
-[2]: https://www.telescope-optics.net/Strehl.htm?utm_source=chatgpt.com "Strehl ratio"
-[3]: https://en.wikipedia.org/wiki/Fourier_optics?utm_source=chatgpt.com "Fourier optics"
-[4]: https://www.optikos.com/blog/how-to-measure-mtf/?utm_source=chatgpt.com "How to Measure MTF and other Properties of Lenses - Optikos"
-
-""")
+    st.caption(f"Version {VERSION}")
+    import re as _re, os as _os
+    _wp_candidates = ["whitepaper.html", "/app/whitepaper.html"]
+    _wp_path = next((p for p in _wp_candidates if _os.path.exists(p)), None)
+    if _wp_path:
+        _wp_html = open(_wp_path, encoding="utf-8").read()
+        _wp_html = _re.sub(r'@page\s*\{[^}]*\}', '', _wp_html)
+        _body = _re.search(r'<body[^>]*>(.*?)</body>', _wp_html, _re.DOTALL)
+        _style = _re.search(r'<style>(.*?)</style>', _wp_html, _re.DOTALL)
+        _css = _style.group(1) if _style else ""
+        st.html(f"<style>{_css}</style>{_body.group(1)}" if _body else _wp_html)
+    else:
+        st.warning("whitepaper.html nicht gefunden — bitte Datei im Programmverzeichnis ablegen.")
 
 with st.expander("📐 Technische Dokumentation"):
     doc_html = open("/app/documentation_v3.html").read() if __import__('os').path.exists("/app/documentation_v3.html") else open("documentation_v3.html").read()

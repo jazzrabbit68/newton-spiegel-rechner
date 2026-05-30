@@ -53,133 +53,109 @@ from functools import lru_cache
 
 # ── Kernrechnung ──────────────────────────────────────────────────────────────
 
+def _wellenfronten(D_mm: float, f_mm: float, lam_nm: float):
+    """Gemeinsame Basis: Wp, Wb, Wrms, Strehl — einmal berechnet, überall genutzt."""
+    lam_mm = lam_nm * 1e-6
+    Wp   = D_mm**4 / (1024.0 * f_mm**3 * lam_mm)
+    Wb   = Wp / 4.0
+    Wrms = Wb / (1.5 * math.sqrt(5))
+    S    = math.exp(-(2 * math.pi * Wrms) ** 2)
+    return lam_mm, Wp, Wb, Wrms, S
+
+def _Wb_von_S(S: float) -> float:
+    """Wb direkt aus Strehl — Umkehrung der Maréchal-Näherung."""
+    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (2.0 * math.pi)
+    return Wrms * 1.5 * math.sqrt(5)
+
+def _kennzahlen_von_S(D_mm: float, S: float, Wb: float) -> dict:
+    """Effektive Öffnungen und Vergrößerungsgrenzen aus S und Wb."""
+    sqrtS       = math.sqrt(max(S, 1e-9))
+    Deff_k      = D_mm * S**0.25
+    Deff_s      = D_mm * sqrtS              # = 116 / theta_eff
+    theta_ideal = 116.0 / D_mm
+    theta_eff   = theta_ideal / sqrtS
+    V_krit_vis  = D_mm * 0.7 * sqrtS
+    Q02 = mtf_sph_rel(0.2, Wb); Q04 = mtf_sph_rel(0.4, Wb); Q06 = mtf_sph_rel(0.6, Wb)
+    # rein relativer Formverlust der MTF (Gewichtung: grobe/mittlere/feine Details)
+    Qshape   = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
+    Qvis     = S * Qshape          # absoluter visueller Qualitätsindex
+    Deff_vis = D_mm * Qvis**0.25
+    return dict(strehl=S, Wb=Wb,
+                Deff_k=Deff_k,   loss_k=D_mm - Deff_k,
+                Deff_s=Deff_s,   loss_s=D_mm - Deff_s,
+                Deff_vis=Deff_vis, loss_vis=D_mm - Deff_vis,
+                theta_ideal=theta_ideal, theta_eff=theta_eff,
+                V_krit_vis=V_krit_vis,
+                Q02=Q02, Q04=Q04, Q06=Q06, Qshape=Qshape, Qvis=Qvis)
+
+def _mtf_arrays(Wb: float, S: float, fc: float, n_pts: int):
+    """MTF-Arrays aus Wb und S — gemeinsame Basis für mtf_kurven und mtf_kurven_von_S."""
+    freqs_norm = np.linspace(0, 1, n_pts)
+    freqs_as   = freqs_norm * fc
+    mp  = np.array([mtf_para(f)        for f in freqs_norm])
+    msr = np.array([mtf_sph_rel(f, Wb) for f in freqs_norm])
+    msa = msr * mp * S
+    return freqs_as, mp, msa, msr
+
+def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr,
+                            S, V, D_mm, use_csf=True):
+    """Gemeinsamer Q_perc-Kern — kein Doppelrechnen von Strehl oder Wb."""
+    nu        = freqs_as / fc_scope
+    f_cpd_arr = freqs_as * 3600.0 / V
+    weight    = np.array([csf(fi) if use_csf else mtf_eye(fi) for fi in f_cpd_arr])
+    _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    Q_raw  = float(_trapz(msa_arr * weight, nu) / max(_trapz(mp_arr * weight, nu), 1e-12))
+    V_krit = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
+    w      = 1.0 / (1.0 + (V_krit / V) ** 2)
+    return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
+
+
 def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
     """Grundlegende optische Kenngrößen (vergrößerungsunabhängig)."""
-    N      = f_mm / D_mm
-    D_inch = D_mm / 25.4
-    lam_mm = lam_nm * 1e-6
-
-    # Wellenfrontfehler (klassische Formel, ZEMAX-verifiziert)
-    Wp     = D_mm**4 / (1024.0 * f_mm**3 * lam_mm)     # W_PtV paraxial [λ]
-    Wb     = Wp / 4.0                                    # W_PtV best focus [λ]
-    Wrms   = Wb / (1.5 * math.sqrt(5))                  # W_RMS best focus [λ]
-    S      = math.exp(-(2 * math.pi * Wrms) ** 2)       # Strehl (Maréchal)
-    Deff_k = D_mm * S**0.25                              # D_eff = D * S^(1/4)
-
-    # Schärfe: visuell relevante Größen
-    r_airy_as   = 1.22 * lam_mm / D_mm * 206265.0
-    theta_ideal = 116.0 / D_mm                         # Dawes-Grenze ["]
-    # theta_eff für visuelle Wahrnehmung: Strehl-basiert
-    # Begründung: Beobachter sieht PSF, nicht geometrischen Lichtkegel
-    # theta_eff = Dawes / sqrt(S)  (aus Deff = D*sqrt(S) -> theta = 116/Deff)
-    theta_eff   = theta_ideal / math.sqrt(max(S, 1e-6))
-    # Geometrischer Blur (für Information, nicht für V_krit)
-    d_blur_mm   = D_mm**3 / (64.0 * f_mm**2)
-    d_blur_as   = d_blur_mm / f_mm * 206265.0
-    # Auflösungsverlust aus geometrischem Blur (gibt an wie stark der Strahl aufgeweitet wird)
-    theta_geo   = math.sqrt(theta_ideal**2 + d_blur_as**2)
-    aufl_verlust_pct = (1.0 - theta_ideal / theta_geo) * 100.0
-    # Kritische Vergrößerung: V_krit = D_mm * 0.7 * sqrt(S)
-    # (Strehl-gewichtete nutzbare Max-Vergrößerung, empirisch nach Suiter)
-    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-6))
-
-    # ── Visueller Qualitätsindex Q_vis ─────────────────────────────
-    #
-    # mtf_sph_rel(f, Wb) liefert den RELATIVEN Formverlust der MTF:
-    #
-    #   Q(f) = MTF_sphäre(f) / MTF_paraboloid(f)
-    #
-    # also nur die Veränderung der Kurvenform.
-    #
-    # Der absolute Kontrastverlust durch sphärische Aberration wird
-    # zusätzlich durch den Strehl-Quotienten beschrieben.
-    #
-    # Deshalb:
-    #   Qshape = gewichteter MTF-Formfaktor
-    #   Qvis   = Strehl × Qshape
-    #
-    # Die Gewichtung ist heuristisch und orientiert sich grob an
-    # visuellen Planetendetails:
-    #
-    #   f=0.2 → grobe Details
-    #   f=0.4 → mittlere Details
-    #   f=0.6 → feine Details
-    #
-    # Effektive Öffnung:
-    #
-    #   D_eff ~ D × Q^(1/4)
-    #
-    # analog zur bereits verwendeten Strehl-Skalierung:
-    #
-    #   D_eff = D × Strehl^(1/4)
-    #
-    # Dadurch werden Formverlust UND Energieverlust berücksichtigt.
-    #
-    Q02 = mtf_sph_rel(0.2, Wb)
-    Q04 = mtf_sph_rel(0.4, Wb)
-    Q06 = mtf_sph_rel(0.6, Wb)
-
-    # rein relativer Formverlust der MTF
-    Qshape = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
-
-    # absoluter visueller Qualitätsindex
-    Qvis = S * Qshape
-
-    # äquivalente effektive Öffnung
-    Deff_vis = D_mm * Qvis**0.25
-
-    return dict(
-        N=N, D_inch=D_inch,
-        Wp=Wp, Wb=Wb, Wrms=Wrms,
-        strehl=S, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
-        r_airy_as=r_airy_as, d_blur_mm=d_blur_mm, d_blur_as=d_blur_as,
-        theta_ideal=theta_ideal, theta_eff=theta_eff,
-        aufl_verlust_pct=aufl_verlust_pct, V_krit_vis=V_krit_vis,
-        Q02=Q02, Q04=Q04, Q06=Q06, Qshape=Qshape,
-        Qvis=Qvis, Deff_vis=Deff_vis,
-        loss_vis=D_mm - Deff_vis,
+    lam_mm, Wp, Wb, Wrms, S = _wellenfronten(D_mm, f_mm, lam_nm)
+    r = _kennzahlen_von_S(D_mm, S, Wb)
+    # Geometrischer Blur (Fotografie — Wb bereits bekannt)
+    d_blur_mm = D_mm**3 / (64.0 * f_mm**2)
+    d_blur_as = d_blur_mm / f_mm * 206265.0
+    theta_geo = math.sqrt(r["theta_ideal"]**2 + d_blur_as**2)
+    r.update(
+        N=f_mm/D_mm, D_inch=D_mm/25.4, lam_mm=lam_mm,
+        Wp=Wp, Wrms=Wrms,
+        r_airy_as=1.22 * lam_mm / D_mm * 206265.0,
+        d_blur_mm=d_blur_mm, d_blur_as=d_blur_as,
+        aufl_verlust_pct=(1.0 - r["theta_ideal"] / theta_geo) * 100.0,
     )
+    return r
 
+def berechne_von_S(D_mm: float, S: float, lam_nm: float = 550.0) -> dict:
+    """Alle Kennzahlen direkt aus S — kein Umweg über strehl_to_f."""
+    return _kennzahlen_von_S(D_mm, S, _Wb_von_S(S))
 
 def berechne_vergr(D_mm: float, f_mm: float, lam_nm: float,
                    V: float, eye_res_as: float = 60.0) -> dict:
-    """
-    Vergrößerungsabhängige effektive Öffnung für Paraboloid und Sphäre.
-
-    eye_res_as : Kontrastschwelle des Auges für Planetendetails in Bogensekunden (Standard 60″ = 1′)
-    V          : Vergrößerung
-    """
-    r  = berechne(D_mm, f_mm, lam_nm)
-    theta_auge = eye_res_as / V           # Auge-Limit im Objektraum
-
+    """Vergrößerungsabhängige effektive Öffnung für Paraboloid und Sphäre."""
+    r = berechne(D_mm, f_mm, lam_nm)
+    theta_auge = eye_res_as / V
     theta_para = max(r["theta_ideal"], theta_auge)
     theta_sph  = max(r["theta_eff"],   theta_auge)
-
-    Deff_para = min(D_mm, 116.0 / theta_para)
-    Deff_sph  = min(D_mm, 116.0 / theta_sph)
-    verlust   = Deff_para - Deff_sph
-
-    return dict(theta_auge=theta_auge,
-                theta_para=theta_para, theta_sph=theta_sph,
-                Deff_para=Deff_para,   Deff_sph=Deff_sph,
-                verlust=verlust, **r)
-
+    Deff_para  = min(D_mm, 116.0 / theta_para)
+    Deff_sph   = min(D_mm, 116.0 / theta_sph)
+    r.update(theta_auge=theta_auge, theta_para=theta_para, theta_sph=theta_sph,
+             Deff_para=Deff_para, Deff_sph=Deff_sph, verlust=Deff_para - Deff_sph)
+    return r
 
 def v_kritisch(D_mm: float, f_mm: float, lam_nm: float,
                eye_res_as: float = 60.0) -> dict:
-    """
-    Kritische Vergrößerung: V_krit = D_mm * 0.7 * sqrt(Strehl)
-    (Strehl-gewichtete nutzbare Max-Vergrößerung nach Suiter)
-    """
+    """Kritische Vergrößerung: V_krit = D_mm * 0.7 * sqrt(Strehl) (nach Suiter)."""
     r = berechne(D_mm, f_mm, lam_nm)
-    return dict(
-        Vk_sph  = r["V_krit_vis"],
-        Vk_para = D_mm * 0.7,
-        Vmax    = D_mm / 0.5,
-        Vmin    = D_mm / 7.0,
-    )
+    return dict(Vk_sph=r["V_krit_vis"], Vk_para=D_mm*0.7,
+                Vmax=D_mm/0.5, Vmin=D_mm/7.0)
 
-
+def v_kritisch_strehl(D_mm: float, strehl: float, theta_eff: float = None,
+                      eye_res_as: float = 60.0) -> dict:
+    """V_krit für beliebigen Strehl-Wert (für Schieber-Vergleich)."""
+    return dict(Vk_sph=D_mm * 0.7 * math.sqrt(max(strehl, 1e-9)),
+                Vk_para=D_mm * 0.7, Vmax=D_mm / 0.5, Vmin=D_mm / 7.0)
 
 def kurven_vergr(D_mm, f_mm, lam_nm, eye_res_as=60.0,
                  V_min=20, V_max=600, schritte=400):
@@ -188,11 +164,9 @@ def kurven_vergr(D_mm, f_mm, lam_nm, eye_res_as=60.0,
     dpara, dsph, verluste = [], [], []
     for V in vs:
         rv = berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as)
-        dpara.append(rv["Deff_para"])
-        dsph.append(rv["Deff_sph"])
+        dpara.append(rv["Deff_para"]); dsph.append(rv["Deff_sph"])
         verluste.append(rv["verlust"])
     return vs, np.array(dpara), np.array(dsph), np.array(verluste)
-
 
 def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=400):
     """Strehl und eff. Öffnungen als Funktion von N."""
@@ -200,94 +174,16 @@ def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=400):
     strehls, deff_ks, aufl_verluste = [], [], []
     for n in ns:
         r = berechne(D_mm, D_mm * n, lam_nm)
-        strehls.append(r["strehl"])
-        deff_ks.append(r["Deff_k"])
+        strehls.append(r["strehl"]); deff_ks.append(r["Deff_k"])
         aufl_verluste.append(r["aufl_verlust_pct"])
     return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste)
 
-
 def strehl_to_f(S: float, D_mm: float, lam_nm: float = 550.0) -> float:
-    """Brennweite die einem bestimmten Strehl-Wert entspricht (sphärischer Spiegel).
-    Inversion von: Wp = D^4/(1024*f^3*lam), Wb=Wp/4, Wrms=Wb/(1.5*sqrt(5))
-    Strehl ≈ exp(-(2π·Wrms)²)  →  Wrms = sqrt(-ln(S)) / (2π)
-    """
-    lam_mm = lam_nm * 1e-6
-    if S >= 0.9999:
-        return D_mm * 50.0
-    Wrms   = math.sqrt(-math.log(max(S, 1e-6))) / (2.0 * math.pi)
-    Wb     = Wrms * 1.5 * math.sqrt(5)
-    Wp     = Wb * 4.0
-    f3     = D_mm**4 / (1024.0 * Wp * lam_mm)
-    N      = (f3 ** (1.0/3.0)) / D_mm
-    return D_mm * N
-
-
-def _Wb_von_S(S: float) -> float:
-    """Wb direkt aus Strehl-Wert — Umkehrung der Maréchal-Näherung."""
-    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (2.0 * math.pi)
-    return Wrms * 1.5 * math.sqrt(5)
-
-def berechne_von_S(D_mm: float, S: float, lam_nm: float = 550.0) -> dict:
-    """Alle Kennzahlen direkt aus S — kein Umweg über strehl_to_f."""
-    Wb          = _Wb_von_S(S)
-    Deff_k      = D_mm * S**0.25
-    theta_ideal = 116.0 / D_mm
-    theta_eff   = theta_ideal / math.sqrt(max(S, 1e-9))
-    Deff_s      = 116.0 / theta_eff
-    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
-    Q02 = mtf_sph_rel(0.2, Wb); Q04 = mtf_sph_rel(0.4, Wb); Q06 = mtf_sph_rel(0.6, Wb)
-    Qshape = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
-    Qvis   = S * Qshape
-    return dict(strehl=S, Wb=Wb, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
-                theta_ideal=theta_ideal, theta_eff=theta_eff,
-                Deff_s=Deff_s, loss_s=D_mm - Deff_s,
-                V_krit_vis=V_krit_vis,
-                Qvis=Qvis, Deff_vis=D_mm * Qvis**0.25)
-
-def mtf_kurven_von_S(D_mm: float, S: float, lam_nm: float = 550.0,
-                     n_pts: int = 200) -> tuple:
-    """Wie mtf_kurven(), aber S direkt einsetzen."""
-    Wb         = _Wb_von_S(S)
-    fc         = D_mm / (lam_nm * 1e-6 * 206265)
-    freqs_norm = np.linspace(0, 1, n_pts)
-    freqs_as   = freqs_norm * fc
-    mp  = np.array([mtf_para(f)        for f in freqs_norm])
-    msr = np.array([mtf_sph_rel(f, Wb) for f in freqs_norm])
-    msa = msr * mp * S
-    return freqs_as, fc, mp, msa, msr, S
-
-def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float,
-                             V: float, n_pts: int = 120,
-                             use_csf: bool = True) -> float:
-    """Wie perceived_quality(), aber S direkt einsetzen."""
-    freqs_as, fc_scope, mp_arr, msa_arr, _, _ = mtf_kurven_von_S(D_mm, S, lam_nm, n_pts)
-    nu        = freqs_as / fc_scope
-    f_cpd_arr = freqs_as * 3600.0 / V
-    weight    = np.array([csf(fi) if use_csf else mtf_eye(fi) for fi in f_cpd_arr])
-    _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    num   = _trapz(msa_arr * weight, nu)
-    denom = _trapz(mp_arr  * weight, nu)
-    Q_raw = float(num / denom) if denom > 1e-12 else 0.0
-    V_krit = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
-    w = 1.0 / (1.0 + (V_krit / V) ** 2)
-    return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
-
-def perceived_quality_kurven_von_S(D_mm: float, S: float, lam_nm: float,
-                                   V_arr: np.ndarray,
-                                   use_csf: bool = True) -> np.ndarray:
-    return np.array([perceived_quality_von_S(D_mm, S, lam_nm, V, use_csf=use_csf)
-                     for V in V_arr])
-
-def v_kritisch_strehl(D_mm: float, strehl: float, theta_eff: float = None,
-                      eye_res_as: float = 60.0) -> dict:
-    """V_krit für beliebigen Strehl-Wert (für Schieber-Vergleich)."""
-    return dict(
-        Vk_sph  = D_mm * 0.7 * math.sqrt(max(strehl, 1e-6)),
-        Vk_para = D_mm * 0.7,
-        Vmax    = D_mm / 0.5,
-        Vmin    = D_mm / 7.0,
-    )
-
+    """Äquivalente Brennweite zu einem Strehl-Wert (nur für Info-Anzeige)."""
+    if S >= 0.9999: return D_mm * 50.0
+    Wb  = _Wb_von_S(S)
+    f3  = D_mm**4 / (1024.0 * Wb * 4.0 * lam_nm * 1e-6)
+    return D_mm * (f3 ** (1.0/3.0)) / D_mm
 
 def mtf_para(f: float) -> float:
     """Analytische MTF eines beugungsbegrenzten Kreisteleskops (Paraboloid)."""
@@ -299,8 +195,7 @@ def mtf_para(f: float) -> float:
 def mtf_sph_rel(f: float, Wb: float, n: int = 80) -> float:
     """
     Relative MTF eines sphärischen Spiegels (normiert: MTF(0)=1).
-    Wb = W_PtV_bestfocus = W_PtV_paraxial / 4
-    f  = normierte Ortsfrequenz (0..1, fc=Grenzfrequenz)
+    Wb = W_PtV_bestfocus; f = normierte Ortsfrequenz (0..1).
     Berechnung via 1D-Autokorrelationsintegral der Pupillenfunktion.
     """
     if f <= 0: return 1.0
@@ -309,124 +204,67 @@ def mtf_sph_rel(f: float, Wb: float, n: int = 80) -> float:
     re = im = norm = 0.0
     for i in range(n):
         x  = -lim + (2*i + 1) / (2*n) * 2*lim
-        x1 = x - f/2
-        x2 = x + f/2
-        if x1**2 >= 1 or x2**2 >= 1:
-            continue
+        x1 = x - f/2; x2 = x + f/2
+        if x1**2 >= 1 or x2**2 >= 1: continue
         h  = min(math.sqrt(max(0.0, 1 - x1**2)),
                  math.sqrt(max(0.0, 1 - x2**2)))
         dW = 2*math.pi * (Wb*(x2**4 - x2**2) - Wb*(x1**4 - x1**2))
-        re   += math.cos(dW) * h
-        im   += math.sin(dW) * h
-        norm += h
-    if norm < 1e-10:
-        return 0.0
+        re += math.cos(dW) * h; im += math.sin(dW) * h; norm += h
+    if norm < 1e-10: return 0.0
     return math.sqrt(re**2 + im**2) / norm
 
-
 def mtf_kurven(D_mm: float, f_mm: float, lam_nm: float = 550.0,
-               n_pts: int = 60) -> tuple:
+               n_pts: int = 200) -> tuple:
+    """MTF-Kurven für Paraboloid und sphärischen Spiegel.
+    Rückgabe: (freqs_as, fc, mp, msa, msr, strehl)
     """
-    Berechnet MTF-Kurven für Paraboloid und sphärischen Spiegel.
-    Rückgabe: (freqs, mtf_para_abs, mtf_sph_abs, mtf_sph_rel_arr)
-      - mtf_para_abs: normiert auf 1 bei f=0
-      - mtf_sph_abs:  Strehl × MTF_sph_relativ  (absolute Übertragung)
-      - mtf_sph_rel_arr: nur der Formfaktor (normiert auf 1 bei f=0)
-    Ortsfrequenz-Achse in Linien/arcsec:
-      fc = D/(lam*206265) [L/arcsec] — Grenzfrequenz
-    """
-    N      = f_mm / D_mm
-    D_inch = D_mm / 25.4
-    Wp     = D_mm**4 / (1024.0 * f_mm**3 * (lam_nm*1e-6))     # W_PtV paraxial [λ]
-    Wb     = Wp / 4.0                                          # W_PtV best focus [λ]
-    Wrms   = Wb / (1.5 * math.sqrt(5))                        # W_RMS best focus [λ]
-    strehl = math.exp(-(2 * math.pi * Wrms)**2)
-
-    # Grenzfrequenz in Linien/arcsec
+    _, _, Wb, _, S = _wellenfronten(D_mm, f_mm, lam_nm)
     fc = D_mm / (lam_nm * 1e-6 * 206265)
+    freqs_as, mp, msa, msr = _mtf_arrays(Wb, S, fc, n_pts)
+    return freqs_as, fc, mp, msa, msr, S
 
-    freqs_norm = np.linspace(0, 1, n_pts)
-    freqs_as   = freqs_norm * fc          # in L/arcsec
-
-    mp  = np.array([mtf_para(f)           for f in freqs_norm])
-    msr = np.array([mtf_sph_rel(f, Wb)    for f in freqs_norm])
-    msa = msr * mp * strehl               # absolut: Strehl × rel × MTF_para
-
-    return freqs_as, fc, mp, msa, msr, strehl
-
+def mtf_kurven_von_S(D_mm: float, S: float, lam_nm: float = 550.0,
+                     n_pts: int = 200) -> tuple:
+    """Wie mtf_kurven(), aber S direkt einsetzen."""
+    Wb = _Wb_von_S(S)
+    fc = D_mm / (lam_nm * 1e-6 * 206265)
+    freqs_as, mp, msa, msr = _mtf_arrays(Wb, S, fc, n_pts)
+    return freqs_as, fc, mp, msa, msr, S
 
 def mtf_eye(f_cpd: float) -> float:
-    """
-    Augen-MTF nach Barten-Näherung.
-    f_cpd : Ortsfrequenz in cycles/degree (cpd)
-    fc    : Cut-off ~30 cpd (Tages-Sehen)
-    """
-    fc = 30.0
-    return float(np.exp(-(f_cpd / fc) ** 1.3))
-
+    """Augen-MTF nach Barten-Näherung (fc ~30 cpd)."""
+    return float(np.exp(-(f_cpd / 30.0) ** 1.3))
 
 def csf(f_cpd: float) -> float:
-    """
-    Contrast Sensitivity Function (CSF) nach van Meeteren / Watson-Ahumada.
-    Modelliert die frequenzabhängige Empfindlichkeit des Auges.
-    f_cpd : Ortsfrequenz in cycles/degree
-    """
+    """Contrast Sensitivity Function (CSF) nach van Meeteren / Watson-Ahumada."""
     f = max(f_cpd, 1e-6)
     return 2.6 * (0.0192 + 0.114 * f) * np.exp(-((0.114 * f) ** 1.1))
-
 
 def perceived_quality(D_mm: float, f_mm: float, lam_nm: float,
                       V: float, n_pts: int = 120,
                       use_csf: bool = True) -> float:
-    """
-    Wahrgenommener Qualitätsindex Q_perc(V).
+    """Wahrgenommener Qualitätsindex Q_perc(V) — CSF-gewichtetes MTF-Integral."""
+    freqs_as, fc, mp, msa, _, S = mtf_kurven(D_mm, f_mm, lam_nm, n_pts)
+    return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf)
 
-    Modell:
-      Q_raw  = CSF-gewichtetes MTF-Integral (Sphäre / Paraboloid)
-               → misst den optischen Qualitätsverlust unabhängig von V
-
-      Q_eff  = Q_raw + (1 - Q_raw) * (1 - w(V))
-
-    Übergangsgewicht w(V):
-      w = 1 / (1 + (V_krit / V)²)
-      → w≈0 bei V << V_krit  (Auge limitiert → Aberration unsichtbar → Q_eff→1)
-      → w≈1 bei V >> V_krit  (Teleskop limitiert → volle Aberration → Q_eff→Q_raw)
-
-    V_krit = eye_res (60″) / theta_eff_sphäre
-    """
-    freqs_as, fc_scope, mp_arr, msa_arr, msr_arr, strehl = mtf_kurven(
-        D_mm, f_mm, lam_nm, n_pts)
-
-    nu = freqs_as / fc_scope
-
-    # CSF-Gewichtung im Bildraum: f_cpd = f_obj[L/as] * 3600 / V
-    f_cpd_arr = freqs_as * 3600.0 / V
-    if use_csf:
-        weight = np.array([csf(fi) for fi in f_cpd_arr])
-    else:
-        weight = np.array([mtf_eye(fi) for fi in f_cpd_arr])
-
-    msa_scope = msr_arr * mp_arr * strehl
-
-    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    num   = _trapz(msa_scope * weight, nu)
-    denom = _trapz(mp_arr    * weight, nu)
-    Q_raw = float(num / denom) if denom > 1e-12 else 0.0
-
-    # Kritische Vergrößerung: Strehl-basiert (konsistent mit v_kritisch)
-    V_krit = D_mm * 0.7 * math.sqrt(max(strehl, 1e-6))
-
-    # Übergangsgewicht
-    w = 1.0 / (1.0 + (V_krit / V) ** 2)
-
-    return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
-
+def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float,
+                             V: float, n_pts: int = 120,
+                             use_csf: bool = True) -> float:
+    """Wie perceived_quality(), aber S direkt einsetzen."""
+    freqs_as, fc, mp, msa, _, S = mtf_kurven_von_S(D_mm, S, lam_nm, n_pts)
+    return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf)
 
 def perceived_quality_kurven(D_mm: float, f_mm: float, lam_nm: float,
                               V_arr: np.ndarray,
                               use_csf: bool = True) -> np.ndarray:
     """Berechnet perceived_quality für ein Array von Vergrößerungen."""
     return np.array([perceived_quality(D_mm, f_mm, lam_nm, V, use_csf=use_csf)
+                     for V in V_arr])
+
+def perceived_quality_kurven_von_S(D_mm: float, S: float, lam_nm: float,
+                                   V_arr: np.ndarray,
+                                   use_csf: bool = True) -> np.ndarray:
+    return np.array([perceived_quality_von_S(D_mm, S, lam_nm, V, use_csf=use_csf)
                      for V in V_arr])
 
 
@@ -450,7 +288,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.1.0 (2026-05-30)"
+VERSION = "4.2.0 (2026-05-30)"
 
 class App(tk.Tk):
     def __init__(self):
@@ -895,51 +733,26 @@ class App(tk.Tk):
         fig, ax, canvas = self._tab_deff_D
         ax.cla()
 
-        lam_mm = 550e-6
-        D_arr  = np.linspace(50, 400, 300)
-        N_list = [5, 6, 7, 8, 10]
+        D_arr    = np.linspace(50, 400, 300)
+        N_list   = [5, 6, 7, 8, 10]
         colors_N = {5:"#c62828", 6:"#D85A30", 7:"#c8a020", 8:"#2e7d32", 10:"#1565c0"}
 
+        # Eine Schleife pro N — berechne() liefert S, Wb und Qvis in einem Aufruf
         for N in N_list:
-            loss_pct = []
+            loss_pct, loss_qvis = [], []
             for D in D_arr:
-                f   = D * N
-                Wp  = D**4 / (1024.0 * f**3 * 550e-6)
-                Wb  = Wp / 4
-                Wrms = Wb / (1.5 * math.sqrt(5))
-                S   = math.exp(-(2 * math.pi * Wrms)**2)
-                loss_pct.append((1 - S**0.25) * 100)
+                r = berechne(D, D * N, 550.0)
+                loss_pct.append((1 - r["strehl"]**0.25) * 100)
+                loss_qvis.append((1 - r["Qvis"]**0.25) * 100)
             col = colors_N[N]
-            ax.plot(D_arr, loss_pct, color=col, lw=2,
-                    label=f"f/{N}")
-            # Label am Ende der Kurve
+            ax.plot(D_arr, loss_pct,  color=col, lw=2,   label=f"f/{N}")
+            ax.plot(D_arr, loss_qvis, color=col, lw=1.2, ls="--", alpha=0.6)
             ax.text(D_arr[-1] + 3, loss_pct[-1], f"f/{N}",
                     color=col, fontsize=9, va="center", fontweight="bold")
-        # Q_vis Kurven (gestrichelt, als Vergleich)
-        for N in N_list:
-            loss_qvis = []
-            for D in D_arr:
-                f   = D * N
-                Wp  = D**4 / (1024.0 * f**3 * 550e-6)
-                Wb  = Wp / 4
-                Wrms = Wb / (1.5 * math.sqrt(5))
-                S   = math.exp(-(2 * math.pi * Wrms)**2)
-                Q02 = mtf_sph_rel(0.2, Wb)
-                Q04 = mtf_sph_rel(0.4, Wb)
-                Q06 = mtf_sph_rel(0.6, Wb)
-                Qv  = 0.4*Q02 + 0.4*Q04 + 0.2*Q06   # identisch mit berechne()
-                Qvis_abs = S * Qv
-                loss_qvis.append((1 - Qvis_abs**0.25) * 100)
-            col = colors_N[N]
-            ax.plot(D_arr, loss_qvis, color=col, lw=1.2, ls="--", alpha=0.6)
 
-
-        # Aktueller Spiegel markieren
-        f_akt    = D_akt * N_akt
-        Wp_akt   = D_akt**4 / (1024.0 * f_akt**3 * 550e-6)
-        Wb_akt   = Wp_akt / 4
-        Wrms_akt = Wb_akt / (1.5 * math.sqrt(5))
-        S_akt    = math.exp(-(2 * math.pi * Wrms_akt)**2)
+        # Aktueller Spiegel — berechne() wiederverwendet den bereits gecachten Wert
+        r_akt    = berechne(D_akt, D_akt * N_akt, 550.0)
+        S_akt    = r_akt["strehl"]
         loss_akt = (1 - S_akt**0.25) * 100
         ax.scatter([D_akt], [loss_akt], color=ACC, s=80, zorder=6)
         ax.annotate(f"D={D_akt:.0f}mm f/{N_akt:.1f}  -{loss_akt:.0f}% Öffnung",
@@ -1011,12 +824,9 @@ class App(tk.Tk):
         lam_mm = 550e-6
         f_arr  = np.linspace(200, 2000, 500)
 
-        # Grenzlinien berechnen
         def D_grenz(S):
-            Wrms = math.sqrt(-math.log(S)) / (2*math.pi)
-            Wp   = Wrms * 1.5 * math.sqrt(5) * 4
-            # Wp = D^4/(1024*f^3*lam) => D = (Wp*1024*lam)^0.25 * f^0.75
-            return (Wp * 1024 * lam_mm) ** 0.25 * f_arr ** 0.75
+            Wb = _Wb_von_S(S)
+            return (Wb * 4.0 * 1024 * lam_mm) ** 0.25 * f_arr ** 0.75
         D_95 = D_grenz(0.95)
         D_80 = D_grenz(0.80)
         D_50 = D_grenz(0.50)
