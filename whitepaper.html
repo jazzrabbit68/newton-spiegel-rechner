@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Whitepaper - Newton Spiegel Rechner</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #2d3748;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        h1, h2, h3 { color: #1a365d; font-weight: 700; }
+        h1 { font-size: 20pt; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 30pt; }
+        h2 { font-size: 15pt; color: #2b6cb0; margin-top: 22pt; border-left: 4px solid #2b6cb0; padding-left: 8px; }
+        p { text-align: justify; margin-bottom: 14pt; }
+        ul, ol { margin-bottom: 14pt; padding-left: 24px; }
+        li { margin-bottom: 6px; }
+        .inline-code { font-family: monospace; background-color: #f7fafc; color: #c53030; padding: 2px 6px; font-size: 10pt; border-radius: 4px; }
+        .formula-block {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: bold;
+            font-size: 14pt;
+            color: #1a365d;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 16px 20px;
+            margin: 18pt auto;
+            text-align: center;
+        }
+        .callout { background-color: #ebf8ff; border-left: 4px solid #3182ce; padding: 14px 18px; margin: 16pt 0; font-style: italic; border-radius: 0 4px 4px 0; }
+        .header-box { background: linear-gradient(135deg, #1a365d 0%, #2a4365 100%); padding: 40px 20px; text-align: center; color: #ffffff; border-radius: 6px; margin-bottom: 30pt; }
+    </style>
+</head>
+<body>
+
+    <div class="header-box">
+        <h1 style="color: #ffffff; border: none; margin: 0; font-size: 22pt; padding-bottom: 5px;">Physikalisch motiviertes Wahrnehmungs- und Qualitätsmodell für sphärische Newton-Spiegelteleskope</h1>
+        <p style="margin: 10px 0 0 0; color: #ffffff; font-size: 11pt;"><b>Software:</b> <span class="inline-code" style="color:#fff; background:#2b6cb0;">newton_spiegel_rechner.py</span> | <b>Version:</b> V4.1.0</p>
+    </div>
+
+    <h1>Abstract</h1>
+    <p>Dieses Whitepaper beschreibt ein numerisches Bewertungsmodell für sphärische Newton-Spiegelteleskope mit Fokus auf visuelle Beobachtung. Das Programm kombiniert klassische optische Kennzahlen wie Wellenfrontfehler, Strehl-Ratio und Modulation Transfer Function (MTF) mit heuristischen Wahrnehmungsmodellen zur Abschätzung der subjektiv wahrgenommenen Bildqualität.</p>
+    <p>Das Ziel der Software ist nicht die vollständige physikalische Simulation eines optischen Systems mittels rigoroser Fourier-Optik, sondern die praxisnahe qualitative Bewertung visueller Teleskopleistung in Abhängigkeit von Öffnung, Brennweite, Vergrößerung und sphärischer Aberration.</p>
+    <p>Die zugrunde liegenden Basisgleichungen entsprechen weitgehend etablierter Literatur der klassischen Optik und Fourier-Optik, insbesondere den Arbeiten von Max Born und Emil Wolf sowie moderner Fourier-optischer Literatur.</p>
+
+    <h1>1. Zielsetzung</h1>
+    <p>Das Programm adressiert ein bekanntes Problem einfacher Teleskoprechner: Klassische Kennzahlen wie die Rayleigh-Grenze, das Dawes-Limit oder die Strehl-Ratio beschreiben zwar fundamentale optische Eigenschaften, korrelieren jedoch nur begrenzt mit der tatsächlich wahrgenommenen visuellen Bildqualität.</p>
+    <p>Die Software verfolgt daher einen erweiterten Ansatz der Kombination aus geometrischer Optik, Wellenoptik, Fourier-optischer MTF und wahrnehmungsorientierter Kontrastbewertung. Der Fokus liegt auf visueller Planetenbeobachtung, Kontrastleistung, wahrgenommener Schärfe und praktischer Beobachtungsqualität sphärischer Newton-Systeme.</p>
+
+    <h1>2. Physikalische Grundlagen</h1>
+    
+    <h2>2.1 Sphärische Aberration des Kugelspiegels</h2>
+    <p>Die primäre sphärische Aberration eines sphärischen Hauptspiegels wird durch den longitudinalen Wellenfrontfehler beschrieben:</p>
+    <div class="formula-block">W<sub>PtV</sub> = D<sup>4</sup> / (1024 · f<sup>3</sup> · &lambda;)</div>
+    <p>mit:<br>• D = Öffnung<br>• f = Brennweite<br>• &lambda; = Wellenlänge</p>
+    <p>Diese Beziehung entspricht klassischer Literatur der geometrischen und Wellenoptik.</p>
+
+    <h2>2.2 RMS-Wellenfrontfehler</h2>
+    <p>Für primäre sphärische Aberration wird der RMS-Fehler näherungsweise berechnet über:</p>
+    <div class="formula-block">W<sub>RMS</sub> = W<sub>PtV</sub> / (1.5 · &radic;5)</div>
+    <p>Diese Näherung ist für moderate Aberrationen üblich und in der Amateur- sowie Ingenieursoptik verbreitet.</p>
+
+    <h2>2.3 Strehl-Ratio</h2>
+    <p>Zur Abschätzung der Bildqualität wird die Maréchal-Näherung verwendet:</p>
+    <div class="formula-block">S = e<sup>-(2 · &pi; · W<sub>RMS</sub>)<sup>2</sup></sup></div>
+    <p>Die Strehl-Ratio beschreibt das Verhältnis der Peakintensität einer aberrierten Punktabbildung zur idealen beugungsbegrenzten Abbildung. Die Näherung ist insbesondere für kleine bis mittlere Aberrationen gültig.</p>
+
+    <h1>3. Fourier-optische Modellierung</h1>
+    
+    <h2>3.1 Ideale MTF</h2>
+    <p>Für ein beugungsbegrenztes Kreisapertursystem wird die analytische ideale MTF verwendet:</p>
+    <div class="formula-block">MTF(f) = (2 / &pi;) · [arccos(f) - f · &radic;(1 - f<sup>2</sup>)]</div>
+    <p>Diese Gleichung entspricht der klassischen Fourier-Optik eines rotationssymmetrischen Systems.</p>
+
+    <h2>3.2 Relative MTF bei sphärischer Aberration</h2>
+    <p>Die Software verwendet eine vereinfachte numerische Approximation der aberrierten MTF auf Basis pupillenbezogener Phasendifferenzen, normierter Aperturkoordinaten und Fourier-optischer Transferprinzipien. Die resultierende MTF ist qualitativ physikalisch plausibel, jedoch keine vollständige hochauflösende 2D-Fourier-Propagation. Das Modell ist daher als vereinfachte Fourier-optische Näherung, nicht jedoch als rigorose Vollsimulation zu verstehen.</p>
+
+    <h1>4. Wahrnehmungsmodell</h1>
+    
+    <h2>4.1 Motivation</h2>
+    <p>Die visuelle Beobachtungsqualität astronomischer Objekte hängt nicht ausschließlich von Peakintensität, Rayleigh-Grenze oder geometrischer Spotgröße ab. Entscheidend sind insbesondere Kontrasttransfer, Objektfrequenzen, Wahrnehmungsschwellen des Auges, Vergrößerung und räumliche Frequenzgewichtung. Daher integriert die Software zusätzlich visuelle Gewichtungsfunktionen, heuristische Kontrastmetriken und vergrößerungsabhängige Wahrnehmungsmodelle.</p>
+
+    <h2>4.2 Heuristische Qualitätsmetriken</h2>
+    <p>Das Programm verwendet zusätzliche empirische Bewertungsgrößen wie die effektive Öffnung, wahrgenommene Auflösung und visuelle Qualitätsindizes. Diese Größen besitzen keine direkte Entsprechung in der fundamentalen Fourier-Optik, sondern dienen als praxisorientierte Wahrnehmungsmetriken.</p>
+    <p>Beispiele:</p>
+    <div class="formula-block">D<sub>eff</sub> = D · S<sup>1/4</sup></div>
+    <p>sowie:</p>
+    <div class="formula-block">&theta;<sub>eff</sub> = &theta;<sub>ideal</sub> / &radic;S</div>
+    <p>Diese Beziehungen sind heuristisch, empirisch motiviert und dienen ausschließlich der qualitativen visuellen Bewertung. Sie stellen keine rigorosen physikalischen Grundgleichungen dar.</p>
+
+    <h1>5. Wissenschaftliche Einordnung</h1>
+    
+    <h2>5.1 Korrekte physikalische Komponenten</h2>
+    <p>Die folgenden Teile des Modells basieren direkt auf etablierter Literatur: Wellenfrontfehler sphärischer Spiegel, RMS-Näherungen, Maréchal-Strehl, ideale Kreisapertur-MTF, Fourier-optische Grundprinzipien und die qualitative Aberrationswirkung auf den Kontrasttransfer.</p>
+
+    <h2>5.2 Modellhafte Komponenten</h2>
+    <p>Die folgenden Komponenten sind bewusst heuristisch: Visuelle Qualitätsmetriken, effektive Öffnung, wahrgenommene Auflösung, gewichtete Wahrnehmungsfunktionen und Strehl-basierte Kontrastskalierungen. Diese dienen der praxisnahen visuellen Interpretation, nicht der exakten physikalischen PSF-Rekonstruktion.</p>
+
+    <h1>6. Grenzen des Modells</h1>
+    <p>Die Software ist ausdrücklich NICHT eine vollständige Fourier-Optik-Simulation, ein Zemax- oder OSLO-Ersatz, eine hochpräzise PSF-Simulation oder ein vollständiges Wellenoptik-Raytracing. Nicht berücksichtigt werden u.a. Seeing, thermische Effekte, Kollimationsfehler, Fertigungsfehler höherer Ordnung, reale Beschichtungen, Obstruktionseffekte im Detail und vollständige 2D-PSF-Strukturen.</p>
+
+    <h1>7. Praktischer Nutzen</h1>
+    <p>Trotz der Vereinfachungen besitzt das Modell hohe praktische Relevanz für die Amateurastronomie, die qualitative Spiegelbewertung, visuelle Vergleichsanalysen, die Abschätzung planetarer Beobachtungsleistung und die didaktische Darstellung optischer Zusammenhänge. Die Software ermöglicht schnelle Parameterstudien, intuitive Visualisierungen und praxisnahe Leistungsabschätzungen.</p>
+
+    <h1>8. Fazit</h1>
+    <p>Das Programm <span class="inline-code">newton_spiegel_rechner.py</span> kombiniert etablierte Grundlagen der klassischen und Fourier-basierten Optik mit heuristischen Wahrnehmungsmodellen zur qualitativen Bewertung visueller Newton-Teleskopleistung. Die fundamentalen optischen Gleichungen entsprechen weitgehend anerkannter Literatur. Die erweiterten visuellen Qualitätsmetriken sind hingegen bewusst empirisch und dienen der praxisnahen Interpretation wahrgenommener Bildqualität. Das Modell ist daher nicht als exakte physikalische Vollsimulation, sondern als physikalisch motiviertes, qualitativ plausibles, wahrnehmungsorientiertes Bewertungsmodell einzuordnen.</p>
+
+    <h1>Literatur</h1>
+    <ul>
+        <li>Principles of Optics (Born & Wolf)</li>
+        <li>telescope-optics.net – Strehl Ratio</li>
+        <li>Optikos – MTF and Fourier Optics</li>
+        <li>Fourieroptik (Wikipedia)</li>
+        <li>Goodman, J.W.: <i>Introduction to Fourier Optics</i></li>
+        <li>Suiter, H.R.: <i>Star Testing Astronomical Telescopes</i></li>
+        <li>Rutten & van Venrooij: <i>Telescope Optics</i></li>
+    </ul>
+
+</body>
+</html>
