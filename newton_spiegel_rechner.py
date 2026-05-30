@@ -222,6 +222,62 @@ def strehl_to_f(S: float, D_mm: float, lam_nm: float = 550.0) -> float:
     return D_mm * N
 
 
+def _Wb_von_S(S: float) -> float:
+    """Wb direkt aus Strehl-Wert — Umkehrung der Maréchal-Näherung."""
+    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (2.0 * math.pi)
+    return Wrms * 1.5 * math.sqrt(5)
+
+def berechne_von_S(D_mm: float, S: float, lam_nm: float = 550.0) -> dict:
+    """Alle Kennzahlen direkt aus S — kein Umweg über strehl_to_f."""
+    Wb          = _Wb_von_S(S)
+    Deff_k      = D_mm * S**0.25
+    theta_ideal = 116.0 / D_mm
+    theta_eff   = theta_ideal / math.sqrt(max(S, 1e-9))
+    Deff_s      = 116.0 / theta_eff
+    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
+    Q02 = mtf_sph_rel(0.2, Wb); Q04 = mtf_sph_rel(0.4, Wb); Q06 = mtf_sph_rel(0.6, Wb)
+    Qshape = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
+    Qvis   = S * Qshape
+    return dict(strehl=S, Wb=Wb, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
+                theta_ideal=theta_ideal, theta_eff=theta_eff,
+                Deff_s=Deff_s, loss_s=D_mm - Deff_s,
+                V_krit_vis=V_krit_vis,
+                Qvis=Qvis, Deff_vis=D_mm * Qvis**0.25)
+
+def mtf_kurven_von_S(D_mm: float, S: float, lam_nm: float = 550.0,
+                     n_pts: int = 200) -> tuple:
+    """Wie mtf_kurven(), aber S direkt einsetzen."""
+    Wb         = _Wb_von_S(S)
+    fc         = D_mm / (lam_nm * 1e-6 * 206265)
+    freqs_norm = np.linspace(0, 1, n_pts)
+    freqs_as   = freqs_norm * fc
+    mp  = np.array([mtf_para(f)        for f in freqs_norm])
+    msr = np.array([mtf_sph_rel(f, Wb) for f in freqs_norm])
+    msa = msr * mp * S
+    return freqs_as, fc, mp, msa, msr, S
+
+def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float,
+                             V: float, n_pts: int = 120,
+                             use_csf: bool = True) -> float:
+    """Wie perceived_quality(), aber S direkt einsetzen."""
+    freqs_as, fc_scope, mp_arr, msa_arr, _, _ = mtf_kurven_von_S(D_mm, S, lam_nm, n_pts)
+    nu        = freqs_as / fc_scope
+    f_cpd_arr = freqs_as * 3600.0 / V
+    weight    = np.array([csf(fi) if use_csf else mtf_eye(fi) for fi in f_cpd_arr])
+    _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    num   = _trapz(msa_arr * weight, nu)
+    denom = _trapz(mp_arr  * weight, nu)
+    Q_raw = float(num / denom) if denom > 1e-12 else 0.0
+    V_krit = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
+    w = 1.0 / (1.0 + (V_krit / V) ** 2)
+    return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
+
+def perceived_quality_kurven_von_S(D_mm: float, S: float, lam_nm: float,
+                                   V_arr: np.ndarray,
+                                   use_csf: bool = True) -> np.ndarray:
+    return np.array([perceived_quality_von_S(D_mm, S, lam_nm, V, use_csf=use_csf)
+                     for V in V_arr])
+
 def v_kritisch_strehl(D_mm: float, strehl: float, theta_eff: float = None,
                       eye_res_as: float = 60.0) -> dict:
     """V_krit für beliebigen Strehl-Wert (für Schieber-Vergleich)."""
@@ -394,7 +450,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.0.0 (2026-05-30)"
+VERSION = "4.1.0 (2026-05-30)"
 
 class App(tk.Tk):
     def __init__(self):
@@ -634,9 +690,8 @@ class App(tk.Tk):
         S_slide = S_real + (S_pct / 100.0) * (1.0 - S_real)
         S_slide = min(max(S_slide, S_real), 1.0)
 
-        # Hypothetischer verbesserter Spiegel: f_slide aus S_slide
-        f_slide = strehl_to_f(S_slide, D, lam) if S_slide > S_real + 0.01 else f
-        r_slide = berechne(D, f_slide, lam)
+        # Hypothetischer verbesserter Spiegel: S direkt einsetzen
+        r_slide = berechne_von_S(D, S_slide, lam) if S_slide > S_real + 0.01 else r_real
         Deff_k_slide = D * S_slide**0.25
         Vk_slide = v_kritisch_strehl(D, S_slide)
 
@@ -1082,8 +1137,7 @@ class App(tk.Tk):
         ms_s = None
         verlust_s = None
         if S_slide is not None and S_slide > strehl + 0.01:
-            f_slide = strehl_to_f(S_slide, D, lam)
-            _, _, _, msa_s_arr, msr_s_arr, _ = mtf_kurven(D, f_slide, lam)
+            _, _, _, msa_s_arr, msr_s_arr, _ = mtf_kurven_von_S(D, S_slide, lam)
             nu_axis_s = np.linspace(0, 1, len(msa_s_arr))
             nu_list_s = [(1.0/(2.0*d))/fc for _,d,_ in planet_details if (1.0/(2.0*d))/fc < 1.0]
             ms_s = [float(np.interp(nu, nu_axis_s, msa_s_arr)) for nu in nu_list_s]
@@ -1201,8 +1255,7 @@ class App(tk.Tk):
         has_slide = S_slide is not None and S_real is not None and S_slide > S_real + 0.01
 
         if has_slide:
-            f_slide = strehl_to_f(S_slide, D, lam)
-            Qp_slide = perceived_quality_kurven(D, f_slide, lam, V_arr, use_csf=True)
+            Qp_slide = perceived_quality_kurven_von_S(D, S_slide, lam, V_arr, use_csf=True)
             ax.fill_between(V_arr, Qp_sph, Qp_para,
                             color=COR, alpha=0.10, label="Wahrnehmungsverlust (Sphäre)")
             ax.fill_between(V_arr, Qp_slide, Qp_para,
@@ -1235,7 +1288,7 @@ class App(tk.Tk):
                                   ec=col, alpha=0.80))
 
         # Slider-Vergrößerung
-        q_v = perceived_quality(D, f_slide if has_slide else f, lam, V_slider, use_csf=True)
+        q_v = perceived_quality_von_S(D, S_slide, lam, V_slider, use_csf=True) if has_slide else perceived_quality(D, f, lam, V_slider, use_csf=True)
         ax.axvline(V_slider, color=ACC, lw=1.8, ls="-", alpha=0.9)
         ax.scatter([V_slider], [q_v], color=ACC, s=90, zorder=7)
         x_off = -65 if V_slider > 200 else 12

@@ -18,7 +18,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.0.0 (2026-05-30)"
+VERSION = "4.1.0 (2026-05-30)"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # KERNFUNKTIONEN (identisch mit newton_spiegel_rechner.py)
@@ -98,6 +98,57 @@ def strehl_to_f(S, D_mm, lam_nm=550.0):
     f3   = D_mm**4 / (1024.0 * Wp * lam_mm)
     N    = (f3 ** (1.0/3.0)) / D_mm
     return D_mm * N
+
+def _Wb_von_S(S):
+    """Wb direkt aus Strehl-Wert — Umkehrung der Maréchal-Näherung."""
+    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (2.0 * math.pi)
+    return Wrms * 1.5 * math.sqrt(5)
+
+def berechne_von_S(D_mm, S, lam_nm=550.0):
+    """Wie berechne(), aber S_slide direkt einsetzen statt Umweg über strehl_to_f."""
+    Wb          = _Wb_von_S(S)
+    lam_mm      = lam_nm * 1e-6
+    Deff_k      = D_mm * S**0.25
+    theta_ideal = 116.0 / D_mm
+    theta_eff   = theta_ideal / math.sqrt(max(S, 1e-9))
+    Deff_s      = 116.0 / theta_eff
+    V_krit_vis  = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
+    Q02 = mtf_sph_rel(0.2, Wb)
+    Q04 = mtf_sph_rel(0.4, Wb)
+    Q06 = mtf_sph_rel(0.6, Wb)
+    Qshape = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
+    Qvis   = S * Qshape
+    Deff_vis = D_mm * Qvis**0.25
+    return dict(strehl=S, Wb=Wb, Deff_k=Deff_k, loss_k=D_mm - Deff_k,
+                theta_ideal=theta_ideal, theta_eff=theta_eff,
+                Deff_s=Deff_s, loss_s=D_mm - Deff_s,
+                V_krit_vis=V_krit_vis,
+                Qvis=Qvis, Deff_vis=Deff_vis, loss_vis=D_mm - Deff_vis)
+
+def mtf_kurven_von_S(D_mm, S, lam_nm=550.0, n_pts=200):
+    """Wie mtf_kurven(), aber S direkt einsetzen."""
+    Wb         = _Wb_von_S(S)
+    fc         = D_mm / (lam_nm * 1e-6 * 206265)
+    freqs_norm = np.linspace(0, 1, n_pts)
+    freqs_as   = freqs_norm * fc
+    mp  = np.array([mtf_para(f)        for f in freqs_norm])
+    msr = np.array([mtf_sph_rel(f, Wb) for f in freqs_norm])
+    msa = msr * mp * S
+    return freqs_as, fc, mp, msa, msr, S
+
+def perceived_quality_von_S(D_mm, S, lam_nm, V, n_pts=28):
+    """Wie perceived_quality(), aber S direkt einsetzen."""
+    freqs_as, fc_scope, mp_arr, msa_arr, msr_arr, _ = mtf_kurven_von_S(D_mm, S, lam_nm, n_pts)
+    nu        = freqs_as / fc_scope
+    f_cpd_arr = freqs_as * 3600.0 / V
+    weight    = np.array([csf(fi) for fi in f_cpd_arr])
+    _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    num   = _trapz(msa_arr * weight, nu)
+    denom = _trapz(mp_arr  * weight, nu)
+    Q_raw = float(num / denom) if denom > 1e-12 else 0.0
+    V_krit = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
+    w = 1.0 / (1.0 + (V_krit / V) ** 2)
+    return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
 
 def mtf_para(f):
     if f <= 0: return 1.0
@@ -220,8 +271,7 @@ def fig_oeffnung(D, f, lam, S_slide):
     ax.scatter([N_akt], [Dk], color=ACC, s=18, zorder=5,
                label=f"Messpunkt: {Dk:.0f} mm  (f/{N_akt:.1f})")
     if S_slide > r["strehl"] + 0.01:
-        f_sl = strehl_to_f(S_slide, D, lam)
-        r_sl = berechne(D, f_sl, lam)
+        r_sl = berechne_von_S(D, S_slide, lam)
         ax.scatter([N_akt], [r_sl["Deff_k"]], color=ACC, s=28, marker="*", zorder=6,
                    label=f"Schieber Kontrast: {r_sl['Deff_k']:.0f} mm")
     ax.set_xlim(3, 15)
@@ -240,9 +290,9 @@ def fig_oeffnung(D, f, lam, S_slide):
     ax2.scatter([N_akt], [Aufl], color=COR, s=18, zorder=5,
                 label=f"Messpunkt: {Aufl:.1f}%")
     if S_slide > r["strehl"] + 0.01:
-        r_sl = berechne(D, strehl_to_f(S_slide, D, lam), lam)
-        ax2.scatter([N_akt], [r_sl["aufl_verlust_pct"]], color=COR, s=28, marker="*", zorder=6,
-                    label=f"Schieber: {r_sl['aufl_verlust_pct']:.1f}%")
+        # Auflösungsverlust ist geometrisch (f-abhängig) → bleibt beim aktuellen Spiegel,
+        # da der Schieber nur S verändert, nicht die Brennweite
+        pass
     ax2.set_ylim(0, 105)
     ax2.set_ylabel("Geom. Auflösungsverlust [%]", fontsize=5, color=COR)
     ax2.tick_params(axis="y", labelcolor=COR)
@@ -363,8 +413,7 @@ def fig_mtf(D, f, lam, S_slide, V):
         bar_colors.append(col); detail_as.append(d_as)
     ms_s = None
     if S_slide > strehl + 0.01:
-        f_sl = strehl_to_f(S_slide, D, lam)
-        freqs_as_s, fc_s, _, msa_s, _, _ = mtf_kurven(D, f_sl, lam, n_pts=N_PTS)
+        freqs_as_s, fc_s, _, msa_s, _, _ = mtf_kurven_von_S(D, S_slide, lam, n_pts=N_PTS)
         freqs_norm_s = freqs_as_s / fc_s
         ms_s = []
         for d_as in detail_as:
@@ -411,8 +460,7 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
     Qp_para = perceived_quality_kurven(D, D*50, lam, V_arr)
     has_slide = S_slide > S_real + 0.01
     if has_slide:
-        f_sl = strehl_to_f(S_slide, D, lam)
-        Qp_slide = perceived_quality_kurven(D, f_sl, lam, V_arr)
+        Qp_slide = np.array([perceived_quality_von_S(D, S_slide, lam, V) for V in V_arr])
         ax.fill_between(V_arr, Qp_sph,   Qp_para, color=COR, alpha=0.10)
         ax.fill_between(V_arr, Qp_slide, Qp_para, color=GRN, alpha=0.10)
     else:
@@ -430,7 +478,7 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
         ax.annotate(f"{V_mark}×\n{q_m:.2f}", xy=(V_mark, q_m),
                     xytext=(V_mark+7, q_m-0.05), fontsize=5, color=col, fontweight="bold",
                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=col, alpha=0.80))
-    q_v = perceived_quality(D, f_sl if has_slide else f, lam, V_slider)
+    q_v = perceived_quality_von_S(D, S_slide, lam, V_slider) if has_slide else perceived_quality(D, f, lam, V_slider)
     ax.axvline(V_slider, color=ACC, lw=1.0, ls="-", alpha=0.9)
     ax.scatter([V_slider], [q_v], color=ACC, s=22, zorder=7)
     x_off = -65 if V_slider > 200 else 12
