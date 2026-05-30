@@ -18,6 +18,8 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
+VERSION = "4.0.0 (2026-05-30)"
+
 # ═════════════════════════════════════════════════════════════════════════════
 # KERNFUNKTIONEN (identisch mit newton_spiegel_rechner.py)
 # ═════════════════════════════════════════════════════════════════════════════
@@ -206,31 +208,52 @@ def fig_strehl(D, f, lam, S_slide):
 def fig_oeffnung(D, f, lam, S_slide):
     fig, ax = plt.subplots(figsize=(5, 2.8), dpi=120)
     fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
-    ns, _, deff_ks, deff_ss = kurven_N(D, lam)
+    ns, _, deff_ks, aufl_verluste = kurven_N(D, lam)
     r = berechne(D, f, lam)
-    N_akt = r["N"]; Dk = r["Deff_k"]; Ds = r["Deff_s"]
-    ax.fill_between(ns, deff_ks, D, color=ACC, alpha=0.10, label="Kontrast-Verlust")
-    ax.fill_between(ns, deff_ss, D, color=COR, alpha=0.10, label="Schärfe-Verlust")
-    ax.axhline(D, color="#555", lw=0.9, ls="-", label=f"Paraboloid = {D:.0f}mm")
-    ax.plot(ns, deff_ks, color=ACC, lw=2, label="Eff. Öffnung (Kontrast)")
-    ax.plot(ns, deff_ss, color=COR, lw=2, label="Eff. Öffnung (Schärfe)")
+    N_akt = r["N"]; Dk = r["Deff_k"]; Aufl = r["aufl_verlust_pct"]
+
+    # Linke Achse: Deff_k in mm (blau/ACC)
+    ax.fill_between(ns, deff_ks, D, color=ACC, alpha=0.10, label="Kontrast-Verlust (Fläche)")
+    ax.axhline(D, color="#555", lw=0.9, ls="-", label=f"Paraboloid = {D:.0f} mm")
+    ax.plot(ns, deff_ks, color=ACC, lw=2, label=f"D\u2091\u2091\u2096 Kontrast = D·S\u2070'\u00b2\u2075 [mm]")
     ax.axvline(N_akt, color="#ccc", lw=0.8, ls=":")
-    ax.scatter([N_akt], [Dk], color=ACC, s=16, zorder=5)
-    ax.scatter([N_akt], [Ds], color=COR, s=16, zorder=5)
+    ax.scatter([N_akt], [Dk], color=ACC, s=18, zorder=5,
+               label=f"Messpunkt: {Dk:.0f} mm  (f/{N_akt:.1f})")
     if S_slide > r["strehl"] + 0.01:
         f_sl = strehl_to_f(S_slide, D, lam)
         r_sl = berechne(D, f_sl, lam)
         ax.scatter([N_akt], [r_sl["Deff_k"]], color=ACC, s=28, marker="*", zorder=6,
-                   label=f"Schieber Kontrast {r_sl['Deff_k']:.0f}mm")
-        ax.scatter([N_akt], [r_sl["Deff_s"]], color=COR, s=28, marker="*", zorder=6,
-                   label=f"Schieber Schärfe {r_sl['Deff_s']:.0f}mm")
+                   label=f"Schieber Kontrast: {r_sl['Deff_k']:.0f} mm")
     ax.set_xlim(3, 15)
+    ax.set_ylim(0, D * 1.08)
     ax.set_xlabel("Öffnungsverhältnis f/D", fontsize=5)
-    ax.set_ylabel("Effektive Öffnung [mm]", fontsize=5)
-    ax.set_title(f"Eff. Öffnung vs. f/D  (D={D:.0f}mm, λ={lam:.0f}nm)", fontsize=5)
+    ax.set_ylabel("Effektive Öffnung D\u2091\u2091\u2096 [mm]", fontsize=5, color=ACC)
+    ax.tick_params(axis="y", labelcolor=ACC)
+    ax.spines["left"].set_color(ACC)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"f/{x:.0f}" if x == int(x) else ""))
     ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
-    ax.legend(fontsize=5, loc="lower right"); ax_fmt(ax)
+
+    # Rechte Achse: geometrischer Auflösungsverlust in % (orange/COR)
+    ax2 = ax.twinx(); ax2.set_facecolor("none")
+    ax2.plot(ns, aufl_verluste, color=COR, lw=1.5, ls="--",
+             label="Geom. Aufl.verlust [%]\n(Fotografie, nicht visuell)")
+    ax2.scatter([N_akt], [Aufl], color=COR, s=18, zorder=5,
+                label=f"Messpunkt: {Aufl:.1f}%")
+    if S_slide > r["strehl"] + 0.01:
+        r_sl = berechne(D, strehl_to_f(S_slide, D, lam), lam)
+        ax2.scatter([N_akt], [r_sl["aufl_verlust_pct"]], color=COR, s=28, marker="*", zorder=6,
+                    label=f"Schieber: {r_sl['aufl_verlust_pct']:.1f}%")
+    ax2.set_ylim(0, 105)
+    ax2.set_ylabel("Geom. Auflösungsverlust [%]", fontsize=5, color=COR)
+    ax2.tick_params(axis="y", labelcolor=COR)
+    ax2.spines["right"].set_color(COR)
+
+    ax.set_title(f"Eff. Öffnung & Auflösungsverlust vs. f/D  (D={D:.0f}mm, λ={lam:.0f}nm)", fontsize=5)
+    # Legenden kombinieren
+    lines1, labels1 = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=4.5, loc="lower left")
+    ax_fmt(ax); ax_fmt(ax2)
     fig.tight_layout(); return fig
 
 def fig_deff_D(D_akt, N_akt, S_slide):
@@ -319,7 +342,9 @@ def fig_beugung(D_akt, f_akt):
 def fig_mtf(D, f, lam, S_slide, V):
     fig, ax = plt.subplots(figsize=(5, 2.8), dpi=120)
     fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
-    freqs_as, fc, mp_arr, msa, msr_arr, strehl = mtf_kurven(D, f, lam)
+    N_PTS = 200  # hohe Auflösung für genaue np.interp-Interpolation
+    freqs_as, fc, mp_arr, msa_arr, msr_arr, strehl = mtf_kurven(D, f, lam, n_pts=N_PTS)
+    freqs_norm = freqs_as / fc  # normierte Frequenzen 0..1
     planet_details = [
         ("Jupiter\nGürtel", 5.0,  "#4a90d9"),
         ("Jupiter\nFestons",1.5,  "#4a90d9"),
@@ -327,29 +352,24 @@ def fig_mtf(D, f, lam, S_slide, V):
         ("Saturn\nCassini", 0.5,  "#c8a020"),
         (f"Dawes\n{116/D:.2f}\"", 116.0/D, "#888"),
     ]
-    def mtf_at(fn, arr):
-        idx = min(int(round(fn*(len(arr)-1))), len(arr)-1)
-        return arr[idx]
     labels, mp_vals, ms_vals, bar_colors, detail_as = [], [], [], [], []
     for label, d_as, col in planet_details:
         fn = 1.0 / (2.0 * d_as * fc)
         if fn >= 1.0: continue
-        mp_v  = mtf_para(fn)
-        msr_v = mtf_at(fn, msr_arr)
-        strehl_eff = 1.0 - (1.0 - strehl) * fn
-        ms_v  = msr_v * mp_v * strehl_eff
+        # v4: exakte Interpolation aus den kontinuierlichen MTF-Arrays (kein heuristisches strehl_eff)
+        mp_v = float(np.interp(fn, freqs_norm, mp_arr))
+        ms_v = float(np.interp(fn, freqs_norm, msa_arr))  # msa = S * msr_rel * mp_para
         labels.append(label); mp_vals.append(mp_v); ms_vals.append(ms_v)
         bar_colors.append(col); detail_as.append(d_as)
     ms_s = None
     if S_slide > strehl + 0.01:
         f_sl = strehl_to_f(S_slide, D, lam)
-        _, _, _, _, msr_s, _ = mtf_kurven(D, f_sl, lam)
+        freqs_as_s, fc_s, _, msa_s, _, _ = mtf_kurven(D, f_sl, lam, n_pts=N_PTS)
+        freqs_norm_s = freqs_as_s / fc_s
         ms_s = []
         for d_as in detail_as:
-            fn = 1.0/(2.0*d_as*fc)
-            msr_v = mtf_at(fn, msr_s)
-            strehl_eff = 1.0 - (1.0 - S_slide) * fn
-            ms_s.append(msr_v * mtf_para(fn) * strehl_eff)
+            fn = 1.0 / (2.0 * d_as * fc)
+            ms_s.append(float(np.interp(fn, freqs_norm_s, msa_s)))
     n = len(labels); x = np.arange(n)
     w = 0.28 if ms_s else 0.35
     ax.bar(x - w/2, mp_vals, w, label="Paraboloid", color="#888", alpha=0.75)
@@ -437,7 +457,7 @@ st.set_page_config(page_title="Newton-Spiegel Rechner", layout="wide")
 st.markdown("<style>div.block-container{padding-top:1rem}</style>",
             unsafe_allow_html=True)
 st.title("Newton-Spiegel Rechner")
-st.caption("Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
+st.caption(f"v{VERSION}  ·  Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
 with st.expander("ℹ️ Über dieses Programm"):
     st.markdown("""
@@ -450,7 +470,7 @@ with st.expander("ℹ️ Über dieses Programm"):
 
 ### Version
 
-2026
+""" + f"`{VERSION}`" + """
 
 ---
 
