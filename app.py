@@ -18,7 +18,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.2.0 (2026-05-30)"
+VERSION = "4.3.0 (2026-05-30)"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # KERNFUNKTIONEN (identisch mit newton_spiegel_rechner.py)
@@ -187,7 +187,7 @@ def beurteilung(strehl):
     if strehl >= 0.95:
         return "✓ Sehr gut — nahezu gleichwertig mit Parabolspiegel (Strehl ≥ 0.95)", "#2e7d32"
     elif strehl >= 0.80:
-        return ("⚠  Noch beugungsbegrenzt (Rayleigh), spürbarer Kontrastverlust bei Planeten  (0.80 ≤ Strehl < 0.95)"), "#e65100"
+        return ("⚠  Noch beugungsbegrenzt (Maréchal), spürbarer Kontrastverlust bei Planeten  (0.80 ≤ Strehl < 0.95)"), "#e65100"
     else:
         return ("✗  Nicht beugungsbegrenzt — erheblicher Kontrast- und Schärfeverlust, Parabolspiegel dringend empfohlen (Strehl < 0.80)"), "#c62828"
 
@@ -209,8 +209,8 @@ def fig_strehl(D, f, lam, S_slide):
     ax.fill_between(ns, S_akt, 1.0, color=ACC, alpha=0.10)
     ax.axhline(1.00, color=GRN,      lw=0.9, ls="-",  label="Paraboloid (S=1.0)")
     ax.plot(ns, sts, color=ACC, lw=2, label="Strehl (sphärisch)")
-    ax.axhline(0.80, color="#BA7517", lw=0.7, ls="--", label="Rayleigh S=0.80")
-    ax.axhline(0.95, color="#888",    lw=1.0, ls=":",  label="S=0.95")
+    ax.axhline(0.986, color="#1565c0", lw=0.7, ls=":",  label="Rayleigh-Grenze  S≈0.986  (Wp=λ/4)")
+    ax.axhline(0.80,  color="#BA7517", lw=0.7, ls="--", label="Maréchal  S=0.80  (beugungsbegrenzt)")
     ax.axvline(N_akt, color="#ccc", lw=0.8, ls=":")
     ax.scatter([N_akt], [S_akt], color=ACC, s=16, zorder=5)
     ax.annotate(f"f/{N_akt:.1f}  S={S_akt:.3f}", xy=(N_akt, S_akt),
@@ -358,12 +358,14 @@ def fig_beugung(D_akt, f_akt):
     ax.legend(fontsize=5, loc="upper left"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
-def fig_mtf(D, f, lam, S_slide, V):
+def fig_mtf(D, f, lam, S_slide, V, modus="gesamt"):
     fig, ax = plt.subplots(figsize=(5, 2.8), dpi=120)
     fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
-    N_PTS = 200  # hohe Auflösung für genaue np.interp-Interpolation
+    N_PTS = 200
     freqs_as, fc, mp_arr, msa_arr, msr_arr, strehl = mtf_kurven(D, f, lam, n_pts=N_PTS)
-    freqs_norm = freqs_as / fc  # normierte Frequenzen 0..1
+    freqs_norm = freqs_as / fc
+    nu_axis    = freqs_norm
+
     planet_details = [
         ("Jupiter\nGürtel", 5.0,  "#4a90d9"),
         ("Jupiter\nFestons",1.5,  "#4a90d9"),
@@ -371,47 +373,146 @@ def fig_mtf(D, f, lam, S_slide, V):
         ("Saturn\nCassini", 0.5,  "#c8a020"),
         (f"Dawes\n{116/D:.2f}\"", 116.0/D, "#888"),
     ]
-    labels, mp_vals, ms_vals, bar_colors, detail_as = [], [], [], [], []
+
+    # ── Klassischer Kurven-Modus ───────────────────────────────────────────────
+    if modus == "klassisch":
+        N_KURVE  = 300
+        nu_k     = np.linspace(0, 1, N_KURVE)
+        lam_mm   = lam * 1e-6
+        Wp_k     = D**4 / (1024.0 * f**3 * lam_mm)
+        Wb_k     = Wp_k / 4.0
+        fc_fokal = 1.0 / (lam_mm * (f / D))
+        mp_k  = np.array([mtf_para(nu)          for nu in nu_k])
+        msr_k = np.array([mtf_sph_rel(nu, Wb_k) for nu in nu_k])
+        ax.plot(nu_k, mp_k,     color=GRN, lw=1.5, ls="-",
+                label="Paraboloid  (Beugungsgrenze)")
+        ax.plot(nu_k, mp_k*msr_k, color=COR, lw=1.5, ls="-",
+                label=f"Sphäre absolut  (S={strehl:.3f})")
+        ax.plot(nu_k, msr_k,    color=ACC, lw=1.2, ls="--",
+                label="Sphäre relativ  (norm. gg. Paraboloid)")
+        if S_slide > strehl + 0.01:
+            _, _, _, _, msr_s_k, _ = mtf_kurven_von_S(D, S_slide, lam, n_pts=N_KURVE)
+            ax.plot(nu_k, mp_k*msr_s_k, color="#1a7abf", lw=1.2, ls="-.",
+                    label=f"Schieber absolut  (S={S_slide:.2f})")
+        for label, d_as, col in planet_details:
+            nu_det = (1.0/(2.0*d_as)) / fc
+            if nu_det >= 1.0: continue
+            ax.axvline(nu_det, color=col, lw=0.7, ls=":", alpha=0.7)
+            ax.text(nu_det+0.005, float(np.interp(nu_det, nu_k, mp_k))-0.07,
+                    label.replace("\n"," "), fontsize=4, color=col, rotation=90, va="top")
+        ax2x = ax.twiny(); ax2x.set_facecolor("none")
+        ax2x.set_xlim(0, fc_fokal)
+        ax2x.set_xlabel("Räumliche Frequenz [Lp/mm] (fokal)", fontsize=4)
+        ax2x.tick_params(axis="x", labelsize=4)
+        ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
+        ax.set_xlabel("Normierte Frequenz ν", fontsize=5)
+        ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=5)
+        ax.set_title(f"MTF-Kurven — D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}  "
+                     f"fc={fc_fokal:.1f}Lp/mm", fontsize=5)
+        ax.text(0.98, 0.97, "Relativ = wie telescope-optics.net",
+                transform=ax.transAxes, ha="right", va="top", fontsize=4,
+                color=ACC, bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=ACC, alpha=0.8))
+        ax.legend(fontsize=4, loc="lower left"); ax_fmt(ax)
+        fig.tight_layout(); return fig
+
+    # ── Balken-Modi: absolut / gesamt / relativ ────────────────────────────────
+    labels, mp_vals = [], []
+    ms_vals_mtf, ms_vals_ges = [], []
+    verlust_mtf, verlust_ges = [], []
+    bar_colors, detail_as   = [], []
     for label, d_as, col in planet_details:
         fn = 1.0 / (2.0 * d_as * fc)
         if fn >= 1.0: continue
-        # v4: exakte Interpolation aus den kontinuierlichen MTF-Arrays (kein heuristisches strehl_eff)
-        mp_v = float(np.interp(fn, freqs_norm, mp_arr))
-        ms_v = float(np.interp(fn, freqs_norm, msa_arr))  # msa = S * msr_rel * mp_para
-        labels.append(label); mp_vals.append(mp_v); ms_vals.append(ms_v)
+        mp_v   = float(np.interp(fn, nu_axis, mp_arr))
+        msr_v  = float(np.interp(fn, nu_axis, msr_arr))
+        ms_mtf = mp_v * msr_v
+        ms_ges = mp_v * msr_v * strehl
+        vl_mtf = (mp_v - ms_mtf) / mp_v * 100.0 if mp_v > 1e-9 else 0.0
+        vl_ges = (mp_v - ms_ges) / mp_v * 100.0 if mp_v > 1e-9 else 0.0
+        labels.append(label); mp_vals.append(mp_v)
+        ms_vals_mtf.append(ms_mtf); ms_vals_ges.append(ms_ges)
+        verlust_mtf.append(vl_mtf); verlust_ges.append(vl_ges)
         bar_colors.append(col); detail_as.append(d_as)
+
+    ms_vals     = ms_vals_ges if modus == "gesamt" else ms_vals_mtf
+    verlust_vals = verlust_ges if modus == "gesamt" else verlust_mtf
+
     ms_s = None
     if S_slide > strehl + 0.01:
-        freqs_as_s, fc_s, _, msa_s, _, _ = mtf_kurven_von_S(D, S_slide, lam, n_pts=N_PTS)
-        freqs_norm_s = freqs_as_s / fc_s
+        _, fc_s, mp_s_arr, _, msr_s_arr, _ = mtf_kurven_von_S(D, S_slide, lam, n_pts=N_PTS)
+        nu_s = np.linspace(0, 1, len(msr_s_arr))
         ms_s = []
         for d_as in detail_as:
-            fn = 1.0 / (2.0 * d_as * fc)
-            ms_s.append(float(np.interp(fn, freqs_norm_s, msa_s)))
+            fn  = 1.0 / (2.0 * d_as * fc)
+            mp_v  = float(np.interp(fn, nu_axis, mp_arr))
+            msr_v = float(np.interp(fn, nu_s, msr_s_arr))
+            ms_s.append(mp_v * msr_v * S_slide if modus == "gesamt" else mp_v * msr_v)
+
     n = len(labels); x = np.arange(n)
-    w = 0.28 if ms_s else 0.35
-    ax.bar(x - w/2, mp_vals, w, label="Paraboloid", color="#888", alpha=0.75)
-    ax.bar(x + w/2, ms_vals, w, label=f"Sphäre (S={strehl:.3f})", color=COR, alpha=0.85)
-    if ms_s:
-        ax.bar(x + w/2, ms_s, w, label=f"Schieber (S={S_slide:.2f})", color=GRN, alpha=0.75)
-    for i, (mp_v, ms_v) in enumerate(zip(mp_vals, ms_vals)):
-        ax.text(i-w/2, mp_v+0.02, f"{mp_v:.2f}", ha="center", fontsize=5, color="#444")
-        ax.text(i+w/2, ms_v+0.02, f"{ms_v:.2f}", ha="center", fontsize=5, color=COR, fontweight="bold")
-    ax.axhline(0.2, color="#BA7517", lw=0.7, ls="-", zorder=5)
-    ax.text(0.01, 0.215, "20%-Schwelle", transform=ax.get_yaxis_transform(),
-            fontsize=5, fontweight="bold", color="#BA7517")
-    ax.set_ylim(0, 1.18)
-    ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=5)
-    ax.set_title(f"MTF je Detail - D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=5)
-    # CSF-Overlay
+
+    if modus in ("absolut", "gesamt"):
+        w = 0.28 if ms_s else 0.35
+        ax.bar(x-w/2, mp_vals, w, label="Paraboloid", color="#888", alpha=0.75)
+        ax.bar(x+w/2, ms_vals, w, label=f"Sphäre (S={strehl:.3f})", color=COR, alpha=0.85)
+        if ms_s:
+            ax.bar(x+w/2, ms_s, w, label=f"Schieber (S={S_slide:.2f})", color=GRN, alpha=0.75)
+        for i, (mp_v, ms_v) in enumerate(zip(mp_vals, ms_vals)):
+            ax.text(i-w/2, mp_v+0.02, f"{mp_v:.2f}", ha="center", fontsize=5, color="#444")
+            ax.text(i+w/2, ms_v+0.02, f"{ms_v:.2f}", ha="center", fontsize=5,
+                    color=COR, fontweight="bold")
+        ax.axhline(0.2, color="#BA7517", lw=0.7, ls="-", zorder=5)
+        ax.text(0.01, 0.215, "20%-Schwelle", transform=ax.get_yaxis_transform(),
+                fontsize=5, fontweight="bold", color="#BA7517")
+        ax.set_ylim(0, 1.18)
+        ax.set_ylabel("Kontrastübertragung", fontsize=5)
+        if modus == "absolut":
+            ax.set_title(f"MTF absolut (Standard, ohne Strehl) — "
+                         f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=5)
+            ax.text(0.02, 0.97, f"Strehl={strehl:.3f} nicht eingerechnet\n"
+                    "Vergleichbar mit Zemax / telescope-optics.net",
+                    transform=ax.transAxes, ha="left", va="top", fontsize=4,
+                    color=ACC, bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=ACC, alpha=0.8))
+        else:
+            ax.set_title(f"MTF × Strehl (Beobachtungsqualität) — "
+                         f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=5)
+            ax.text(0.02, 0.97, f"Strehl={strehl:.3f} eingerechnet\n= effektiver Kontrast am Okular",
+                    transform=ax.transAxes, ha="left", va="top", fontsize=4,
+                    color=COR, bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=COR, alpha=0.8))
+
+    else:  # relativ
+        w = 0.4 if not ms_s else 0.3
+        ax.bar(x, verlust_vals, width=w, color=bar_colors, alpha=0.85,
+               label=f"Sphäre (S={strehl:.3f})")
+        if ms_s:
+            verlust_s = [(mp_v-ms_v)/max(mp_v,1e-9)*100
+                         for mp_v, ms_v in zip(mp_vals, ms_s)]
+            ax.bar(x+w, verlust_s, width=w, color=GRN, alpha=0.75,
+                   label=f"Schieber (S={S_slide:.2f})")
+            for i, v in enumerate(verlust_s):
+                ax.text(i+w, v+0.3, f"{v:.1f}%", ha="center", fontsize=5,
+                        color=GRN, fontweight="bold")
+        for i, v in enumerate(verlust_vals):
+            ax.text(i, v+0.3, f"{v:.1f}%", ha="center", fontsize=5,
+                    fontweight="bold", color=bar_colors[i])
+        ymax = max(verlust_vals)*1.35+3 if verlust_vals else 30
+        ax.axhline(20, color="#BA7517", lw=0.7, ls="-", zorder=5)
+        ax.text(0.01, 21.5, "20%-Schwelle", transform=ax.get_yaxis_transform(),
+                fontsize=5, fontweight="bold", color="#BA7517")
+        ax.set_ylim(0, ymax)
+        ax.set_ylabel("Kontrastverlust gg. Paraboloid [%]", fontsize=5)
+        ax.set_title(f"Kontrastverlust (MTF-Form, ohne Strehl) — "
+                     f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=5)
+
+    # CSF-Overlay (nur Balkenmodi)
     if detail_as:
-        csf_vals = [csf(3600.0/(2.0*d_as*V)) for d_as in detail_as]
+        csf_vals = [csf(3600.0/(2.0*d*V)) for d in detail_as]
         ax2 = ax.twinx(); ax2.set_facecolor("none")
         csf_col = "#1a7abf"
         ax2.plot(x, csf_vals, color=csf_col, lw=1.3, ls="-.", marker="o", ms=3, zorder=8,
                  label=f"CSF  ({V:.0f}×)")
         for i, cv in enumerate(csf_vals):
-            ax2.text(i, cv+0.03, f"{cv:.2f}", ha="center", fontsize=5, color=csf_col, fontweight="bold")
+            ax2.text(i, cv+0.03, f"{cv:.2f}", ha="center", fontsize=5,
+                     color=csf_col, fontweight="bold")
         ax2.set_ylim(0, 1.35)
         ax2.set_ylabel("Augenempfindlichkeit CSF", fontsize=5, color=csf_col)
         ax2.tick_params(axis="y", labelcolor=csf_col)
@@ -492,7 +593,7 @@ with st.expander("ℹ️ Über dieses Programm"):
         st.warning("whitepaper.html nicht gefunden — bitte Datei im Programmverzeichnis ablegen.")
 
 with st.expander("📐 Technische Dokumentation"):
-    doc_html = open("/app/documentation_v3.html").read() if __import__('os').path.exists("/app/documentation_v3.html") else open("documentation_v3.html").read()
+    doc_html = open("/app/documentation_v43.html").read() if __import__('os').path.exists("/app/documentation_v43.html") else open("documentation_v43.html").read()
     # Entferne @page CSS (nicht relevant im Browser) und body-Margins
     import re
     doc_html = re.sub(r'@page\s*\{[^}]*\}', '', doc_html)
@@ -611,7 +712,18 @@ elif diagramm == "Beugungsgrenze":
     plt.close(fig)
 
 elif diagramm == "MTF":
-    fig = fig_mtf(D, f, lam, S_slide, V_slider)
+    mtf_modus = st.radio(
+        "Darstellung",
+        ["MTF × Strehl  (Beobachtungsqualität)",
+         "MTF absolut  (Standard, ohne Strehl)",
+         "Kontrastverlust %",
+         "Klassisch  (Kurven, Vergleich mit Optikrechnern)"],
+        horizontal=True, index=0, label_visibility="collapsed")
+    modus_key = {"MTF × Strehl  (Beobachtungsqualität)":        "gesamt",
+                 "MTF absolut  (Standard, ohne Strehl)":        "absolut",
+                 "Kontrastverlust %":                           "relativ",
+                 "Klassisch  (Kurven, Vergleich mit Optikrechnern)": "klassisch"}[mtf_modus]
+    fig = fig_mtf(D, f, lam, S_slide, V_slider, modus=modus_key)
     st.pyplot(fig, use_container_width=True)
     plt.close(fig)
 

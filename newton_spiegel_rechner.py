@@ -288,7 +288,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.2.0 (2026-05-30)"
+VERSION = "4.3.0 (2026-05-30)"
 
 class App(tk.Tk):
     def __init__(self):
@@ -437,9 +437,13 @@ class App(tk.Tk):
                 row1.pack(side="top", anchor="w")
                 tk.Label(row1, text="Darstellung:", bg=BG, fg=ACC,
                          font=("Helvetica", 10, "bold")).pack(side="left", padx=(0,6))
-                self._mtf_modus = tk.StringVar(value="absolut")
-                for val, text in [("absolut", "Absolut (Para vs. Sphäre)"),
-                                   ("relativ", "Relativ (Kontrastverlust %)")]:
+                self._mtf_modus = tk.StringVar(value="gesamt")
+                for val, text in [
+                    ("absolut",  "MTF absolut  (Standard, ohne Strehl)"),
+                    ("gesamt",   "MTF × Strehl  (Beobachtungsqualität)"),
+                    ("relativ",  "Kontrastverlust %"),
+                    ("klassisch","Klassisch  (Kurven, Vergleich mit Optikrechnern)"),
+                ]:
                     tk.Radiobutton(row1, text=text, variable=self._mtf_modus,
                                    value=val, bg=BG, fg=ACC,
                                    activebackground=BG, selectcolor=BG2,
@@ -921,69 +925,90 @@ class App(tk.Tk):
             """Exakte Interpolation aus einem MTF-Array bei normierter Frequenz nu."""
             return float(np.interp(nu, nu_axis, arr))
 
-        labels, mp_vals, ms_vals, verlust_vals, bar_colors = [], [], [], [], []
-        detail_sizes_as = []
+        labels, mp_vals = [], []
+        ms_vals_mtf, ms_vals_ges   = [], []   # ohne S / mit S
+        verlust_mtf, verlust_ges   = [], []
+        bar_colors, detail_sizes_as = [], []
         for label, d_as, col in planet_details:
-            # Normierte Frequenz des Details: nu = (1/2d) / fc
             nu = (1.0 / (2.0 * d_as)) / fc
             if nu >= 1.0: continue
-            # Exakte Interpolation aus den berechneten Kurven
-            mp_v  = interp_mtf(nu, mp_arr)
-            ms_v  = interp_mtf(nu, msa)       # msa = Strehl × msr × mp (absolut, korrekt)
-            # Relativer Verlust aus absoluter MTF berechnen → konsistent mit absoluter Ansicht:
-            # verlust = (mp - ms) / mp × 100%  →  wie viel % Paraboloid-Leistung fehlt (inkl. Strehl)
-            verlust_v = ((mp_v - ms_v) / mp_v * 100.0) if mp_v > 1e-9 else 0.0
-            labels.append(label)
-            mp_vals.append(mp_v)
-            ms_vals.append(ms_v)
-            verlust_vals.append(verlust_v)
-            bar_colors.append(col)
-            detail_sizes_as.append(d_as)
+            mp_v   = interp_mtf(nu, mp_arr)
+            msr_v  = interp_mtf(nu, msr_arr)
+            ms_mtf = mp_v * msr_v            # Standard-MTF (kein S)
+            ms_ges = mp_v * msr_v * strehl   # MTF × Strehl
+            vl_mtf = ((mp_v - ms_mtf) / mp_v * 100.0) if mp_v > 1e-9 else 0.0
+            vl_ges = ((mp_v - ms_ges) / mp_v * 100.0) if mp_v > 1e-9 else 0.0
+            labels.append(label); mp_vals.append(mp_v)
+            ms_vals_mtf.append(ms_mtf); ms_vals_ges.append(ms_ges)
+            verlust_mtf.append(vl_mtf); verlust_ges.append(vl_ges)
+            bar_colors.append(col); detail_sizes_as.append(d_as)
+
+        # Rückwärtskompatibilität: ms_vals und verlust_vals je nach Modus
+        ms_vals     = ms_vals_ges if modus == "gesamt" else ms_vals_mtf
+        verlust_vals = verlust_ges if modus == "gesamt" else verlust_mtf
 
         n = len(labels)
         x = np.arange(n)
 
         # Verbesserten Spiegel berechnen
-        ms_s = None
-        verlust_s = None
+        ms_s = None; verlust_s = None
         if S_slide is not None and S_slide > strehl + 0.01:
-            _, _, _, msa_s_arr, msr_s_arr, _ = mtf_kurven_von_S(D, S_slide, lam)
-            nu_axis_s = np.linspace(0, 1, len(msa_s_arr))
-            nu_list_s = [(1.0/(2.0*d))/fc for _,d,_ in planet_details if (1.0/(2.0*d))/fc < 1.0]
-            ms_s = [float(np.interp(nu, nu_axis_s, msa_s_arr)) for nu in nu_list_s]
-            # Verlust konsistent aus absoluter MTF: (mp - ms_s) / mp × 100%
-            nu_axis_p = np.linspace(0, 1, len(mp_arr))
-            verlust_s = [
-                ((float(np.interp(nu, nu_axis_p, mp_arr)) - ms_sv) /
-                  max(float(np.interp(nu, nu_axis_p, mp_arr)), 1e-9)) * 100.0
-                for nu, ms_sv in zip(nu_list_s, ms_s)
-            ]
+            _, _, _, _, msr_s_arr, _ = mtf_kurven_von_S(D, S_slide, lam)
+            nu_axis_s = np.linspace(0, 1, len(msr_s_arr))
+            nu_list_s = [(1.0/(2.0*d))/fc for _,d,_ in planet_details
+                         if (1.0/(2.0*d))/fc < 1.0]
+            mp_list_s = [float(np.interp(nu, nu_axis, mp_arr)) for nu in nu_list_s]
+            msr_list_s = [float(np.interp(nu, nu_axis_s, msr_s_arr)) for nu in nu_list_s]
+            if modus == "gesamt":
+                ms_s = [mp_v * msr_v * S_slide
+                        for mp_v, msr_v in zip(mp_list_s, msr_list_s)]
+            else:
+                ms_s = [mp_v * msr_v
+                        for mp_v, msr_v in zip(mp_list_s, msr_list_s)]
+            verlust_s = [((mp_v - ms_v) / max(mp_v, 1e-9)) * 100.0
+                         for mp_v, ms_v in zip(mp_list_s, ms_s)]
 
-        if modus == "absolut":
+        if modus in ("absolut", "gesamt"):
             w = 0.28 if ms_s else 0.35
             ax.bar(x - w/2, mp_vals, w, label="Paraboloid", color="#888", alpha=0.75)
-            ax.bar(x + w/2, ms_vals, w, label=f"Sphäre (S={strehl:.3f})",
-                   color=COR, alpha=0.85)
+            ax.bar(x + w/2, ms_vals, w,
+                   label=f"Sphäre (S={strehl:.3f})", color=COR, alpha=0.85)
             if ms_s:
-                ax.bar(x + w/2, ms_s, w, label=f"Verbessert (S={S_slide:.2f})",
-                       color=GRN, alpha=0.75)
+                ax.bar(x + w/2, ms_s, w,
+                       label=f"Verbessert (S={S_slide:.2f})", color=GRN, alpha=0.75)
             for i, (mp_v, ms_v) in enumerate(zip(mp_vals, ms_vals)):
                 ax.text(i-w/2, mp_v+0.02, f"{mp_v:.2f}", ha="center", va="bottom",
                         fontsize=8, color="#444")
                 ax.text(i+w/2, ms_v+0.02, f"{ms_v:.2f}", ha="center", va="bottom",
                         fontsize=8, color=COR, fontweight="bold")
             ax.axhline(0.2, color="#BA7517", lw=2.0, ls="-", zorder=5)
-            ax.text(0.01, 0.215, "20%-Schwelle", transform=ax.get_yaxis_transform(),
+            ax.text(0.01, 0.215, "20%-Schwelle",
+                    transform=ax.get_yaxis_transform(),
                     fontsize=9, fontweight="bold", color="#BA7517")
             ax.set_ylim(0, 1.18)
-            ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=10)
-            ax.set_title(f"Absolute MTF je Detail — D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}",
-                         fontsize=10)
-            ax.text(0.02, 0.97, f"Strehl = {strehl:.3f}",
-                    transform=ax.transAxes, ha="left", va="top", fontsize=9, color=COR,
-                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=COR, alpha=0.8))
+            ax.set_ylabel("Kontrastübertragung", fontsize=10)
+            if modus == "absolut":
+                ax.set_title(
+                    f"MTF absolut (Standard, ohne Strehl) — "
+                    f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=10)
+                ax.text(0.02, 0.97,
+                        f"Strehl={strehl:.3f} — hier nicht eingerechnet\n"
+                        f"Vergleichbar mit Zemax / telescope-optics.net",
+                        transform=ax.transAxes, ha="left", va="top", fontsize=8,
+                        color=ACC,
+                        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.8))
+            else:  # gesamt
+                ax.set_title(
+                    f"MTF × Strehl (Beobachtungsqualität) — "
+                    f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=10)
+                ax.text(0.02, 0.97,
+                        f"Strehl={strehl:.3f} eingerechnet\n"
+                        f"= effektiver Kontrast am Okular",
+                        transform=ax.transAxes, ha="left", va="top", fontsize=9,
+                        color=COR,
+                        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=COR, alpha=0.8))
 
-        else:  # relativ
+        elif modus == "relativ":
             w = 0.4 if not ms_s else 0.3
             bars = ax.bar(x, verlust_vals, width=w, color=bar_colors, alpha=0.85,
                           label=f"Sphäre (S={strehl:.3f})")
@@ -1002,11 +1027,75 @@ class App(tk.Tk):
                     fontsize=9, fontweight="bold", color="#BA7517")
             ax.set_ylim(0, ymax)
             ax.set_ylabel("Kontrastverlust gg. Paraboloid [%]", fontsize=10)
-            ax.set_title(f"Relativer Kontrastverlust — D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}",
-                         fontsize=10)
+            ax.set_title(
+                f"Kontrastverlust (MTF-Form, ohne Strehl) — "
+                f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=10)
 
-        # ── CSF-Overlay: Augenempfindlichkeit bei Vergrößerung V ─────────────
-        if detail_sizes_as:
+        elif modus == "klassisch":
+            # ── Klassisches MTF-Kurvendiagramm ────────────────────────────────
+            # X-Achse: normierte räumliche Frequenz 0..1  (= Lp/mm / fc_fokal)
+            # Kurven:  Paraboloid (absolut), Sphäre absolut, Sphäre relativ
+            # Entspricht Darstellung von telescope-optics.net / Zemax / Oslo
+            N_KURVE = 300
+            nu_k    = np.linspace(0, 1, N_KURVE)
+            lam_mm  = lam * 1e-6
+            Wp_k    = D**4 / (1024.0 * f**3 * lam_mm)
+            Wb_k    = Wp_k / 4.0
+            fc_fokal = 1.0 / (lam_mm * (f / D))   # Grenzfrequenz [Lp/mm]
+
+            mp_k  = np.array([mtf_para(nu)           for nu in nu_k])
+            msr_k = np.array([mtf_sph_rel(nu, Wb_k)  for nu in nu_k])
+            ms_k  = mp_k * msr_k          # absolut (ohne Strehl-Faktor — wie Optikrechner)
+            msr_only = msr_k              # relativ normiert gegen Paraboloid
+
+            ax.plot(nu_k, mp_k,   color=GRN,      lw=2.2, ls="-",
+                    label="Paraboloid  (Beugungsgrenze)")
+            ax.plot(nu_k, ms_k,   color=COR,      lw=2.2, ls="-",
+                    label=f"Sphäre absolut  (S={strehl:.3f})")
+            ax.plot(nu_k, msr_only, color=ACC,    lw=1.5, ls="--",
+                    label="Sphäre relativ  (normiert gg. Paraboloid)")
+
+            # Schieber-Kurve
+            if S_slide is not None and S_slide > strehl + 0.01:
+                _, _, _, _, msr_s_k, _ = mtf_kurven_von_S(D, S_slide, lam, n_pts=N_KURVE)
+                ms_s_k = mp_k * msr_s_k
+                ax.plot(nu_k, ms_s_k, color="#1a7abf", lw=1.8, ls="-.",
+                        label=f"Schieber absolut  (S={S_slide:.2f})")
+
+            # Detailmarkierungen als vertikale Linien
+            for label, d_as, col, *_ in all_details:
+                nu_det = (1.0 / (2.0 * d_as)) / fc
+                if nu_det >= 1.0: continue
+                ax.axvline(nu_det, color=col, lw=0.8, ls=":", alpha=0.7)
+                mp_v  = float(np.interp(nu_det, nu_k, mp_k))
+                ax.text(nu_det + 0.005, mp_v - 0.07,
+                        label.replace("\n", " "),
+                        fontsize=7, color=col, rotation=90, va="top")
+
+            # Zweite X-Achse: Lp/mm (fokal)
+            ax2x = ax.twiny()
+            ax2x.set_facecolor("none")
+            ax2x.set_xlim(0, fc_fokal)
+            ax2x.set_xlabel("Räumliche Frequenz  [Lp/mm]  (fokal)", fontsize=9)
+            ax2x.tick_params(axis="x", labelsize=8)
+
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1.05)
+            ax.set_xlabel("Normierte räumliche Frequenz  ν  (0 = DC, 1 = Beugungsgrenze)", fontsize=9)
+            ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=10)
+            ax.set_title(
+                f"MTF-Kurven — D={D:.0f}mm  f/{f/D:.1f}  Strehl={strehl:.3f}  "
+                f"fc={fc_fokal:.1f} Lp/mm  λ={lam:.0f}nm",
+                fontsize=9)
+            ax.text(0.98, 0.97,
+                    "Relativ = normiert gg. Paraboloid\n(wie telescope-optics.net)",
+                    transform=ax.transAxes, ha="right", va="top", fontsize=8,
+                    color=ACC,
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.8))
+            ax.legend(fontsize=9, loc="lower left")
+
+        # ── CSF-Overlay und X-Ticks nur für absolut/relativ ───────────────────
+        if modus != "klassisch" and detail_sizes_as:
             csf_vals = []
             for d_as in detail_sizes_as:
                 # Detailgröße im Bild: d_as [arcsec] → Winkel für das Auge
@@ -1034,9 +1123,10 @@ class App(tk.Tk):
             ax2.legend(fontsize=9, loc="upper left",
                        bbox_to_anchor=(0.0, 0.88))
 
-        ax.set_xticks(x)
-        ax.set_xticklabels(labels, fontsize=9, linespacing=1.3)
-        ax.legend(fontsize=9, loc="upper right")
+        if modus != "klassisch":
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, fontsize=9, linespacing=1.3)
+            ax.legend(fontsize=9, loc="upper right")
         self._ax_fmt(ax)
         fig.tight_layout()
         canvas.draw_idle()
