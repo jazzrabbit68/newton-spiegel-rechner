@@ -18,7 +18,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.3.0 (2026-05-30)"
+VERSION = "4.4.0 (2026-05-30)"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # KERNFUNKTIONEN (identisch mit newton_spiegel_rechner.py)
@@ -117,17 +117,24 @@ def mtf_para(f):
     return (2/math.pi) * (math.acos(f) - f * math.sqrt(1 - f**2))
 
 @lru_cache(maxsize=2048)
-def mtf_sph_rel(f, Wb, n=80):
+def mtf_sph_rel(f, Wb, n=80, paraxial=False):
     if f <= 0: return 1.0
     if f >= 1: return 0.0
     lim = math.sqrt(max(0.0, 1.0 - (f/2)**2))
     re = im = norm = 0.0
+    Wp = Wb * 8
     for i in range(n):
         x  = -lim + (2*i + 1) / (2*n) * 2*lim
         x1 = x - f/2; x2 = x + f/2
         if x1**2 >= 1 or x2**2 >= 1: continue
         h  = min(math.sqrt(max(0.0, 1 - x1**2)), math.sqrt(max(0.0, 1 - x2**2)))
-        dW = 2*math.pi * (Wb*(x2**4 - x2**2) - Wb*(x1**4 - x1**2))
+        if paraxial:
+            W1 = Wp * (x1**4)
+            W2 = Wp * (x2**4)
+        else:
+            W1 = Wp * (x1**4 - x1**2)
+            W2 = Wp * (x2**4 - x2**2)
+        dW = 2 * math.pi * (W1 - W2)
         re += math.cos(dW) * h; im += math.sin(dW) * h; norm += h
     if norm < 1e-10: return 0.0
     return math.sqrt(re**2 + im**2) / norm
@@ -358,7 +365,9 @@ def fig_beugung(D_akt, f_akt):
     ax.legend(fontsize=5, loc="upper left"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
-def fig_mtf(D, f, lam, S_slide, V, modus="gesamt"):
+def fig_mtf(D, f, lam, S_slide, V, modus="gesamt", fokus="bestfocus"):
+    paraxial    = (fokus == "paraxial")
+    fokus_label = "Paraxialer Fokus (ρ⁴)" if paraxial else "Best Focus (ρ⁴−ρ²)"
     fig, ax = plt.subplots(figsize=(5, 2.8), dpi=120)
     fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
     N_PTS = 200
@@ -382,17 +391,18 @@ def fig_mtf(D, f, lam, S_slide, V, modus="gesamt"):
         Wp_k     = D**4 / (1024.0 * f**3 * lam_mm)
         Wb_k     = Wp_k / 4.0
         fc_fokal = 1.0 / (lam_mm * (f / D))
-        mp_k  = np.array([mtf_para(nu)          for nu in nu_k])
-        msr_k = np.array([mtf_sph_rel(nu, Wb_k) for nu in nu_k])
-        ax.plot(nu_k, mp_k,     color=GRN, lw=1.5, ls="-",
+        mp_k   = np.array([mtf_para(nu)                        for nu in nu_k])
+        msr_k  = np.array([mtf_sph_rel(nu, Wb_k, paraxial=paraxial) for nu in nu_k])
+        ax.plot(nu_k, mp_k,       color=GRN, lw=1.5, ls="-",
                 label="Paraboloid  (Beugungsgrenze)")
         ax.plot(nu_k, mp_k*msr_k, color=COR, lw=1.5, ls="-",
                 label=f"Sphäre absolut  (S={strehl:.3f})")
-        ax.plot(nu_k, msr_k,    color=ACC, lw=1.2, ls="--",
+        ax.plot(nu_k, msr_k,      color=ACC, lw=1.2, ls="--",
                 label="Sphäre relativ  (norm. gg. Paraboloid)")
         if S_slide > strehl + 0.01:
-            _, _, _, _, msr_s_k, _ = mtf_kurven_von_S(D, S_slide, lam, n_pts=N_KURVE)
-            ax.plot(nu_k, mp_k*msr_s_k, color="#1a7abf", lw=1.2, ls="-.",
+            Wb_s   = _Wb_von_S(S_slide)
+            msr_sk = np.array([mtf_sph_rel(nu, Wb_s, paraxial=paraxial) for nu in nu_k])
+            ax.plot(nu_k, mp_k*msr_sk, color="#1a7abf", lw=1.2, ls="-.",
                     label=f"Schieber absolut  (S={S_slide:.2f})")
         for label, d_as, col in planet_details:
             nu_det = (1.0/(2.0*d_as)) / fc
@@ -407,11 +417,16 @@ def fig_mtf(D, f, lam, S_slide, V, modus="gesamt"):
         ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
         ax.set_xlabel("Normierte Frequenz ν", fontsize=5)
         ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=5)
-        ax.set_title(f"MTF-Kurven — D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}  "
-                     f"fc={fc_fokal:.1f}Lp/mm", fontsize=5)
-        ax.text(0.98, 0.97, "Relativ = wie telescope-optics.net",
+        ax.set_title(f"MTF-Kurven [{fokus_label}] — D={D:.0f}mm f/{f/D:.1f}  "
+                     f"Strehl={strehl:.3f}  fc={fc_fokal:.1f}Lp/mm", fontsize=5)
+        fc_color = "#2e7d32" if paraxial else ACC
+        ax.text(0.98, 0.97,
+                f"{fokus_label}\n"
+                + ("Vergleich: Sacek / Born&Wolf" if paraxial
+                   else "Vergleich: Zemax / telescope-optics.net"),
                 transform=ax.transAxes, ha="right", va="top", fontsize=4,
-                color=ACC, bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=ACC, alpha=0.8))
+                color=fc_color,
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=fc_color, alpha=0.8))
         ax.legend(fontsize=4, loc="lower left"); ax_fmt(ax)
         fig.tight_layout(); return fig
 
@@ -593,7 +608,7 @@ with st.expander("ℹ️ Über dieses Programm"):
         st.warning("whitepaper.html nicht gefunden — bitte Datei im Programmverzeichnis ablegen.")
 
 with st.expander("📐 Technische Dokumentation"):
-    doc_html = open("/app/documentation_v43.html").read() if __import__('os').path.exists("/app/documentation_v43.html") else open("documentation_v43.html").read()
+    doc_html = open("/app/documentation_v3.html").read() if __import__('os').path.exists("/app/documentation_v3.html") else open("documentation_v3.html").read()
     # Entferne @page CSS (nicht relevant im Browser) und body-Margins
     import re
     doc_html = re.sub(r'@page\s*\{[^}]*\}', '', doc_html)
@@ -719,11 +734,19 @@ elif diagramm == "MTF":
          "Kontrastverlust %",
          "Klassisch  (Kurven, Vergleich mit Optikrechnern)"],
         horizontal=True, index=0, label_visibility="collapsed")
-    modus_key = {"MTF × Strehl  (Beobachtungsqualität)":        "gesamt",
-                 "MTF absolut  (Standard, ohne Strehl)":        "absolut",
-                 "Kontrastverlust %":                           "relativ",
+    modus_key = {"MTF × Strehl  (Beobachtungsqualität)":             "gesamt",
+                 "MTF absolut  (Standard, ohne Strehl)":             "absolut",
+                 "Kontrastverlust %":                                 "relativ",
                  "Klassisch  (Kurven, Vergleich mit Optikrechnern)": "klassisch"}[mtf_modus]
-    fig = fig_mtf(D, f, lam, S_slide, V_slider, modus=modus_key)
+    fokus_key = "bestfocus"
+    if modus_key == "klassisch":
+        fokus_opt = st.radio(
+            "Fokusebene",
+            ["Best Focus  (ρ⁴−ρ², Beobachter fokussiert optimal)",
+             "Paraxialer Fokus  (ρ⁴, Literaturvergleich Sacek/Born&Wolf)"],
+            horizontal=True, index=0, label_visibility="visible")
+        fokus_key = "bestfocus" if "Best" in fokus_opt else "paraxial"
+    fig = fig_mtf(D, f, lam, S_slide, V_slider, modus=modus_key, fokus=fokus_key)
     st.pyplot(fig, use_container_width=True)
     plt.close(fig)
 

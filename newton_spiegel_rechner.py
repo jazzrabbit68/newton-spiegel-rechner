@@ -192,26 +192,50 @@ def mtf_para(f: float) -> float:
     return (2/math.pi) * (math.acos(f) - f * math.sqrt(1 - f**2))
 
 @lru_cache(maxsize=2048)
-def mtf_sph_rel(f: float, Wb: float, n: int = 80) -> float:
+def mtf_sph_rel(f: float, Wb: float, n: int = 80,
+                paraxial: bool = False) -> float:
     """
     Relative MTF eines sphärischen Spiegels (normiert: MTF(0)=1).
     Wb = W_PtV_bestfocus; f = normierte Ortsfrequenz (0..1).
-    Berechnung via 1D-Autokorrelationsintegral der Pupillenfunktion.
+    paraxial=False (Standard): W(ρ)=Wb·(ρ⁴−ρ²) — best focus, min. Wrms
+    paraxial=True:             W(ρ)=Wb·ρ⁴       — paraxialer Fokus,
+                               passt zu Sacek/Born&Wolf, zeigt mehr Verlust
     """
     if f <= 0: return 1.0
     if f >= 1: return 0.0
     lim = math.sqrt(max(0.0, 1.0 - (f/2)**2))
     re = im = norm = 0.0
+    Wp = Wb * 8
     for i in range(n):
         x  = -lim + (2*i + 1) / (2*n) * 2*lim
         x1 = x - f/2; x2 = x + f/2
         if x1**2 >= 1 or x2**2 >= 1: continue
         h  = min(math.sqrt(max(0.0, 1 - x1**2)),
                  math.sqrt(max(0.0, 1 - x2**2)))
-        dW = 2*math.pi * (Wb*(x2**4 - x2**2) - Wb*(x1**4 - x1**2))
+        if paraxial:
+            #dW = 2*math.pi * Wb * (x1**4 - x2**4)
+            # Paraxialer Fokus: Reine sphärische Aberration 4. Ordnung
+            W1 = Wp * (x1**4)
+            W2 = Wp * (x2**4)
+        else:
+            #dW = 2*math.pi * (Wb*(x2**4 - x2**2) - Wb*(x1**4 - x1**2))
+            # Bester Fokus (Minimum RMS): Balance aus 4. Ordnung und Defokus (2. Ordnung)
+            W1 = Wp * (x1**4 - x1**2)
+            W2 = Wp * (x2**4 - x2**2)
+        dW = 2 * math.pi * (W1 - W2)
         re += math.cos(dW) * h; im += math.sin(dW) * h; norm += h
     if norm < 1e-10: return 0.0
     return math.sqrt(re**2 + im**2) / norm
+
+def _mtf_arrays_klassisch(Wb: float, S: float, fc: float,
+                          n_pts: int, paraxial: bool = False):
+    """MTF-Arrays für klassisches Kurvendiagramm mit wählbarer Fokusebene."""
+    freqs_norm = np.linspace(0, 1, n_pts)
+    freqs_as   = freqs_norm * fc
+    mp  = np.array([mtf_para(f)                        for f in freqs_norm])
+    msr = np.array([mtf_sph_rel(f, Wb, paraxial=paraxial) for f in freqs_norm])
+    msa = msr * mp   # Standard-MTF ohne Strehl (für klassische Darstellung)
+    return freqs_as, mp, msa, msr
 
 def mtf_kurven(D_mm: float, f_mm: float, lam_nm: float = 550.0,
                n_pts: int = 200) -> tuple:
@@ -288,7 +312,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.3.0 (2026-05-30)"
+VERSION = "4.4.0 (2026-05-30)"
 
 class App(tk.Tk):
     def __init__(self):
@@ -448,6 +472,22 @@ class App(tk.Tk):
                                    value=val, bg=BG, fg=ACC,
                                    activebackground=BG, selectcolor=BG2,
                                    font=("Helvetica", 10),
+                                   command=self._aktualisieren
+                                   ).pack(side="left", padx=8)
+                # Zeile 1b: Fokus-Modus (nur im klassischen Modus relevant)
+                row1b = tk.Frame(btn_frame, bg=BG)
+                row1b.pack(side="top", anchor="w", pady=(2,0))
+                tk.Label(row1b, text="Fokusebene:", bg=BG, fg="#888",
+                         font=("Helvetica", 9)).pack(side="left", padx=(0,6))
+                self._mtf_fokus = tk.StringVar(value="bestfocus")
+                for val, text in [
+                    ("bestfocus",  "Best Focus  (min. Wrms, Beobachter fokussiert optimal)"),
+                    ("paraxial",   "Paraxialer Fokus  (ρ⁴, Literaturvergleich Sacek/Born&Wolf)"),
+                ]:
+                    tk.Radiobutton(row1b, text=text, variable=self._mtf_fokus,
+                                   value=val, bg=BG, fg="#666",
+                                   activebackground=BG, selectcolor=BG2,
+                                   font=("Helvetica", 9),
                                    command=self._aktualisieren
                                    ).pack(side="left", padx=8)
                 # Zeile 2: Objektkategorie
@@ -1033,65 +1073,76 @@ class App(tk.Tk):
 
         elif modus == "klassisch":
             # ── Klassisches MTF-Kurvendiagramm ────────────────────────────────
-            # X-Achse: normierte räumliche Frequenz 0..1  (= Lp/mm / fc_fokal)
-            # Kurven:  Paraboloid (absolut), Sphäre absolut, Sphäre relativ
-            # Entspricht Darstellung von telescope-optics.net / Zemax / Oslo
+            paraxial = getattr(self, '_mtf_fokus',
+                               tk.StringVar(value="bestfocus")).get() == "paraxial"
+            fokus_label = "Paraxialer Fokus  (ρ⁴)" if paraxial else "Best Focus  (ρ⁴−ρ²)"
             N_KURVE = 300
             nu_k    = np.linspace(0, 1, N_KURVE)
             lam_mm  = lam * 1e-6
             Wp_k    = D**4 / (1024.0 * f**3 * lam_mm)
             Wb_k    = Wp_k / 4.0
-            fc_fokal = 1.0 / (lam_mm * (f / D))   # Grenzfrequenz [Lp/mm]
+            fc_fokal = 1.0 / (lam_mm * (f / D))
 
-            mp_k  = np.array([mtf_para(nu)           for nu in nu_k])
-            msr_k = np.array([mtf_sph_rel(nu, Wb_k)  for nu in nu_k])
-            ms_k  = mp_k * msr_k          # absolut (ohne Strehl-Faktor — wie Optikrechner)
+            freqs_as_k, mp_k, msa_k, msr_k = _mtf_arrays_klassisch(
+                Wb_k, strehl, fc_fokal / (D / (lam_mm * 206265)),
+                N_KURVE, paraxial=paraxial)
+            # freqs_as_k ist in Lp/arcsec — für Kurvenplot normiert darstellen
+            nu_k2 = np.linspace(0, 1, N_KURVE)
+            mp_k2  = np.array([mtf_para(nu) for nu in nu_k2])
+            msr_k2 = np.array([mtf_sph_rel(nu, Wb_k, paraxial=paraxial) for nu in nu_k2])
+            ms_k2  = mp_k2 * msr_k2
             msr_only = msr_k              # relativ normiert gegen Paraboloid
 
-            ax.plot(nu_k, mp_k,   color=GRN,      lw=2.2, ls="-",
+            ax.plot(nu_k2, mp_k2,   color=GRN,  lw=2.2, ls="-",
                     label="Paraboloid  (Beugungsgrenze)")
-            ax.plot(nu_k, ms_k,   color=COR,      lw=2.2, ls="-",
+            ax.plot(nu_k2, ms_k2,   color=COR,  lw=2.2, ls="-",
                     label=f"Sphäre absolut  (S={strehl:.3f})")
-            ax.plot(nu_k, msr_only, color=ACC,    lw=1.5, ls="--",
+            ax.plot(nu_k2, msr_k2,  color=ACC,  lw=1.5, ls="--",
                     label="Sphäre relativ  (normiert gg. Paraboloid)")
 
             # Schieber-Kurve
             if S_slide is not None and S_slide > strehl + 0.01:
-                _, _, _, _, msr_s_k, _ = mtf_kurven_von_S(D, S_slide, lam, n_pts=N_KURVE)
-                ms_s_k = mp_k * msr_s_k
-                ax.plot(nu_k, ms_s_k, color="#1a7abf", lw=1.8, ls="-.",
+                Wb_s = _Wb_von_S(S_slide)
+                msr_s_k = np.array([mtf_sph_rel(nu, Wb_s, paraxial=paraxial)
+                                    for nu in nu_k2])
+                ax.plot(nu_k2, mp_k2 * msr_s_k, color="#1a7abf", lw=1.8, ls="-.",
                         label=f"Schieber absolut  (S={S_slide:.2f})")
 
-            # Detailmarkierungen als vertikale Linien
+            # Detailmarkierungen
             for label, d_as, col, *_ in all_details:
                 nu_det = (1.0 / (2.0 * d_as)) / fc
                 if nu_det >= 1.0: continue
                 ax.axvline(nu_det, color=col, lw=0.8, ls=":", alpha=0.7)
-                mp_v  = float(np.interp(nu_det, nu_k, mp_k))
+                mp_v = float(np.interp(nu_det, nu_k2, mp_k2))
                 ax.text(nu_det + 0.005, mp_v - 0.07,
                         label.replace("\n", " "),
                         fontsize=7, color=col, rotation=90, va="top")
 
-            # Zweite X-Achse: Lp/mm (fokal)
+            # Zweite X-Achse: Lp/mm
             ax2x = ax.twiny()
             ax2x.set_facecolor("none")
             ax2x.set_xlim(0, fc_fokal)
             ax2x.set_xlabel("Räumliche Frequenz  [Lp/mm]  (fokal)", fontsize=9)
             ax2x.tick_params(axis="x", labelsize=8)
 
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1.05)
-            ax.set_xlabel("Normierte räumliche Frequenz  ν  (0 = DC, 1 = Beugungsgrenze)", fontsize=9)
+            ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
+            ax.set_xlabel(
+                "Normierte räumliche Frequenz  ν  (0 = DC, 1 = Beugungsgrenze)",
+                fontsize=9)
             ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=10)
             ax.set_title(
-                f"MTF-Kurven — D={D:.0f}mm  f/{f/D:.1f}  Strehl={strehl:.3f}  "
-                f"fc={fc_fokal:.1f} Lp/mm  λ={lam:.0f}nm",
+                f"MTF-Kurven [{fokus_label}] — D={D:.0f}mm  f/{f/D:.1f}  "
+                f"Strehl={strehl:.3f}  fc={fc_fokal:.1f} Lp/mm  λ={lam:.0f}nm",
                 fontsize=9)
+            fokus_color = "#2e7d32" if paraxial else ACC
             ax.text(0.98, 0.97,
-                    "Relativ = normiert gg. Paraboloid\n(wie telescope-optics.net)",
+                    f"{fokus_label}\n"
+                    + ("Vergleichbar mit Sacek/Born&Wolf" if paraxial
+                       else "Vergleichbar mit Zemax / telescope-optics.net"),
                     transform=ax.transAxes, ha="right", va="top", fontsize=8,
-                    color=ACC,
-                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.8))
+                    color=fokus_color,
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white",
+                              ec=fokus_color, alpha=0.85))
             ax.legend(fontsize=9, loc="lower left")
 
         # ── CSF-Overlay und X-Ticks nur für absolut/relativ ───────────────────
