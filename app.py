@@ -18,7 +18,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.4.0 (2026-05-30)"
+VERSION = "5.0.1 (2026-06-05)"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # KERNFUNKTIONEN (identisch mit newton_spiegel_rechner.py)
@@ -37,6 +37,21 @@ def _Wb_von_S(S):
     """Wb direkt aus Strehl — Umkehrung der Maréchal-Näherung."""
     Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (2.0 * math.pi)
     return Wrms * 1.5 * math.sqrt(5)
+
+def _strehl_exakt(Wb, n=2000):
+    """Exakter Strehl via Pupillenintegral.
+    S = |<exp(i·2π·W(ρ))>|²  W(ρ)=8·Wb·(ρ⁴−ρ²)
+    Maréchal versagt für Wb > 0.08λ (f/N < ~8).
+    """
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    rho   = np.linspace(0.0, 1.0, n)
+    W     = 8.0 * Wb * (rho**4 - rho**2)
+    W_m   = float(_trapz(W * rho, rho) / 0.5)
+    Wc    = W - W_m
+    phase = 2.0 * math.pi * Wc
+    A_re  = float(_trapz(np.cos(phase) * rho, rho)) / 0.5
+    A_im  = float(_trapz(np.sin(phase) * rho, rho)) / 0.5
+    return A_re**2 + A_im**2
 
 def _kennzahlen_von_S(D_mm, S, Wb):
     """Effektive Öffnungen und Vergrößerungsgrenzen aus S und Wb."""
@@ -78,7 +93,7 @@ def berechne_von_S(D_mm, S, lam_nm=550.0):
     """Alle Kennzahlen direkt aus S — kein Umweg über strehl_to_f."""
     return _kennzahlen_von_S(D_mm, S, _Wb_von_S(S))
 
-def berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as=16.0):
+def berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as=60.0):
     r = berechne(D_mm, f_mm, lam_nm)
     theta_auge = eye_res_as / V
     theta_para = max(r["theta_ideal"], theta_auge)
@@ -89,19 +104,23 @@ def berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as=16.0):
              Deff_para=Deff_para, Deff_sph=Deff_sph, verlust=Deff_para - Deff_sph)
     return r
 
-def v_kritisch(D_mm, f_mm, lam_nm, eye_res_as=16.0):
+def v_kritisch(D_mm, f_mm, lam_nm, eye_res_as=60.0):
     r = berechne(D_mm, f_mm, lam_nm)
     return dict(Vk_sph=r["V_krit_vis"], Vk_para=D_mm*0.7,
                 Vmax=D_mm/0.5, Vmin=D_mm/7.0)
 
 def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=400):
+    """Strehl und eff. Öffnungen als Funktion von N.
+    Rückgabe: ns, strehls (Maréchal), deff_ks, aufl_verluste, strehls_exakt (Pupillenintegral)
+    """
     ns = np.linspace(N_min, N_max, schritte)
-    strehls, deff_ks, aufl_verluste = [], [], []
+    strehls, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
     for n in ns:
         r = berechne(D_mm, D_mm * n, lam_nm)
         strehls.append(r["strehl"]); deff_ks.append(r["Deff_k"])
         aufl_verluste.append(r["aufl_verlust_pct"])
-    return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste)
+        strehls_exakt.append(_strehl_exakt(r["Wb"]))
+    return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste), np.array(strehls_exakt)
 
 def strehl_to_f(S, D_mm, lam_nm=550.0):
     """Äquivalente Brennweite zu einem Strehl-Wert (nur für Info-Anzeige)."""
@@ -190,6 +209,40 @@ def perceived_quality_von_S(D_mm, S, lam_nm, V, n_pts=28, use_csf=True):
 def perceived_quality_kurven(D_mm, f_mm, lam_nm, V_arr, use_csf=True):
     return np.array([perceived_quality(D_mm, f_mm, lam_nm, V, use_csf=use_csf) for V in V_arr])
 
+def perceived_quality_exakt(D_mm, f_mm, lam_nm, V, n_pts=200):
+    """Q_vis exakt: MTF×CSF-Integral ohne Dämpfungsfunktion und ohne ×S.
+    Definition: Q_vis(V) = ∫ msr·mp·CSF dν / ∫ mp·CSF dν
+    Grenzwerte: Q_vis(V→V_min)→1  ·  Q_vis(V→∞)→S_form
+    """
+    _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
+    fc     = D_mm / (lam_nm * 1e-6 * 206265)
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    nu     = np.linspace(0.0, 1.0, n_pts)
+    mp     = np.array([mtf_para(fi)         for fi in nu])
+    msr    = np.array([mtf_sph_rel(fi, Wb)  for fi in nu])
+    w_csf  = np.array([csf(fi * 3600.0 / V) for fi in nu * fc])
+    return float(_trapz(msr * mp * w_csf, nu) /
+                 max(_trapz(mp * w_csf, nu), 1e-12))
+
+def perceived_quality_exakt_kurven(D_mm, f_mm, lam_nm, V_arr):
+    """perceived_quality_exakt für ein Array von Vergrößerungen."""
+    return np.array([perceived_quality_exakt(D_mm, f_mm, lam_nm, V) for V in V_arr])
+
+def perceived_quality_exakt_von_Wb(D_mm, Wb, lam_nm, V, n_pts=200):
+    """Q_vis exakt direkt aus Wb — für Schieber-Kurve mit beliebigem Strehl."""
+    fc     = D_mm / (lam_nm * 1e-6 * 206265)
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    nu     = np.linspace(0.0, 1.0, n_pts)
+    mp     = np.array([mtf_para(fi)         for fi in nu])
+    msr    = np.array([mtf_sph_rel(fi, Wb)  for fi in nu])
+    w_csf  = np.array([csf(fi * 3600.0 / V) for fi in nu * fc])
+    return float(_trapz(msr * mp * w_csf, nu) /
+                 max(_trapz(mp * w_csf, nu), 1e-12))
+
+def perceived_quality_exakt_kurven_von_Wb(D_mm, Wb, lam_nm, V_arr):
+    """perceived_quality_exakt_von_Wb für ein Array von Vergrößerungen."""
+    return np.array([perceived_quality_exakt_von_Wb(D_mm, Wb, lam_nm, V) for V in V_arr])
+
 def beurteilung(strehl):
     if strehl >= 0.95:
         return "✓ Sehr gut — nahezu gleichwertig mit Parabolspiegel (Strehl ≥ 0.95)", "#2e7d32"
@@ -210,25 +263,28 @@ def ax_fmt(ax):
 def fig_strehl(D, f, lam, S_slide):
     fig, ax = plt.subplots(figsize=(5, 2.8), dpi=120)
     fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
-    ns, sts, _, _ = kurven_N(D, lam)
+    ns, sts, _, _, sts_exakt = kurven_N(D, lam)
     r = berechne(D, f, lam)
     N_akt = r["N"]; S_akt = r["strehl"]
+    S_akt_exakt = _strehl_exakt(r["Wb"])
     ax.fill_between(ns, S_akt, 1.0, color=ACC, alpha=0.10)
     ax.axhline(1.00, color=GRN,      lw=0.9, ls="-",  label="Paraboloid (S=1.0)")
-    ax.plot(ns, sts, color=ACC, lw=2, label="Strehl (sphärisch)")
-    ax.axhline(0.986, color="#1565c0", lw=0.7, ls=":",  label="Rayleigh-Grenze  S≈0.986  (Wp=λ/4)")
-    ax.axhline(0.80,  color="#BA7517", lw=0.7, ls="--", label="Maréchal  S=0.80  (beugungsbegrenzt)")
+    ax.plot(ns, sts,       color=ACC,       lw=2.0, ls="-",  label="Strehl Marechal (Naherung)")
+    ax.plot(ns, sts_exakt, color="#534AB7", lw=1.5, ls="--", label="Strehl exakt (Pupillenintegral)")
+    ax.axhline(0.986, color="#1565c0", lw=0.7, ls=":",  label="Rayleigh-Grenze  S=0.986  (Wp=lam/4)")
+    ax.axhline(0.80,  color="#BA7517", lw=0.7, ls="--", label="Marechal  S=0.80  (beugungsbegrenzt)")
     ax.axvline(N_akt, color="#ccc", lw=0.8, ls=":")
-    ax.scatter([N_akt], [S_akt], color=ACC, s=16, zorder=5)
-    ax.annotate(f"f/{N_akt:.1f}  S={S_akt:.3f}", xy=(N_akt, S_akt),
-                xytext=(8, 10), textcoords="offset points", fontsize=5, color="#333",
-                arrowprops=dict(arrowstyle="-", color="#aaa"))
+    ax.scatter([N_akt], [S_akt],       color=ACC,       s=16, zorder=5)
+    ax.scatter([N_akt], [S_akt_exakt], color="#534AB7", s=12, zorder=5, marker="D")
+    ax.annotate(f"f/{N_akt:.1f}  S={S_akt:.3f} (Mar.) / S={S_akt_exakt:.3f} (exakt)",
+                xy=(N_akt, S_akt), xytext=(8, 10), textcoords="offset points",
+                fontsize=5, color="#333", arrowprops=dict(arrowstyle="-", color="#aaa"))
     if S_slide > S_akt + 0.01:
         ax.axhline(S_slide, color=COR, lw=0.9, ls="-.", label=f"Schieber S={S_slide:.3f}")
     ax.set_xlim(3, 15); ax.set_ylim(0, 1.08)
     ax.set_xlabel("Öffnungsverhältnis f/D", fontsize=5)
     ax.set_ylabel("Strehl-Quotient", fontsize=5)
-    ax.set_title(f"Strehl vs. f/D  (D={D:.0f}mm, λ={lam:.0f}nm)", fontsize=5)
+    ax.set_title(f"Strehl vs. f/D  (D={D:.0f}mm, lam={lam:.0f}nm)", fontsize=5)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"f/{x:.0f}" if x == int(x) else ""))
     ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
     ax.legend(fontsize=5, loc="lower right"); ax_fmt(ax)
@@ -237,7 +293,7 @@ def fig_strehl(D, f, lam, S_slide):
 def fig_oeffnung(D, f, lam, S_slide):
     fig, ax = plt.subplots(figsize=(5, 2.8), dpi=120)
     fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
-    ns, _, deff_ks, aufl_verluste = kurven_N(D, lam)
+    ns, _, deff_ks, aufl_verluste, _ = kurven_N(D, lam)
     r = berechne(D, f, lam)
     N_akt = r["N"]; Dk = r["Deff_k"]; Aufl = r["aufl_verlust_pct"]
 
@@ -538,47 +594,131 @@ def fig_mtf(D, f, lam, S_slide, V, modus="gesamt", fokus="bestfocus"):
     fig.tight_layout(); return fig
 
 def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
+    """Wahrnehmungs-Diagramm nach v5.0.1:
+    - Exakte Kurven via MTF×CSF-Integral (perceived_quality_exakt)
+    - Näherungskurven via Dämpfungsfunktion w(V)
+    - Schraffur exakt ↔ Näherung
+    - Dynamischer V-Bereich bis 8×V_krit
+    - Schieber-Kurve korrekt via Wb_s (nicht f_real)
+    - S_ex_s = S_slide (virtuell gewünschter Wert)
+    """
     fig, ax = plt.subplots(figsize=(5, 2.8), dpi=120)
     fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
-    V_arr = np.linspace(30, 250, 100)
-    Qp_sph  = perceived_quality_kurven(D, f, lam, V_arr)
-    Qp_para = perceived_quality_kurven(D, D*50, lam, V_arr)
-    has_slide = S_slide > S_real + 0.01
+
+    # Exakter Strehl via Pupillenintegral
+    _, _, Wb, _, S_mar = _wellenfronten(D, f, lam)
+    S_exakt = _strehl_exakt(Wb)
+
+    # V-Bereich dynamisch (bis 8×V_krit, mind. 250)
+    V_krit     = D * 0.7 * math.sqrt(max(S_exakt, 1e-9))
+    V_max_plot = 400.0
+    V_arr      = np.linspace(30, V_max_plot, 150)
+
+    # Exakte Kurven: MTF×CSF-Integral
+    Qe_sph  = perceived_quality_exakt_kurven(D, f, lam, V_arr)
+    f_para  = D * 50.0
+    Qe_para = perceived_quality_exakt_kurven(D, f_para, lam, V_arr)
+
+    # Näherungskurven: Dämpfungsfunktion w(V)
+    def Q_naeh(V_a, S):
+        Vk = D * 0.7 * math.sqrt(max(S, 1e-9))
+        w  = 1.0 / (1.0 + (Vk / np.maximum(V_a, 1e-9))**2)
+        return S + (1 - S) * (1 - w)
+
+    Qn_sph  = Q_naeh(V_arr, S_exakt)
+    Qn_para = Q_naeh(V_arr, 1.0)
+
+    # Schieber-Kurve (S_ex_s = S_slide: virtuell gewünschter Wert)
+    has_slide = S_slide > S_mar + 0.01
     if has_slide:
-        Qp_slide = np.array([perceived_quality_von_S(D, S_slide, lam, V) for V in V_arr])
-        ax.fill_between(V_arr, Qp_sph,   Qp_para, color=COR, alpha=0.10)
-        ax.fill_between(V_arr, Qp_slide, Qp_para, color=GRN, alpha=0.10)
-    else:
-        ax.fill_between(V_arr, Qp_sph, Qp_para, color=COR, alpha=0.13, label="Wahrnehmungsverlust")
-    ax.plot(V_arr, Qp_para, color=GRN, lw=0.7, ls="--", label="Paraboloid (Referenz)")
-    ax.plot(V_arr, Qp_sph,  color=COR, lw=0.7, ls=":",  label=f"Sphäre f/{f/D:.1f}  S={S_real:.3f}")
+        Wb_s      = _Wb_von_S(S_slide)
+        S_ex_s    = S_slide              # virtuell gewünschter Wert (Label/Legende)
+        S_ex_s_ph = _strehl_exakt(Wb_s) # physikalischer Strehl für Q_naeh-Asymptote
+        # Qe: korrekt via Wb_s
+        Qe_slide = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr)
+        # Näherung: S_ex_s_ph als Asymptote, sonst divergieren die Kurven
+        Qn_slide = Q_naeh(V_arr, S_ex_s_ph)
+
+    # Schraffur: Abweichung exakt ↔ Näherung
+    ax.fill_between(V_arr, Qe_sph, Qn_sph,
+                    color="#534AB7", alpha=0.12, label="Abweichung exakt ↔ Naherung")
+    # Wahrnehmungsverlust
+    ax.fill_between(V_arr, Qe_sph, Qe_para,
+                    color=COR, alpha=0.10, label="Wahrnehmungsverlust")
+
+    # Paraboloid
+    ax.plot(V_arr, Qe_para, color=GRN, lw=1.2, ls="-",  label="Paraboloid exakt")
+    ax.plot(V_arr, Qn_para, color=GRN, lw=0.7, ls="--", alpha=0.4)
+
+    # Sphäre
+    strehl_label = f"Sphare f/{f/D:.1f}  S={S_exakt:.3f} (exakt)"
+    ax.plot(V_arr, Qe_sph, color=COR, lw=1.4, ls="-",
+            label=f"{strehl_label}  exakt")
+    ax.plot(V_arr, Qn_sph, color=COR, lw=1.0, ls="--", alpha=0.75,
+            label=f"Sphare Naherung  (S={S_exakt:.3f})")
+
     if has_slide:
-        ax.plot(V_arr, Qp_slide, color=ACC, lw=0.9, label=f"Schieber  S={S_slide:.3f}")
-    q_curve = Qp_slide if has_slide else Qp_sph
-    for V_mark, col, ls in [(30, "#c8a020", ":"), (80, "#888", "-."), (160, "#c62828", ":")]:
-        idx = int(round((V_mark-30)/(250-30)*(len(V_arr)-1)))
-        q_m = float(q_curve[idx])
-        ax.axvline(V_mark, color=col, lw=0.7, ls=ls, alpha=0.6)
+        ax.plot(V_arr, Qe_slide, color=ACC, lw=1.2, ls="-",
+                label=f"Schieber exakt  S={S_ex_s:.3f}")
+        ax.plot(V_arr, Qn_slide, color=ACC, lw=0.8, ls="--", alpha=0.7,
+                label=f"Schieber Naherung  S={S_ex_s:.3f}")
+
+    # Asymptote
+    ax.axhline(S_exakt, color=COR, lw=0.8, ls=":", alpha=0.75)
+    ax.text(V_max_plot * 0.98, S_exakt + 0.012,
+            f"Asymptote S={S_exakt:.3f}",
+            fontsize=5, color=COR, ha="right", alpha=0.85)
+
+    # V_min / V_krit Linien
+    for V_m, col, ls, lbl in [
+            (D / 7.0, "#888888", ":",  f"V_min={D/7:.0f}x"),
+            (V_krit,  "#534AB7", "--", f"V_krit={V_krit:.0f}x")]:
+        if 30 <= V_m <= V_max_plot:
+            ax.axvline(V_m, color=col, lw=0.8, ls=ls, alpha=0.65)
+            ax.text(V_m + 2, 0.03, lbl, fontsize=5, color=col,
+                    rotation=90, va="bottom", alpha=0.8)
+
+    # Feste Vergrößerungs-Markierungen
+    for V_mark, col, ls in [(80, "#888", "-."), (160, "#c62828", ":")]:
+        if V_mark > V_max_plot:
+            continue
+        idx = int(round((V_mark - 30) / (V_max_plot - 30) * (len(V_arr) - 1)))
+        q_m = float(Qe_sph[idx])
+        ax.axvline(V_mark, color=col, lw=0.7, ls=ls, alpha=0.5)
         ax.scatter([V_mark], [q_m], color=col, s=14, zorder=6)
-        ax.annotate(f"{V_mark}×\n{q_m:.2f}", xy=(V_mark, q_m),
-                    xytext=(V_mark+7, q_m-0.05), fontsize=5, color=col, fontweight="bold",
+        ax.annotate(f"{V_mark}x\n{q_m:.2f}", xy=(V_mark, q_m),
+                    xytext=(V_mark + 6, q_m - 0.05), fontsize=5, color=col,
+                    fontweight="bold",
                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=col, alpha=0.80))
-    q_v = perceived_quality_von_S(D, S_slide, lam, V_slider) if has_slide else perceived_quality(D, f, lam, V_slider)
+
+    # Slider-Vergrößerung
+    q_v = perceived_quality_exakt(D, f, lam, V_slider)
     ax.axvline(V_slider, color=ACC, lw=1.0, ls="-", alpha=0.9)
     ax.scatter([V_slider], [q_v], color=ACC, s=22, zorder=7)
-    x_off = -65 if V_slider > 200 else 12
-    ax.annotate(f"V={V_slider:.0f}×\nQ={q_v:.3f}", xy=(V_slider, q_v),
-                xytext=(V_slider+x_off, q_v+0.04), fontsize=5, color=ACC, fontweight="bold",
+    x_off = -65 if V_slider > V_max_plot * 0.8 else 12
+    ax.annotate(f"V={V_slider:.0f}x\nQ={q_v:.3f}", xy=(V_slider, q_v),
+                xytext=(V_slider + x_off, q_v + 0.04), fontsize=5,
+                color=ACC, fontweight="bold",
                 arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.88))
-    for q_thresh, col, label in [(0.9, GRN, "Q=0.90 (sehr gut)"), (0.7, "#BA7517", "Q=0.70 (spürbar)")]:
-        ax.axhline(q_thresh, color=col, lw=1.0, ls=":", alpha=0.7)
-        ax.text(32, q_thresh+0.008, label, fontsize=5, color=col, alpha=0.85)
-    ax.set_xlim(30, 250); ax.set_ylim(0, 1.12)
-    ax.set_xlabel("Vergrößerung V  [×]", fontsize=5)
-    ax.set_ylabel("Wahrgenommener Qualitätsindex Q_perc", fontsize=5)
-    ax.set_title(f"Wahrgenommener Kontrast (CSF-gewichtet)  -  D={D:.0f}mm  f/{f/D:.1f}", fontsize=5)
-    ax.legend(fontsize=5, loc="lower right"); ax_fmt(ax)
+
+    # Schwelllinien
+    for q_thresh, col, label in [(0.9, GRN, "Q=0.90 (sehr gut)"),
+                                  (0.7, "#BA7517", "Q=0.70 (spurbar)")]:
+        ax.axhline(q_thresh, color=col, lw=0.8, ls=":", alpha=0.7)
+        ax.text(32, q_thresh + 0.008, label, fontsize=5, color=col, alpha=0.85)
+
+    max_abw = float(np.max(np.abs(Qe_sph - Qn_sph)))
+    ax.set_xlim(30, V_max_plot); ax.set_ylim(0, 1.12)
+    ax.set_xlabel("Vergroesserung V  [x]", fontsize=5)
+    ax.set_ylabel("Visueller Qualitaetsindex Q_vis", fontsize=5)
+    ax.set_title(
+        f"Visuelle Wahrnehmung  D={D:.0f}mm  f/{f/D:.1f}"
+        f"  S_exakt={S_exakt:.3f}  max.Abw.={max_abw:.3f}", fontsize=5)
+    ax.legend(fontsize=5, loc="lower right",
+              title="- exakt (MTF*CSF)   -- Naherung",
+              title_fontsize=4)
+    ax_fmt(ax)
     fig.tight_layout(); return fig
 
 
@@ -642,7 +782,8 @@ with st.sidebar:
 
 # ── Berechnungen ──────────────────────────────────────────────────────────────
 r      = berechne(D, f, lam)
-S_real = r["strehl"]
+S_real  = r["strehl"]
+S_exakt = _strehl_exakt(r["Wb"])
 S_slide = S_real + (S_pct / 100.0) * (1.0 - S_real)
 S_slide = min(S_slide, 0.9999)
 
@@ -671,7 +812,7 @@ st.markdown(f"""
 <table style='font-size:0.88em;border-collapse:collapse;width:100%'>
 <tr>
   {row("f/D", f"{r['N']:.1f}")}
-  {row("Strehl", f"{S_real:.4f}")}
+  {row("Strehl", f"{S_real:.4f}  /  {S_exakt:.4f}", "Marechal / exakt")}
   {row("D_eff Kontrast", f"{r['Deff_k']:.1f} mm", f"−{r['loss_k']:.1f} mm")}
   {row("D_eff Schärfe", f"{r['Deff_s']:.1f} mm", f"−{r['loss_s']:.1f} mm")}
   {row("V_krit", f"{Vk['Vk_sph']:.0f}×")}
@@ -684,8 +825,8 @@ st.markdown(f"""
   {row(f"D_eff Sphäre ({V_slider}×)", f"{rv['Deff_sph']:.1f} mm", f"−{rv['verlust']:.1f} mm")}
 </tr>
 <tr>
-  {row("Q_perc 30×",  f"{Qp_30:.3f}")}
-  {row("Q_perc 80×",  f"{Qp_80:.3f}")}
+  {row("Q_perc  30×",  f"{Qp_30:.3f}")}
+  {row("Q_perc  80×",  f"{Qp_80:.3f}")}
   {row("Q_perc 160×", f"{Qp_160:.3f}")}
   {row(f"Q_perc {V_slider}×", f"{Qp_V:.3f}")}
   <td></td><td></td>

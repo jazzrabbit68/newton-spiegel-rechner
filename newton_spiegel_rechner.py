@@ -1,5 +1,5 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel V5
 =======================================================================
 Berücksichtigt:
   - Wellenfrontfehler und Strehl-Quotient (Kontrast)
@@ -61,6 +61,70 @@ def _wellenfronten(D_mm: float, f_mm: float, lam_nm: float):
     Wrms = Wb / (1.5 * math.sqrt(5))
     S    = math.exp(-(2 * math.pi * Wrms) ** 2)
     return lam_mm, Wp, Wb, Wrms, S
+
+def _strehl_exakt(Wb: float, n: int = 2000) -> float:
+    """Exakter Strehl via Pupillenintegral.
+    S = |<exp(i·2π·W(ρ))>|²  W(ρ)=8·Wb·(ρ⁴−ρ²)
+    Maréchal versagt für Wb > 0.08λ (f/N < ~8).
+    """
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    rho   = np.linspace(0.0, 1.0, n)
+    W     = 8.0 * Wb * (rho**4 - rho**2)
+    W_m   = float(_trapz(W * rho, rho) / 0.5)
+    Wc    = W - W_m
+    phase = 2.0 * math.pi * Wc
+    A_re  = float(_trapz(np.cos(phase) * rho, rho)) / 0.5
+    A_im  = float(_trapz(np.sin(phase) * rho, rho)) / 0.5
+    return A_re**2 + A_im**2
+
+
+def perceived_quality_exakt(D_mm: float, f_mm: float, lam_nm: float,
+                             V: float, n_pts: int = 200) -> float:
+    """Q_vis exakt: MTF×CSF-Integral ohne Dämpfungsfunktion und ohne ×S.
+    Definition: Q_vis(V) = ∫ msr·mp·CSF dν / ∫ mp·CSF dν
+    Grenzwerte: Q_vis(V→V_min)→1  ·  Q_vis(V→∞)→S_form
+    """
+    _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
+    fc     = D_mm / (lam_nm * 1e-6 * 206265)
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    nu     = np.linspace(0.0, 1.0, n_pts)
+    mp     = np.array([mtf_para(f)          for f in nu])
+    msr    = np.array([mtf_sph_rel(f, Wb)   for f in nu])
+    w_csf  = np.array([csf(fi * 3600.0 / V) for fi in nu * fc])
+    return float(_trapz(msr * mp * w_csf, nu) /
+                 max(_trapz(mp * w_csf, nu), 1e-12))
+
+
+def perceived_quality_exakt_kurven(D_mm: float, f_mm: float, lam_nm: float,
+                                   V_arr: np.ndarray) -> np.ndarray:
+    """perceived_quality_exakt für ein Array von Vergrößerungen."""
+    return np.array([perceived_quality_exakt(D_mm, f_mm, lam_nm, V)
+                     for V in V_arr])
+
+
+def perceived_quality_exakt_von_Wb(D_mm: float, Wb: float, lam_nm: float,
+                                    V: float, n_pts: int = 200) -> float:
+    """Q_vis exakt direkt aus Wb — für Schieber-Kurve mit beliebigem Strehl.
+    Identisch zu perceived_quality_exakt, aber Wb wird direkt übergeben
+    statt aus D und f abgeleitet. Ermöglicht korrekte Darstellung des
+    hypothetischen Spiegels aus der Strehl-Schieber-Einstellung.
+    """
+    fc     = D_mm / (lam_nm * 1e-6 * 206265)
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    nu     = np.linspace(0.0, 1.0, n_pts)
+    mp     = np.array([mtf_para(f)          for f in nu])
+    msr    = np.array([mtf_sph_rel(f, Wb)   for f in nu])
+    w_csf  = np.array([csf(fi * 3600.0 / V) for fi in nu * fc])
+    return float(_trapz(msr * mp * w_csf, nu) /
+                 max(_trapz(mp * w_csf, nu), 1e-12))
+
+
+def perceived_quality_exakt_kurven_von_Wb(D_mm: float, Wb: float, lam_nm: float,
+                                           V_arr: np.ndarray) -> np.ndarray:
+    """perceived_quality_exakt_von_Wb für ein Array von Vergrößerungen."""
+    return np.array([perceived_quality_exakt_von_Wb(D_mm, Wb, lam_nm, V)
+                     for V in V_arr])
+
 
 def _Wb_von_S(S: float) -> float:
     """Wb direkt aus Strehl — Umkehrung der Maréchal-Näherung."""
@@ -169,14 +233,17 @@ def kurven_vergr(D_mm, f_mm, lam_nm, eye_res_as=60.0,
     return vs, np.array(dpara), np.array(dsph), np.array(verluste)
 
 def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=400):
-    """Strehl und eff. Öffnungen als Funktion von N."""
+    """Strehl und eff. Öffnungen als Funktion von N.
+    Rückgabe: ns, strehls (Maréchal), deff_ks, aufl_verluste, strehls_exakt (Pupillenintegral)
+    """
     ns = np.linspace(N_min, N_max, schritte)
-    strehls, deff_ks, aufl_verluste = [], [], []
+    strehls, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
     for n in ns:
         r = berechne(D_mm, D_mm * n, lam_nm)
         strehls.append(r["strehl"]); deff_ks.append(r["Deff_k"])
         aufl_verluste.append(r["aufl_verlust_pct"])
-    return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste)
+        strehls_exakt.append(_strehl_exakt(r["Wb"]))
+    return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste), np.array(strehls_exakt)
 
 def strehl_to_f(S: float, D_mm: float, lam_nm: float = 550.0) -> float:
     """Äquivalente Brennweite zu einem Strehl-Wert (nur für Info-Anzeige)."""
@@ -196,10 +263,19 @@ def mtf_sph_rel(f: float, Wb: float, n: int = 80,
                 paraxial: bool = False) -> float:
     """
     Relative MTF eines sphärischen Spiegels (normiert: MTF(0)=1).
-    Wb = W_PtV_bestfocus; f = normierte Ortsfrequenz (0..1).
-    paraxial=False (Standard): W(ρ)=Wb·(ρ⁴−ρ²) — best focus, min. Wrms
-    paraxial=True:             W(ρ)=Wb·ρ⁴       — paraxialer Fokus,
-                               passt zu Sacek/Born&Wolf, zeigt mehr Verlust
+
+    Wb = W_PtV_bestfocus  (= Wp/4, Wellenfrontfehler PtV am besten Fokus)
+    f  = normierte Ortsfrequenz (0..1)
+
+    Das Integral verwendet intern Wp = 8·Wb als Amplitude.
+    Herleitung: Wp = D⁴/(1024·f³·λ) ist der Wellenfrontfehler PtV am
+    paraxialen Fokus. Am besten Fokus gilt Wb = Wp/4. Die Wellenfrontform
+    W(ρ) = Wp·(ρ⁴−ρ²) hat PtV = Wp/8, also Wb = Wp/8 → Wp_integral = 8·Wb.
+
+    paraxial=False (Standard): W(ρ) = Wp·(ρ⁴−ρ²)  — best focus
+                               passt zu Zemax / telescope-optics.net
+    paraxial=True:             W(ρ) = Wp·ρ⁴        — paraxialer Fokus
+                               passt zu Sacek / Born&Wolf
     """
     if f <= 0: return 1.0
     if f >= 1: return 0.0
@@ -312,7 +388,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "4.4.0 (2026-05-30)"
+VERSION = "5.0.1 (2026-06-05)"
 
 class App(tk.Tk):
     def __init__(self):
@@ -352,7 +428,7 @@ class App(tk.Tk):
         slider_defs = [
             ("Öffnung D",       self.var_D,      50,  500, 10,  "mm"),
             ("Brennweite f",    self.var_f,      200, 4000, 50, "mm"),
-            ("Strehl-Quotient", self.var_strehl,   0,  95,   5,  ""),
+            ("Strehl-Quotient", self.var_strehl,   0,  100,   5,  ""),
             ("Auge-Auflösung",  self.var_eye,     20,  180,  5,  '"'),
             ("Vergrößerung",    self.var_vergr,   30,  250, 10,  "×"),
         ]
@@ -393,19 +469,20 @@ class App(tk.Tk):
                 ("W_PtV paraxial [λ]",         "rWp"),
                 ("W_PtV best focus [λ]",       "rWb"),
                 ("W_RMS [λ]",                  "rWrms"),
-                ("Strehl best focus (visuell)", "rS"),
+                ("Strehl Maréchal-Näherung", "rS"),
+                ("Strehl Pupillenintegral", "rS_exakt"),
                 ("Eff. Öffnung Kontrast [mm]", "rDeff_k"),
                 ("V_krit Sphäre (Blur sichtb.)","rVkrit2"),
             ]),
 
-            ("Visueller Qualitätsindex Q_vis (MTF + Strehl)", [
-                ("Q(0.2) grobe Details",        "rQ02"),
-                ("Q(0.4) mittlere Details",     "rQ04"),
-                ("Q(0.6) feine Details",        "rQ06"),
-                ("Q_shape (nur MTF-Form)",      "rQshape"),
-                ("Q_vis (gewichtet 0.4/0.4/0.2)","rQvis"),
-                ("D_eff visuell [mm]",          "rDeff_vis"),
-            ]),
+   #         ("Visueller Qualitätsindex Q_vis (MTF + Strehl)", [
+   #             ("Q(0.2) grobe Details",        "rQ02"),
+   #             ("Q(0.4) mittlere Details",     "rQ04"),
+   #             ("Q(0.6) feine Details",        "rQ06"),
+   #             ("Q_shape (nur MTF-Form)",      "rQshape"),
+   #             ("Q_vis (gewichtet 0.4/0.4/0.2)","rQvis"),
+   #             ("D_eff visuell [mm]",          "rDeff_vis"),
+    #        ]),
             ("Schärfe bei gewählter Vergrößerung", [
                 ("Aufl.verlust gg. Paraboloid [%]",    "rAuflVerlust"),
                 ("Verlust bei dieser Vergr. [mm]",    "rVerlustV"),
@@ -456,25 +533,9 @@ class App(tk.Tk):
                 # Umschalter: absolut / relativ
                 btn_frame = tk.Frame(frm, bg=BG)
                 btn_frame.pack(side="top", fill="x", padx=8, pady=(6,0))
-                # Zeile 1: Darstellungsmodus
-                row1 = tk.Frame(btn_frame, bg=BG)
-                row1.pack(side="top", anchor="w")
-                tk.Label(row1, text="Darstellung:", bg=BG, fg=ACC,
-                         font=("Helvetica", 10, "bold")).pack(side="left", padx=(0,6))
-                self._mtf_modus = tk.StringVar(value="gesamt")
-                for val, text in [
-                    ("absolut",  "MTF absolut  (Standard, ohne Strehl)"),
-                    ("gesamt",   "MTF × Strehl  (Beobachtungsqualität)"),
-                    ("relativ",  "Kontrastverlust %"),
-                    ("klassisch","Klassisch  (Kurven, Vergleich mit Optikrechnern)"),
-                ]:
-                    tk.Radiobutton(row1, text=text, variable=self._mtf_modus,
-                                   value=val, bg=BG, fg=ACC,
-                                   activebackground=BG, selectcolor=BG2,
-                                   font=("Helvetica", 10),
-                                   command=self._aktualisieren
-                                   ).pack(side="left", padx=8)
-                # Zeile 1b: Fokus-Modus (nur im klassischen Modus relevant)
+                # Fokus-Modus
+                self._mtf_modus = tk.StringVar(value="klassisch")
+                # Zeile 1b: Fokus-Modus
                 row1b = tk.Frame(btn_frame, bg=BG)
                 row1b.pack(side="top", anchor="w", pady=(2,0))
                 tk.Label(row1b, text="Fokusebene:", bg=BG, fg="#888",
@@ -626,15 +687,18 @@ class App(tk.Tk):
         rv2["rWb"].config(    text=f"{r['Wb']:.4f} λ")
         rv2["rWrms"].config(  text=f"{r['Wrms']:.5f} λ")
         rv2["rS"].config(     text=f"{S_real:.4f}  →  {S_slide:.4f}")
+        S_exakt = _strehl_exakt(r["Wb"])
+        _col_ex = "#2e7d32" if S_exakt >= 0.95 else "#e65100" if S_exakt >= 0.80 else "#c62828"
+        rv2["rS_exakt"].config(text=f"{S_exakt:.4f}  (Δ {S_exakt - S_real:+.4f})",fg=_col_ex)
         rv2["rDeff_k"].config(text=f"{r['Deff_k']:.1f} → {Deff_k_slide:.1f} mm")
-        rv2["rQ02"].config(    text=f"{r['Q02']:.4f}")
-        rv2["rQ04"].config(    text=f"{r['Q04']:.4f}")
-        rv2["rQ06"].config(    text=f"{r['Q06']:.4f}")
-        rv2["rQshape"].config(text=f"{r['Qshape']:.4f}")
-        rv2["rQvis"].config(   text=f"{r['Qvis']:.4f}",
-                               fg="#2e7d32" if r["Qvis"]>=0.95 else
-                               "#e65100" if r["Qvis"]>=0.80 else "#c62828")
-        rv2["rDeff_vis"].config(text=f"{r['Deff_vis']:.1f} mm")
+    #   rv2["rQ02"].config(    text=f"{r['Q02']:.4f}")
+    #    rv2["rQ04"].config(    text=f"{r['Q04']:.4f}")
+    #   rv2["rQ06"].config(    text=f"{r['Q06']:.4f}")
+    #    rv2["rQshape"].config(text=f"{r['Qshape']:.4f}")
+    #    rv2["rQvis"].config(   text=f"{r['Qvis']:.4f}",
+    #                           fg="#2e7d32" if r["Qvis"]>=0.95 else
+    #                           "#e65100" if r["Qvis"]>=0.80 else "#c62828")
+    #    rv2["rDeff_vis"].config(text=f"{r['Deff_vis']:.1f} mm")
         rv2["rVkrit2"].config(text=f"{Vk['Vk_sph']:.0f}× → {Vk_slide['Vk_sph']:.0f}×",
                               fg="#534AB7")
         avp = r_real["aufl_verlust_pct"]
@@ -684,17 +748,23 @@ class App(tk.Tk):
     def _diagramm_strehl(self, D, f, lam, N_akt, S_akt, S_sph=None):
         fig, ax, canvas = self._tab_strehl
         ax.cla()
-        ns, sts, _, _ = kurven_N(D, lam)
+        ns, sts, _, _, sts_exakt = kurven_N(D, lam)
+        # Exakter Strehl am aktuellen Betriebspunkt
+        _, _, Wb_akt, _, _ = _wellenfronten(D, f, lam)
+        S_akt_exakt = _strehl_exakt(Wb_akt)
         # Schraffur: Bereich zwischen Paraboloid (S=1) und gewähltem Strehl
         ax.fill_between(ns, S_sph if S_sph else S_akt, 1.0,
                         color=ACC, alpha=0.10, label="Bereich Paraboloid→Sphäre")
         ax.axhline(1.00, color=GRN,      lw=1.5, ls="-",  label="Paraboloid (S=1.0)")
-        ax.plot(ns, sts, color=ACC, lw=2, label="Strehl (sphärisch)")
+        ax.plot(ns, sts,       color=ACC,      lw=2.0, ls="-",  label="Strehl Maréchal (Näherung)")
+        ax.plot(ns, sts_exakt, color="#534AB7", lw=1.8, ls="--", label="Strehl exakt (Pupillenintegral)")
         ax.axhline(0.80, color="#BA7517", lw=1.2, ls="--", label="Rayleigh S=0.80")
         ax.axhline(0.95, color="#888",    lw=1.0, ls=":",  label="S=0.95")
         ax.axvline(N_akt, color="#ccc", lw=0.8, ls=":")
-        ax.scatter([N_akt], [S_akt], color=ACC, s=60, zorder=5)
-        ax.annotate(f"f/{N_akt:.1f}  S={S_akt:.3f}",
+        ax.scatter([N_akt], [S_akt],       color=ACC,       s=60, zorder=5)
+        ax.scatter([N_akt], [S_akt_exakt], color="#534AB7", s=40, zorder=5, marker="D")
+        ax.annotate(f"f/{N_akt:.1f}  S={S_akt:.3f} (Marechal) / "
+                    f"S={S_akt_exakt:.3f} (exakt)",
                     xy=(N_akt, S_akt), xytext=(8, 10),
                     textcoords="offset points", fontsize=9, color="#333",
                     arrowprops=dict(arrowstyle="-", color="#aaa"))
@@ -711,7 +781,6 @@ class App(tk.Tk):
             ticker.FuncFormatter(lambda x, _: f"f/{x:.0f}" if x == int(x) else ""))
         ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
         ax.legend(fontsize=9, loc="lower right"); self._ax_fmt(ax)
-       # fig.tight_layout(); canvas.draw()
         fig.tight_layout(); canvas.draw_idle()
 
     def _diagramm_oeffnung(self, D, f, lam, N_akt, Dk_akt, Ds_akt=None, S_sph=None, Dk_slide=None, Ds_slide=None):
@@ -720,7 +789,7 @@ class App(tk.Tk):
         for ax2_old in fig.get_axes()[1:]:
             fig.delaxes(ax2_old)
 
-        ns, _, deff_ks, aufl_verluste = kurven_N(D, lam)
+        ns, _, deff_ks, aufl_verluste, _ = kurven_N(D, lam)
         r_akt = berechne(D, f, lam)
         avp_akt = r_akt["aufl_verlust_pct"]
 
@@ -932,8 +1001,6 @@ class App(tk.Tk):
         for ax2_old in fig.get_axes()[1:]:
             fig.delaxes(ax2_old)
 
-        modus = self._mtf_modus.get()  # "absolut" oder "relativ"
-
         freqs_as, fc, mp_arr, msa, msr_arr, strehl = mtf_kurven(D, f, lam)
 
         objekte = self._mtf_objekte.get()
@@ -965,284 +1032,194 @@ class App(tk.Tk):
             """Exakte Interpolation aus einem MTF-Array bei normierter Frequenz nu."""
             return float(np.interp(nu, nu_axis, arr))
 
-        labels, mp_vals = [], []
-        ms_vals_mtf, ms_vals_ges   = [], []   # ohne S / mit S
-        verlust_mtf, verlust_ges   = [], []
-        bar_colors, detail_sizes_as = [], []
-        for label, d_as, col in planet_details:
-            nu = (1.0 / (2.0 * d_as)) / fc
-            if nu >= 1.0: continue
-            mp_v   = interp_mtf(nu, mp_arr)
-            msr_v  = interp_mtf(nu, msr_arr)
-            ms_mtf = mp_v * msr_v            # Standard-MTF (kein S)
-            ms_ges = mp_v * msr_v * strehl   # MTF × Strehl
-            vl_mtf = ((mp_v - ms_mtf) / mp_v * 100.0) if mp_v > 1e-9 else 0.0
-            vl_ges = ((mp_v - ms_ges) / mp_v * 100.0) if mp_v > 1e-9 else 0.0
-            labels.append(label); mp_vals.append(mp_v)
-            ms_vals_mtf.append(ms_mtf); ms_vals_ges.append(ms_ges)
-            verlust_mtf.append(vl_mtf); verlust_ges.append(vl_ges)
-            bar_colors.append(col); detail_sizes_as.append(d_as)
+        # ── Klassisches MTF-Kurvendiagramm ────────────────────────────────
+        paraxial = getattr(self, '_mtf_fokus',
+                           tk.StringVar(value="bestfocus")).get() == "paraxial"
+        fokus_label = "Paraxialer Fokus  (ρ⁴)" if paraxial else "Best Focus  (ρ⁴−ρ²)"
+        N_KURVE  = 300
+        lam_mm   = lam * 1e-6
+        Wp_k     = D**4 / (1024.0 * f**3 * lam_mm)
+        Wb_k     = Wp_k / 4.0
+        fc_fokal = 1.0 / (lam_mm * (f / D))
 
-        # Rückwärtskompatibilität: ms_vals und verlust_vals je nach Modus
-        ms_vals     = ms_vals_ges if modus == "gesamt" else ms_vals_mtf
-        verlust_vals = verlust_ges if modus == "gesamt" else verlust_mtf
+        freqs_as_k, mp_k, msa_k, msr_k = _mtf_arrays_klassisch(
+            Wb_k, strehl, fc_fokal / (D / (lam_mm * 206265)),
+            N_KURVE, paraxial=paraxial)
+        nu_k2  = np.linspace(0, 1, N_KURVE)
+        mp_k2  = np.array([mtf_para(nu) for nu in nu_k2])
+        msr_k2 = np.array([mtf_sph_rel(nu, Wb_k, paraxial=paraxial) for nu in nu_k2])
+        ms_k2  = mp_k2 * msr_k2
 
-        n = len(labels)
-        x = np.arange(n)
+        ax.plot(nu_k2, mp_k2,  color=GRN, lw=2.2, ls="-",
+                label="Paraboloid  (Beugungsgrenze)")
+        ax.plot(nu_k2, ms_k2,  color=COR, lw=2.2, ls="-",
+                label=f"Sphäre absolut  (S={strehl:.3f})")
+        ax.plot(nu_k2, msr_k2, color=ACC, lw=1.5, ls="--",
+                label="Sphäre relativ  (normiert gg. Paraboloid)")
 
-        # Verbesserten Spiegel berechnen
-        ms_s = None; verlust_s = None
+        # Schieber-Kurve
         if S_slide is not None and S_slide > strehl + 0.01:
-            _, _, _, _, msr_s_arr, _ = mtf_kurven_von_S(D, S_slide, lam)
-            nu_axis_s = np.linspace(0, 1, len(msr_s_arr))
-            nu_list_s = [(1.0/(2.0*d))/fc for _,d,_ in planet_details
-                         if (1.0/(2.0*d))/fc < 1.0]
-            mp_list_s = [float(np.interp(nu, nu_axis, mp_arr)) for nu in nu_list_s]
-            msr_list_s = [float(np.interp(nu, nu_axis_s, msr_s_arr)) for nu in nu_list_s]
-            if modus == "gesamt":
-                ms_s = [mp_v * msr_v * S_slide
-                        for mp_v, msr_v in zip(mp_list_s, msr_list_s)]
-            else:
-                ms_s = [mp_v * msr_v
-                        for mp_v, msr_v in zip(mp_list_s, msr_list_s)]
-            verlust_s = [((mp_v - ms_v) / max(mp_v, 1e-9)) * 100.0
-                         for mp_v, ms_v in zip(mp_list_s, ms_s)]
+            Wb_s    = _Wb_von_S(S_slide)
+            msr_s_k = np.array([mtf_sph_rel(nu, Wb_s, paraxial=paraxial)
+                                 for nu in nu_k2])
+            ax.plot(nu_k2, mp_k2 * msr_s_k, color="#1a7abf", lw=1.8, ls="-.",
+                    label=f"Schieber absolut  (S={S_slide:.2f})")
 
-        if modus in ("absolut", "gesamt"):
-            w = 0.28 if ms_s else 0.35
-            ax.bar(x - w/2, mp_vals, w, label="Paraboloid", color="#888", alpha=0.75)
-            ax.bar(x + w/2, ms_vals, w,
-                   label=f"Sphäre (S={strehl:.3f})", color=COR, alpha=0.85)
-            if ms_s:
-                ax.bar(x + w/2, ms_s, w,
-                       label=f"Verbessert (S={S_slide:.2f})", color=GRN, alpha=0.75)
-            for i, (mp_v, ms_v) in enumerate(zip(mp_vals, ms_vals)):
-                ax.text(i-w/2, mp_v+0.02, f"{mp_v:.2f}", ha="center", va="bottom",
-                        fontsize=8, color="#444")
-                ax.text(i+w/2, ms_v+0.02, f"{ms_v:.2f}", ha="center", va="bottom",
-                        fontsize=8, color=COR, fontweight="bold")
-            ax.axhline(0.2, color="#BA7517", lw=2.0, ls="-", zorder=5)
-            ax.text(0.01, 0.215, "20%-Schwelle",
-                    transform=ax.get_yaxis_transform(),
-                    fontsize=9, fontweight="bold", color="#BA7517")
-            ax.set_ylim(0, 1.18)
-            ax.set_ylabel("Kontrastübertragung", fontsize=10)
-            if modus == "absolut":
-                ax.set_title(
-                    f"MTF absolut (Standard, ohne Strehl) — "
-                    f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=10)
-                ax.text(0.02, 0.97,
-                        f"Strehl={strehl:.3f} — hier nicht eingerechnet\n"
-                        f"Vergleichbar mit Zemax / telescope-optics.net",
-                        transform=ax.transAxes, ha="left", va="top", fontsize=8,
-                        color=ACC,
-                        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.8))
-            else:  # gesamt
-                ax.set_title(
-                    f"MTF × Strehl (Beobachtungsqualität) — "
-                    f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=10)
-                ax.text(0.02, 0.97,
-                        f"Strehl={strehl:.3f} eingerechnet\n"
-                        f"= effektiver Kontrast am Okular",
-                        transform=ax.transAxes, ha="left", va="top", fontsize=9,
-                        color=COR,
-                        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=COR, alpha=0.8))
+        # Detailmarkierungen
+        for label, d_as, col, *_ in all_details:
+            nu_det = (1.0 / (2.0 * d_as)) / fc
+            if nu_det >= 1.0: continue
+            ax.axvline(nu_det, color=col, lw=0.8, ls=":", alpha=0.7)
+            mp_v = float(np.interp(nu_det, nu_k2, mp_k2))
+            ax.text(nu_det + 0.005, mp_v - 0.07,
+                    label.replace("\n", " "),
+                    fontsize=7, color=col, rotation=90, va="top")
 
-        elif modus == "relativ":
-            w = 0.4 if not ms_s else 0.3
-            bars = ax.bar(x, verlust_vals, width=w, color=bar_colors, alpha=0.85,
-                          label=f"Sphäre (S={strehl:.3f})")
-            if verlust_s:
-                ax.bar(x + w, verlust_s, width=w, color=GRN, alpha=0.75,
-                       label=f"Verbessert (S={S_slide:.2f})")
-                for i, v in enumerate(verlust_s):
-                    ax.text(i+w, v+0.3, f"{v:.1f}%", ha="center", va="bottom",
-                            fontsize=9, color=GRN, fontweight="bold")
-            for i, v in enumerate(verlust_vals):
-                ax.text(i, v+0.3, f"{v:.1f}%", ha="center", va="bottom",
-                        fontsize=10, fontweight="bold", color=bar_colors[i])
-            ymax = max(verlust_vals) * 1.35 + 3 if verlust_vals else 30
-            ax.axhline(20, color="#BA7517", lw=2.0, ls="-", zorder=5)
-            ax.text(0.01, 21.5, "20%-Schwelle", transform=ax.get_yaxis_transform(),
-                    fontsize=9, fontweight="bold", color="#BA7517")
-            ax.set_ylim(0, ymax)
-            ax.set_ylabel("Kontrastverlust gg. Paraboloid [%]", fontsize=10)
-            ax.set_title(
-                f"Kontrastverlust (MTF-Form, ohne Strehl) — "
-                f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=10)
+        # Zweite X-Achse: Lp/mm
+        ax2x = ax.twiny()
+        ax2x.set_facecolor("none")
+        ax2x.set_xlim(0, fc_fokal)
+        ax2x.set_xlabel("Räumliche Frequenz  [Lp/mm]  (fokal)", fontsize=9)
+        ax2x.tick_params(axis="x", labelsize=8)
 
-        elif modus == "klassisch":
-            # ── Klassisches MTF-Kurvendiagramm ────────────────────────────────
-            paraxial = getattr(self, '_mtf_fokus',
-                               tk.StringVar(value="bestfocus")).get() == "paraxial"
-            fokus_label = "Paraxialer Fokus  (ρ⁴)" if paraxial else "Best Focus  (ρ⁴−ρ²)"
-            N_KURVE = 300
-            nu_k    = np.linspace(0, 1, N_KURVE)
-            lam_mm  = lam * 1e-6
-            Wp_k    = D**4 / (1024.0 * f**3 * lam_mm)
-            Wb_k    = Wp_k / 4.0
-            fc_fokal = 1.0 / (lam_mm * (f / D))
+        ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
+        ax.set_xlabel(
+            "Normierte räumliche Frequenz  ν  (0 = DC, 1 = Beugungsgrenze)",
+            fontsize=9)
+        ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=10)
+        ax.set_title(
+            f"MTF-Kurven [{fokus_label}] — D={D:.0f}mm  f/{f/D:.1f}  "
+            f"Strehl={strehl:.3f}  fc={fc_fokal:.1f} Lp/mm  λ={lam:.0f}nm",
+            fontsize=9)
+        fokus_color = "#2e7d32" if paraxial else ACC
+        ax.text(0.98, 0.97,
+                f"{fokus_label}\n"
+                + ("Vergleichbar mit Sacek/Born&Wolf" if paraxial
+                   else "Vergleichbar mit Zemax / telescope-optics.net"),
+                transform=ax.transAxes, ha="right", va="top", fontsize=8,
+                color=fokus_color,
+                bbox=dict(boxstyle="round,pad=0.3", fc="white",
+                          ec=fokus_color, alpha=0.85))
+        ax.legend(fontsize=9, loc="lower left")
 
-            freqs_as_k, mp_k, msa_k, msr_k = _mtf_arrays_klassisch(
-                Wb_k, strehl, fc_fokal / (D / (lam_mm * 206265)),
-                N_KURVE, paraxial=paraxial)
-            # freqs_as_k ist in Lp/arcsec — für Kurvenplot normiert darstellen
-            nu_k2 = np.linspace(0, 1, N_KURVE)
-            mp_k2  = np.array([mtf_para(nu) for nu in nu_k2])
-            msr_k2 = np.array([mtf_sph_rel(nu, Wb_k, paraxial=paraxial) for nu in nu_k2])
-            ms_k2  = mp_k2 * msr_k2
-            msr_only = msr_k              # relativ normiert gegen Paraboloid
-
-            ax.plot(nu_k2, mp_k2,   color=GRN,  lw=2.2, ls="-",
-                    label="Paraboloid  (Beugungsgrenze)")
-            ax.plot(nu_k2, ms_k2,   color=COR,  lw=2.2, ls="-",
-                    label=f"Sphäre absolut  (S={strehl:.3f})")
-            ax.plot(nu_k2, msr_k2,  color=ACC,  lw=1.5, ls="--",
-                    label="Sphäre relativ  (normiert gg. Paraboloid)")
-
-            # Schieber-Kurve
-            if S_slide is not None and S_slide > strehl + 0.01:
-                Wb_s = _Wb_von_S(S_slide)
-                msr_s_k = np.array([mtf_sph_rel(nu, Wb_s, paraxial=paraxial)
-                                    for nu in nu_k2])
-                ax.plot(nu_k2, mp_k2 * msr_s_k, color="#1a7abf", lw=1.8, ls="-.",
-                        label=f"Schieber absolut  (S={S_slide:.2f})")
-
-            # Detailmarkierungen
-            for label, d_as, col, *_ in all_details:
-                nu_det = (1.0 / (2.0 * d_as)) / fc
-                if nu_det >= 1.0: continue
-                ax.axvline(nu_det, color=col, lw=0.8, ls=":", alpha=0.7)
-                mp_v = float(np.interp(nu_det, nu_k2, mp_k2))
-                ax.text(nu_det + 0.005, mp_v - 0.07,
-                        label.replace("\n", " "),
-                        fontsize=7, color=col, rotation=90, va="top")
-
-            # Zweite X-Achse: Lp/mm
-            ax2x = ax.twiny()
-            ax2x.set_facecolor("none")
-            ax2x.set_xlim(0, fc_fokal)
-            ax2x.set_xlabel("Räumliche Frequenz  [Lp/mm]  (fokal)", fontsize=9)
-            ax2x.tick_params(axis="x", labelsize=8)
-
-            ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
-            ax.set_xlabel(
-                "Normierte räumliche Frequenz  ν  (0 = DC, 1 = Beugungsgrenze)",
-                fontsize=9)
-            ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=10)
-            ax.set_title(
-                f"MTF-Kurven [{fokus_label}] — D={D:.0f}mm  f/{f/D:.1f}  "
-                f"Strehl={strehl:.3f}  fc={fc_fokal:.1f} Lp/mm  λ={lam:.0f}nm",
-                fontsize=9)
-            fokus_color = "#2e7d32" if paraxial else ACC
-            ax.text(0.98, 0.97,
-                    f"{fokus_label}\n"
-                    + ("Vergleichbar mit Sacek/Born&Wolf" if paraxial
-                       else "Vergleichbar mit Zemax / telescope-optics.net"),
-                    transform=ax.transAxes, ha="right", va="top", fontsize=8,
-                    color=fokus_color,
-                    bbox=dict(boxstyle="round,pad=0.3", fc="white",
-                              ec=fokus_color, alpha=0.85))
-            ax.legend(fontsize=9, loc="lower left")
-
-        # ── CSF-Overlay und X-Ticks nur für absolut/relativ ───────────────────
-        if modus != "klassisch" and detail_sizes_as:
-            csf_vals = []
-            for d_as in detail_sizes_as:
-                # Detailgröße im Bild: d_as [arcsec] → Winkel für das Auge
-                # Bei Vergrößerung V erscheint 1 arcsec als V arcsec = V/3600 Grad
-                # Frequenz für das Auge: f_cpd = 1 / (2 * d_as * V/3600) [cpd]
-                f_cpd_eye = 3600.0 / (2.0 * d_as * V)
-                csf_vals.append(csf(f_cpd_eye))
-
-            # CSF auf zweiter Y-Achse (0..1 rechts)
-            ax2 = ax.twinx()
-            ax2.set_facecolor("none")
-            csf_color = "#1a7abf"
-            ax2.plot(x, csf_vals, color=csf_color, lw=2.2, ls="-.",
-                     marker="o", ms=6, zorder=8,
-                     label=f"Augenempfindlichkeit CSF  ({V:.0f}×)")
-            for i, cv in enumerate(csf_vals):
-                ax2.text(i, cv + 0.03, f"{cv:.2f}",
-                         ha="center", va="bottom", fontsize=8,
-                         color=csf_color, fontweight="bold")
-            ax2.set_ylim(0, 1.35)
-            ax2.set_ylabel("Augenempfindlichkeit CSF  (0–1)", fontsize=9,
-                           color=csf_color)
-            ax2.tick_params(axis="y", labelcolor=csf_color)
-            ax2.spines["right"].set_color(csf_color)
-            ax2.legend(fontsize=9, loc="upper left",
-                       bbox_to_anchor=(0.0, 0.88))
-
-        if modus != "klassisch":
-            ax.set_xticks(x)
-            ax.set_xticklabels(labels, fontsize=9, linespacing=1.3)
-            ax.legend(fontsize=9, loc="upper right")
+        # ── Gemeinsame Formatierung ───────────────────────────────────────────
         self._ax_fmt(ax)
         fig.tight_layout()
         canvas.draw_idle()
 
 
-
     def _diagramm_wahrnehmung(self, D, f, lam, V_slider,
                                S_slide=None, S_real=None):
         """
-        Wahrnehmungs-Tab: CSF-gewichteter Qualitätsindex Q_perc vs. Vergrößerung.
+        Wahrnehmungs-Tab: Visueller Qualitätsindex Q_vis vs. Vergrößerung.
+
+        Zwei Kurven pro Spiegel:
+          · Q_vis exakt  = MTF×CSF-Integral ohne w(V)  (Definition, durchgezogen)
+          · Q̃ Näherung  = S + (1−S)·(1−w(V))          (Satz, gestrichelt)
+        Beide verwenden den exakten Strehl aus dem Pupillenintegral.
+        V-Achse dynamisch: reicht bis 8·V_krit damit Asymptote S sichtbar wird.
         """
         fig, ax, canvas = self._tab_wahrnehmung
         ax.cla()
 
-        V_arr = np.linspace(30, 250, 120)
+        # ── Exakter Strehl via Pupillenintegral ───────────────────────────
+        _, _, Wb, _, S_mar = _wellenfronten(D, f, lam)
+        S_exakt = _strehl_exakt(Wb)
 
-        # Sphärischer Spiegel (theoretisch aus D/f)
-        Qp_sph = perceived_quality_kurven(D, f, lam, V_arr, use_csf=True)
+        # ── V-Bereich dynamisch ───────────────────────────────────────────
+        V_krit     = D * 0.7 * math.sqrt(max(S_exakt, 1e-9))
+        V_max_plot = 400.0
+        V_arr      = np.linspace(30, V_max_plot, 150)
 
-        # Paraboloid-Referenz
-        f_para = D * 50.0
-        Qp_para = perceived_quality_kurven(D, f_para, lam, V_arr, use_csf=True)
+        # ── Q_vis exakt: MTF×CSF-Integral, kein S-Faktor ─────────────────
+        Qe_sph  = perceived_quality_exakt_kurven(D, f, lam, V_arr)
+        f_para  = D * 50.0
+        Qe_para = perceived_quality_exakt_kurven(D, f_para, lam, V_arr)
 
-        # Strehl nach Schieber: eigene Kurve wenn abweichend
-        strehl_label = f"Sphäre  f/{f/D:.1f}  S={S_real:.3f}" if S_real else f"Sphäre  f/{f/D:.1f}"
-        has_slide = S_slide is not None and S_real is not None and S_slide > S_real + 0.01
+        # ── Q̃ Näherung: Dämpfungsfunktion w(V) auf exaktem S ─────────────
+        def Q_naeh(V_a, S):
+            Vk = D * 0.7 * math.sqrt(max(S, 1e-9))
+            w  = 1.0 / (1.0 + (Vk / np.maximum(V_a, 1e-9))**2)
+            return S + (1 - S) * (1 - w)
+
+        Qn_sph  = Q_naeh(V_arr, S_exakt)
+        Qn_para = Q_naeh(V_arr, 1.0)          # Paraboloid S=1 → Q̃=1 immer
+
+        # ── Schieber-Kurve (exakter S_slide) ─────────────────────────────
+        has_slide = (S_slide is not None and S_real is not None
+                     and S_slide > S_mar + 0.01)
+        if has_slide:
+            Wb_s      = _Wb_von_S(S_slide)
+            S_ex_s    = S_slide              # virtuell gewünschter Wert (Label/Legende)
+            S_ex_s_ph = _strehl_exakt(Wb_s) # physikalischer Strehl für Q_naeh-Asymptote
+            # Qe: korrekt via Wb_s (nicht f des realen Spiegels)
+            Qe_slide = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr)
+            # Näherung: muss S_ex_s_ph als Asymptote nutzen, sonst divergieren die Kurven
+            Qn_slide = Q_naeh(V_arr, S_ex_s_ph)
+
+        strehl_label = f"Sphäre f/{f/D:.1f}  S={S_exakt:.3f} (exakt)"
+
+        # ── Beweis-Schraffur: Abweichung exakt ↔ Näherung ────────────────
+        ax.fill_between(V_arr, Qe_sph, Qn_sph,
+                        color="#534AB7", alpha=0.12,
+                        label="Abweichung exakt ↔ Näherung")
+
+        # ── Wahrnehmungsverlust ───────────────────────────────────────────
+        ax.fill_between(V_arr, Qe_sph, Qe_para,
+                        color=COR, alpha=0.10, label="Wahrnehmungsverlust")
+
+        # ── Paraboloid ────────────────────────────────────────────────────
+        ax.plot(V_arr, Qe_para, color=GRN, lw=2.0, ls="-",
+                label="Paraboloid  exakt")
+        ax.plot(V_arr, Qn_para, color=GRN, lw=1.0, ls="--", alpha=0.4)
+
+        # ── Sphäre ────────────────────────────────────────────────────────
+        ax.plot(V_arr, Qe_sph, color=COR, lw=2.2, ls="-",
+                label=f"{strehl_label}  exakt")
+        ax.plot(V_arr, Qn_sph, color=COR, lw=1.5, ls="--", alpha=0.75,
+                label=f"Sphäre  Näherung Q̃  (S={S_exakt:.3f})")
 
         if has_slide:
-            Qp_slide = perceived_quality_kurven_von_S(D, S_slide, lam, V_arr, use_csf=True)
-            ax.fill_between(V_arr, Qp_sph, Qp_para,
-                            color=COR, alpha=0.10, label="Wahrnehmungsverlust (Sphäre)")
-            ax.fill_between(V_arr, Qp_slide, Qp_para,
-                            color=GRN, alpha=0.10, label="Wahrnehmungsverlust (Schieber)")
-        else:
-            ax.fill_between(V_arr, Qp_sph, Qp_para,
-                            color=COR, alpha=0.13, label="Wahrnehmungsverlust")
+            ax.plot(V_arr, Qe_slide, color=ACC, lw=2.0, ls="-",
+                    label=f"Schieber exakt  S={S_ex_s:.3f}")
+            ax.plot(V_arr, Qn_slide, color=ACC, lw=1.2, ls="--", alpha=0.7,
+                    label=f"Schieber Näherung  S={S_ex_s:.3f}")
 
-        ax.plot(V_arr, Qp_para, color=GRN,  lw=2.0, ls="--",
-                label="Paraboloid (Referenz)")
-        ax.plot(V_arr, Qp_sph,  color=COR,  lw=2.0, ls=":",
-                label=strehl_label)
+        # ── Asymptote bei S_exakt ─────────────────────────────────────────
+        ax.axhline(S_exakt, color=COR, lw=1.0, ls=":", alpha=0.75)
+        ax.text(V_max_plot * 0.98, S_exakt + 0.012,
+                f"Asymptote Q̃→S={S_exakt:.3f}",
+                fontsize=8, color=COR, ha="right", alpha=0.85)
 
-        if has_slide:
-            ax.plot(V_arr, Qp_slide, color=ACC, lw=2.5,
-                    label=f"Strehl-Schieber  S={S_slide:.3f}")
+        # ── V_min / V_krit ────────────────────────────────────────────────
+        for V_m, col, ls, lbl in [
+                (D / 7.0, "#888888", ":",  f"V_min={D/7:.0f}×"),
+                (V_krit,  "#534AB7", "--", f"V_krit={V_krit:.0f}×")]:
+            if 30 <= V_m <= V_max_plot:
+                ax.axvline(V_m, color=col, lw=1.0, ls=ls, alpha=0.65)
+                ax.text(V_m + 2, 0.03, lbl,
+                        fontsize=7, color=col, rotation=90, va="bottom", alpha=0.8)
 
-        # Feste Markierungen — auf der Schieber-Kurve wenn vorhanden, sonst Sphäre
-        q_curve = Qp_slide if has_slide else Qp_sph
-        for V_mark, col, ls in [(30, "#c8a020", ":"), (80, "#888", "-."), (160, "#c62828", ":")]:
-            idx = int(round((V_mark - 30) / (250 - 30) * (len(V_arr) - 1)))
-            q_m = float(q_curve[idx])
-            ax.axvline(V_mark, color=col, lw=1.2, ls=ls, alpha=0.6)
-            ax.scatter([V_mark], [q_m], color=col, s=50, zorder=6)
+        # ── Feste Vergrößerungs-Markierungen ─────────────────────────────
+        for V_mark, col, ls in [(80, "#888", "-."), (160, "#c62828", ":")]:
+            if V_mark > V_max_plot:
+                continue
+            idx = int(round((V_mark - 30) / (V_max_plot - 30) * (len(V_arr) - 1)))
+            q_m = float(Qe_sph[idx])
+            ax.axvline(V_mark, color=col, lw=1.0, ls=ls, alpha=0.5)
+            ax.scatter([V_mark], [q_m], color=col, s=40, zorder=6)
             ax.annotate(f"{V_mark}×\n{q_m:.2f}",
                         xy=(V_mark, q_m),
-                        xytext=(V_mark + 7, q_m - 0.05),
+                        xytext=(V_mark + 6, q_m - 0.05),
                         fontsize=8, color=col, fontweight="bold",
                         bbox=dict(boxstyle="round,pad=0.2", fc="white",
                                   ec=col, alpha=0.80))
 
-        # Slider-Vergrößerung
-        q_v = perceived_quality_von_S(D, S_slide, lam, V_slider, use_csf=True) if has_slide else perceived_quality(D, f, lam, V_slider, use_csf=True)
+        # ── Slider-Vergrößerung ───────────────────────────────────────────
+        q_v = perceived_quality_exakt(D, f, lam, V_slider)
         ax.axvline(V_slider, color=ACC, lw=1.8, ls="-", alpha=0.9)
         ax.scatter([V_slider], [q_v], color=ACC, s=90, zorder=7)
-        x_off = -65 if V_slider > 200 else 12
+        x_off = -65 if V_slider > V_max_plot * 0.8 else 12
         ax.annotate(f"V={V_slider:.0f}×\nQ={q_v:.3f}",
                     xy=(V_slider, q_v),
                     xytext=(V_slider + x_off, q_v + 0.04),
@@ -1251,21 +1228,26 @@ class App(tk.Tk):
                     bbox=dict(boxstyle="round,pad=0.3", fc="white",
                               ec=ACC, alpha=0.88))
 
-        # Schwelllinien
-        for q_thresh, col, label in [(0.9, GRN, "Q=0.90 (sehr gut)"),
-                                      (0.7, "#BA7517", "Q=0.70 (spürbar)")]:
+        # ── Schwelllinien ─────────────────────────────────────────────────
+        for q_thresh, col, lbl in [(0.9, GRN, "Q=0.90 (sehr gut)"),
+                                    (0.7, "#BA7517", "Q=0.70 (spürbar)")]:
             ax.axhline(q_thresh, color=col, lw=1.0, ls=":", alpha=0.7)
-            ax.text(32, q_thresh + 0.008, label,
-                    fontsize=8, color=col, alpha=0.85)
+            ax.text(32, q_thresh + 0.008, lbl, fontsize=8, color=col, alpha=0.85)
 
-        ax.set_xlim(30, 250)
+        # ── max. Abweichung ───────────────────────────────────────────────
+        max_abw = float(np.max(np.abs(Qe_sph - Qn_sph)))
+
+        ax.set_xlim(30, V_max_plot)
         ax.set_ylim(0, 1.12)
         ax.set_xlabel("Vergrößerung V  [×]", fontsize=10)
-        ax.set_ylabel("Wahrgenommener Qualitätsindex Q_perc", fontsize=10)
+        ax.set_ylabel("Visueller Qualitätsindex  Q_vis", fontsize=10)
         ax.set_title(
-            f"Wahrgenommener Kontrast (CSF-gewichtet)  —  D={D:.0f}mm  f/{f/D:.1f}",
-            fontsize=10)
-        ax.legend(fontsize=9, loc="lower right")
+            f"Visuelle Wahrnehmung  —  D={D:.0f}mm  f/{f/D:.1f}"
+            f"  |  S_exakt={S_exakt:.3f}  max.Abw.={max_abw:.3f}",
+            fontsize=9)
+        ax.legend(fontsize=8, loc="lower right",
+                  title="— exakt (MTF×CSF)   - - Näherung Q̃(V)",
+                  title_fontsize=7)
         self._ax_fmt(ax)
         fig.tight_layout()
         canvas.draw_idle()
