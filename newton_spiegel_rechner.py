@@ -128,7 +128,7 @@ def perceived_quality_exakt_kurven_von_Wb(D_mm: float, Wb: float, lam_nm: float,
 
 def _Wb_von_S(S: float) -> float:
     """Wb direkt aus Strehl — Umkehrung der Maréchal-Näherung."""
-    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (2.0 * math.pi)
+    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (4.0 * math.pi)
     return Wrms * 1.5 * math.sqrt(5)
 
 def _kennzahlen_von_S(D_mm: float, S: float, Wb: float) -> dict:
@@ -1129,7 +1129,7 @@ class App(tk.Tk):
         # ── V-Bereich dynamisch ───────────────────────────────────────────
         V_krit     = D * 0.7 * math.sqrt(max(S_exakt, 1e-9))
         V_max_plot = 400.0
-        V_arr      = np.linspace(30, V_max_plot, 150)
+        V_arr      = np.linspace(20, V_max_plot, 150)
 
         # ── Q_vis exakt: MTF×CSF-Integral, kein S-Faktor ─────────────────
         Qe_sph  = perceived_quality_exakt_kurven(D, f, lam, V_arr)
@@ -1155,7 +1155,7 @@ class App(tk.Tk):
             # Qe: korrekt via Wb_s (nicht f des realen Spiegels)
             Qe_slide = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr)
             # Näherung: muss S_ex_s_ph als Asymptote nutzen, sonst divergieren die Kurven
-            Qn_slide = Q_naeh(V_arr, S_ex_s_ph)
+            Qn_slide = Q_naeh(V_arr, S_ex_s)
 
         strehl_label = f"Sphäre f/{f/D:.1f}  S={S_exakt:.3f} (exakt)"
 

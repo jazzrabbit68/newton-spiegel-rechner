@@ -35,7 +35,7 @@ def _wellenfronten(D_mm, f_mm, lam_nm):
 
 def _Wb_von_S(S):
     """Wb direkt aus Strehl — Umkehrung der Maréchal-Näherung."""
-    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (2.0 * math.pi)
+    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (4.0 * math.pi)
     return Wrms * 1.5 * math.sqrt(5)
 
 def _strehl_exakt(Wb, n=2000):
@@ -637,7 +637,7 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
         # Qe: korrekt via Wb_s
         Qe_slide = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr)
         # Näherung: S_ex_s_ph als Asymptote, sonst divergieren die Kurven
-        Qn_slide = Q_naeh(V_arr, S_ex_s_ph)
+        Qn_slide = Q_naeh(V_arr, S_ex_s)
 
     # Schraffur: Abweichung exakt ↔ Näherung
     ax.fill_between(V_arr, Qe_sph, Qn_sph,
