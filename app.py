@@ -18,7 +18,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "5.0.1 (2026-06-05)"
+VERSION = "5.0.2 (2026-06-05)"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # KERNFUNKTIONEN (identisch mit newton_spiegel_rechner.py)
@@ -33,10 +33,20 @@ def _wellenfronten(D_mm, f_mm, lam_nm):
     S    = math.exp(-(2 * math.pi * Wrms) ** 2)
     return lam_mm, Wp, Wb, Wrms, S
 
-def _Wb_von_S(S):
-    """Wb direkt aus Strehl — Umkehrung der Maréchal-Näherung."""
-    Wrms = math.sqrt(-math.log(max(S, 1e-9))) / (4.0 * math.pi)
-    return Wrms * 1.5 * math.sqrt(5)
+def _Wb_von_S(S, n=60):
+    """Wb via Bisektionssuche so dass _strehl_exakt(Wb) == S.
+    Ersetzt die frühere Maréchal-Umkehrung, die Wb um Faktor ~2 überschätzte
+    und dadurch die Schieber-Kurve mit falscher (zu hoher) Aberration berechnete.
+    """
+    if S >= 0.9999: return 0.0
+    lo, hi = 0.0, 0.44
+    for _ in range(n):
+        mid = (lo + hi) / 2.0
+        if _strehl_exakt(mid) > S:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
 
 def _strehl_exakt(Wb, n=2000):
     """Exakter Strehl via Pupillenintegral.
@@ -637,7 +647,7 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
         # Qe: korrekt via Wb_s
         Qe_slide = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr)
         # Näherung: S_ex_s_ph als Asymptote, sonst divergieren die Kurven
-        Qn_slide = Q_naeh(V_arr, S_ex_s)
+        Qn_slide = Q_naeh(V_arr, S_ex_s_ph)
 
     # Schraffur: Abweichung exakt ↔ Näherung
     ax.fill_between(V_arr, Qe_sph, Qn_sph,
@@ -868,26 +878,13 @@ elif diagramm == "Beugungsgrenze":
     plt.close(fig)
 
 elif diagramm == "MTF":
-    mtf_modus = st.radio(
-        "Darstellung",
-        ["MTF × Strehl  (Beobachtungsqualität)",
-         "MTF absolut  (Standard, ohne Strehl)",
-         "Kontrastverlust %",
-         "Klassisch  (Kurven, Vergleich mit Optikrechnern)"],
-        horizontal=True, index=0, label_visibility="collapsed")
-    modus_key = {"MTF × Strehl  (Beobachtungsqualität)":             "gesamt",
-                 "MTF absolut  (Standard, ohne Strehl)":             "absolut",
-                 "Kontrastverlust %":                                 "relativ",
-                 "Klassisch  (Kurven, Vergleich mit Optikrechnern)": "klassisch"}[mtf_modus]
-    fokus_key = "bestfocus"
-    if modus_key == "klassisch":
-        fokus_opt = st.radio(
-            "Fokusebene",
-            ["Best Focus  (ρ⁴−ρ², Beobachter fokussiert optimal)",
-             "Paraxialer Fokus  (ρ⁴, Literaturvergleich Sacek/Born&Wolf)"],
-            horizontal=True, index=0, label_visibility="visible")
-        fokus_key = "bestfocus" if "Best" in fokus_opt else "paraxial"
-    fig = fig_mtf(D, f, lam, S_slide, V_slider, modus=modus_key, fokus=fokus_key)
+    fokus_opt = st.radio(
+        "Fokusebene",
+        ["Best Focus  (ρ⁴−ρ², Beobachter fokussiert optimal)",
+         "Paraxialer Fokus  (ρ⁴, Literaturvergleich Sacek/Born&Wolf)"],
+        horizontal=True, index=0, label_visibility="visible")
+    fokus_key = "bestfocus" if "Best" in fokus_opt else "paraxial"
+    fig = fig_mtf(D, f, lam, S_slide, V_slider, modus="klassisch", fokus=fokus_key)
     st.pyplot(fig, use_container_width=True)
     plt.close(fig)
 
