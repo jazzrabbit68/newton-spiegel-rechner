@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visueller Qualitätsindex Q_vis(V) — Herleitung und Implementierung</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Source+Code+Pro:wght@400;600&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --acc:   #534AB7;
+    --cor:   #D85A30;
+    --grn:   #0F6E56;
+    --head:  #1A1840;
+    --text:  #1C1C2E;
+    --muted: #5A5A7A;
+    --rule:  #DDDDF0;
+    --bg:    #FAFAFA;
+    --code:  #F2F1FC;
+    --w: 720px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--text);
+    background: var(--bg);
+    padding: 0 24px 100px;
+  }
+
+  /* ── Seitenlayout ─────────────────────────── */
+  .page {
+    max-width: var(--w);
+    margin: 0 auto;
+  }
+
+  /* ── Titelblock ───────────────────────────── */
+  .title-block {
+    border-top: 3px solid var(--head);
+    padding: 48px 0 36px;
+    margin-bottom: 48px;
+  }
+  .title-block h1 {
+    font-family: 'Lora', serif;
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--head);
+    line-height: 1.3;
+    margin-bottom: 14px;
+  }
+  .title-block .subtitle {
+    font-size: 15px;
+    color: var(--muted);
+    font-style: italic;
+    margin-bottom: 20px;
+  }
+  .meta {
+    display: flex;
+    gap: 28px;
+    font-size: 13px;
+    color: var(--muted);
+    font-family: 'Source Code Pro', monospace;
+    border-top: 1px solid var(--rule);
+    padding-top: 14px;
+  }
+
+  /* ── Abstract ─────────────────────────────── */
+  .abstract {
+    border-left: 3px solid var(--acc);
+    padding: 16px 22px;
+    background: #F4F3FC;
+    margin-bottom: 48px;
+    border-radius: 0 4px 4px 0;
+  }
+  .abstract .label {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--acc);
+    margin-bottom: 8px;
+  }
+  .abstract p {
+    font-size: 14.5px;
+    line-height: 1.75;
+    color: var(--head);
+    margin-bottom: 0;
+  }
+
+  /* ── Abschnitte ───────────────────────────── */
+  section { margin-bottom: 44px; }
+
+  h2 {
+    font-family: 'Lora', serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--head);
+    margin: 0 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+  }
+  h2 .sec-num {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 12px;
+    color: var(--acc);
+    margin-right: 10px;
+    font-weight: 400;
+  }
+
+  h3 {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--head);
+    margin: 24px 0 8px;
+  }
+
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── Formeln ──────────────────────────────── */
+  .eq-block {
+    background: #fff;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 16px 24px;
+    margin: 18px 0 20px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 14px;
+    line-height: 2.0;
+    color: var(--head);
+    overflow-x: auto;
+  }
+  .eq-block .eq-label {
+    float: right;
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+    font-family: 'Source Sans 3', sans-serif;
+    margin-top: 2px;
+  }
+  .eq-block .comment {
+    color: var(--muted);
+    font-size: 12px;
+    font-style: italic;
+    font-family: 'Source Sans 3', sans-serif;
+  }
+
+  /* ── Inline Code ──────────────────────────── */
+  code {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 13px;
+    background: var(--code);
+    color: var(--acc);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* ── Fußnoten-Stil-Hinweise ───────────────── */
+  .note {
+    font-size: 13px;
+    color: var(--muted);
+    font-style: italic;
+    padding-left: 16px;
+    border-left: 2px solid var(--rule);
+    margin: 14px 0 18px;
+    line-height: 1.65;
+  }
+
+  /* ── Hervorhebung ─────────────────────────── */
+  .highlight {
+    background: #EEEEF8;
+    border-radius: 3px;
+    padding: 1px 4px;
+    color: var(--head);
+    font-weight: 600;
+  }
+
+  /* ── Literatur ────────────────────────────── */
+  .refs {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--muted);
+  }
+  .refs li {
+    padding: 5px 0 5px 8px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .refs li:last-child { border-bottom: none; }
+  .refs .ref-key {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 11px;
+    color: var(--acc);
+    margin-right: 8px;
+    font-weight: 600;
+  }
+
+  /* ── Tabelle ──────────────────────────────── */
+  .tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 16px 0 20px;
+  }
+  .tbl thead th {
+    background: var(--head);
+    color: #fff;
+    padding: 8px 14px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    font-family: 'Source Code Pro', monospace;
+  }
+  .tbl tbody tr:nth-child(even) { background: #F4F3FC; }
+  .tbl tbody td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    line-height: 1.55;
+  }
+  .tbl tbody td:first-child {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 12px;
+    color: var(--acc);
+    white-space: nowrap;
+  }
+
+  /* ── Trennlinie ───────────────────────────── */
+  hr {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 40px 0;
+  }
+
+  /* ── Fußzeile ─────────────────────────────── */
+  footer {
+    margin-top: 60px;
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: 'Source Code Pro', monospace;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ── Titelblock ────────────────────────────── -->
+<div class="title-block">
+  <h1>Ein vergrößerungsabhängiger visueller Qualitätsindex für sphärische Newton-Spiegel</h1>
+  <p class="subtitle">Herleitung, Implementierung und Validierung von Q<sub>vis</sub>(V) im Newton-Spiegel-Rechner v5.0</p>
+  <div class="meta">
+    <span>Newton-Spiegel-Rechner v5.0.2</span>
+    <span>Juni 2026</span>
+    <span>newton_spiegel_rechner.py</span>
+  </div>
+</div>
+
+<!-- ── Abstract ──────────────────────────────── -->
+<div class="abstract">
+  <div class="label">Zusammenfassung</div>
+  <p>
+    Ein Newton-Teleskop mit sphärischem Hauptspiegel erzeugt sphärische Aberration, deren
+    visuelle Auswirkung stark von der verwendeten Vergrößerung abhängt. Bestehende
+    Qualitätsmaße wie der Strehl-Quotient oder der MTF-Formverlust sind
+    vergrößerungsunabhängig und beschreiben daher nicht, was der Beobachter tatsächlich
+    wahrnimmt. Wir leiten einen visuellen Qualitätsindex Q<sub>vis</sub>(V) her, der das
+    CSF-gewichtete MTF-Integral des sphärischen Spiegels relativ zum beugungsbegrenzten
+    Parabolspiegel berechnet. Q<sub>vis</sub>(V) = 1 bedeutet keine wahrnehmbare
+    Verschlechterung; Q<sub>vis</sub>(V) → S<sub>exakt</sub> für sehr hohe Vergrößerungen.
+    Wir diskutieren eine analytische Näherungsformel Q̃(V), deren Grenzen, sowie einen
+    kritischen Implementierungsfehler (Faktor-2-Fehler bei der Wb-Inversion), der in v5.0.1
+    behoben wurde.
+  </p>
+</div>
+
+<!-- ── 1 Einleitung ──────────────────────────── -->
+<section>
+  <h2><span class="sec-num">1</span>Einleitung und Motivation</h2>
+  <p>
+    Der Qualitätsvergleich zwischen sphärischen und parabolischen Newtonspiegeln wird
+    üblicherweise mit dem Strehl-Quotienten S geführt. Ein Spiegel gilt als
+    „beugungsbegrenzt" für S ≥ 0.80 (Rayleigh-Kriterium) bzw. als optisch exzellent für
+    S ≥ 0.95. Beide Grenzen sind jedoch vergrößerungsunabhängig — sie sagen nichts darüber
+    aus, bei welcher Vergrößerung ein Qualitätsunterschied tatsächlich sichtbar wird.
+  </p>
+  <p>
+    Suiter [1] führte die kritische Vergrößerung V<sub>krit</sub> = D · 0.7 · √S ein:
+    unterhalb dieser Vergrößerung dominiert die Auflösungsgrenze des Auges, die sphärische
+    Aberration ist nicht erkennbar. Oberhalb von V<sub>krit</sub> wird der Aberrationsblur
+    sichtbar. Dieses Kriterium ist zwar qualitativ korrekt, liefert aber keine kontinuierliche
+    Qualitätskurve.
+  </p>
+  <p>
+    Der hier beschriebene Ansatz ersetzt die binäre Schwelle durch einen kontinuierlichen
+    Index Q<sub>vis</sub>(V), der auf dem CSF-gewichteten MTF-Integral basiert. Er ist eng
+    verwandt mit dem „Visible Contrast Loss" in der angewandten Optik [2, 3] und wurde für
+    die astronomische Beobachtungspraxis adaptiert.
+  </p>
+</section>
+
+<!-- ── 2 Wellenfront und Strehl ──────────────── -->
+<section>
+  <h2><span class="sec-num">2</span>Wellenfront und Strehl-Quotient</h2>
+
+  <h3>2.1 Sphärische Aberration</h3>
+  <p>
+    Ein sphärischer Spiegel mit Öffnung D, Brennweite f und Beobachtungswellenlänge λ
+    erzeugt am paraxialen Fokus einen Wellenfrontfehler PtV (Peak-to-Valley):
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(1)</span>
+    W<sub>p</sub> = D⁴ / (1024 · f³ · λ)    <span class="comment">[in Einheiten von λ]</span>
+  </div>
+  <p>
+    Durch optimale Defokussierung (Balancierung des ρ⁴-Terms mit einem ρ²-Defokus) wird
+    der RMS-Wellenfrontfehler minimiert. Die resultierende Wellenfront am besten Fokus lautet:
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(2)</span>
+    W(ρ) = 8 · W<sub>b</sub> · (ρ⁴ − ρ²)    <span class="comment">mit  W<sub>b</sub> = W<sub>p</sub>/4</span>
+  </div>
+  <p>
+    Der RMS-Wellenfrontfehler dieser Form beträgt W<sub>rms</sub> = W<sub>b</sub> / (1.5 · √5).
+  </p>
+
+  <h3>2.2 Strehl-Quotient: Näherung und exakter Wert</h3>
+  <p>
+    Die Maréchal-Näherung liefert den Strehl-Quotienten direkt aus W<sub>rms</sub>:
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(3)</span>
+    S<sub>Mar</sub> ≈ exp(−(2π · W<sub>rms</sub>)²)    <span class="comment">[gültig für W<sub>rms</sub> &lt; 0.07λ]</span>
+  </div>
+  <p>
+    Für schnelle Spiegel (f/D &lt; 8, entsprechend W<sub>b</sub> &gt; 0.08λ) überschätzt die
+    Maréchal-Näherung den wahren Strehl erheblich. Der exakte Wert folgt aus dem Pupillenintegral:
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(4)</span>
+    S<sub>exakt</sub> = |⟨exp(i · 2π · W(ρ))⟩|²<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= (2∫₀¹ cos(2π·W<sub>c</sub>(ρ)) ρ dρ)² + (2∫₀¹ sin(2π·W<sub>c</sub>(ρ)) ρ dρ)²<br>
+    <br>
+    <span class="comment">mit  W<sub>c</sub>(ρ) = W(ρ) − ⟨W⟩   (pistonbereinigt)</span>
+  </div>
+  <p>
+    Im Programm wird Gleichung (4) numerisch mit n = 2000 Stützstellen ausgewertet
+    (<code>_strehl_exakt(Wb)</code>). Ab v5.0.0 wird S<sub>exakt</sub> konsequent für alle
+    wahrnehmungsrelevanten Berechnungen verwendet.
+  </p>
+</section>
+
+<!-- ── 3 MTF ─────────────────────────────────── -->
+<section>
+  <h2><span class="sec-num">3</span>Modulationsübertragungsfunktion</h2>
+
+  <h3>3.1 MTF des Parabolspiegels</h3>
+  <p>
+    Die MTF eines beugungsbegrenzten Kreisteleskops (Parabolspiegel) hat die analytische Form:
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(5)</span>
+    m<sub>p</sub>(ν) = (2/π) · (arccos(ν) − ν · √(1−ν²))    <span class="comment">ν ∈ [0, 1]</span>
+  </div>
+  <p>
+    Die normierte Ortsfrequenz ν = 1 entspricht der Beugungsgrenzfrequenz
+    f<sub>c</sub> = D / (λ · 206265) [arcsec⁻¹]. Im Bildraum gilt
+    f<sub>c,mm</sub> = D / (λ · f) [Lp/mm].
+  </p>
+
+  <h3>3.2 MTF des sphärischen Spiegels</h3>
+  <p>
+    Die relative MTF des sphärischen Spiegels m<sub>sr</sub>(ν, W<sub>b</sub>) — normiert
+    auf m<sub>sr</sub>(0) = 1 — wird über das Talbot-Integral berechnet. Es integriert die
+    komplexe Amplitude über alle Paare von Pupillenpunkten mit Abstand ν in der Pupillenebene:
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(6)</span>
+    m<sub>sr</sub>(ν, W<sub>b</sub>) = |∫ exp(i · 2π · ΔW(x, ν)) h(x, ν) dx| / ∫ h(x, ν) dx<br>
+    <br>
+    <span class="comment">ΔW(x,ν) = W(x − ν/2) − W(x + ν/2)  [Wellenfrontdifferenz]</span><br>
+    <span class="comment">h(x,ν)  = geometrische Überlappfunktion der kreisförmigen Pupille</span>
+  </div>
+  <p>
+    Im Programm (<code>mtf_sph_rel</code>) wird das Integral mit n = 80 Stützstellen
+    numerisch ausgewertet und LRU-gecacht. Zwei Fokus-Modi sind implementiert: der
+    Standard-Modus (Best Focus, Gleichung 2) und der paraxiale Fokus W(ρ) = 8·W<sub>b</sub>·ρ⁴
+    für den Vergleich mit Sacek [4] und Born &amp; Wolf [5].
+  </p>
+</section>
+
+<!-- ── 4 Q_vis ────────────────────────────────── -->
+<section>
+  <h2><span class="sec-num">4</span>Herleitung des visuellen Qualitätsindex Q<sub>vis</sub>(V)</h2>
+
+  <h3>4.1 Motivation: Warum Strehl und MTF allein nicht genügen</h3>
+  <p>
+    Strehl S und MTF m<sub>sr</sub>(ν) beschreiben physikalische Eigenschaften des Teleskops,
+    sind aber unabhängig von der verwendeten Vergrößerung und vom menschlichen
+    Wahrnehmungsapparat. Ein sphärischer Spiegel mit S = 0.85 bei V = 50× ist für das
+    Auge kaum von einem Parabolspiegel zu unterscheiden; bei V = 300× ist der
+    Qualitätsunterschied deutlich sichtbar.
+  </p>
+  <p>
+    Der Grund liegt in der Contrast Sensitivity Function (CSF) des Auges: Das Auge hat ein
+    bandpassförmiges Empfindlichkeitsprofil mit einem Maximum bei etwa 10 Zyklen/Grad
+    (cpd). Ortsfrequenzen, die außerhalb dieses Peaks liegen, werden deutlich schlechter
+    wahrgenommen.
+  </p>
+
+  <h3>4.2 Contrast Sensitivity Function (CSF)</h3>
+  <p>
+    Wir verwenden die CSF nach van Meeteren / Watson-Ahumada [2, 3]:
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(7)</span>
+    CSF(f) = 2.6 · (0.0192 + 0.114 · f) · exp(−(0.114 · f)<sup>1.1</sup>)    <span class="comment">f in cpd</span>
+  </div>
+  <p>
+    Diese Funktion hat ihr Maximum bei etwa 10 cpd, fällt zu hohen Frequenzen steil ab
+    (Beugungsgrenze des Auges ~60 cpd) und zu niedrigen Frequenzen langsam
+    (Laterale Inhibition). Die Umrechnung der normierten Teleskopfrequenz ν in cpd erfolgt
+    über die Vergrößerung V:
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(8)</span>
+    f<sub>cpd</sub>(ν, V) = ν · f<sub>c</sub> · 3600 / V    <span class="comment">f<sub>c</sub> in arcsec⁻¹, V in ×</span>
+  </div>
+  <p>
+    Bei kleinen Vergrößerungen (V ≈ 30–50×) fallen alle Teleskopfrequenzen weit rechts
+    des CSF-Peaks bei f &gt; 50 cpd, wo CSF ≈ 0. Das Auge kann keine Aberrationen auflösen,
+    Q<sub>vis</sub> ≈ 1 unabhängig vom Spiegel. Bei V ≈ V<sub>krit</sub> wandern die
+    Teleskopfrequenzen in den empfindlichsten Bereich der CSF — Aberrationen werden maximal
+    sichtbar.
+  </p>
+
+  <h3>4.3 Definition von Q<sub>vis</sub>(V)</h3>
+  <p>
+    Q<sub>vis</sub>(V) ist das Verhältnis des CSF-gewichteten MTF-Integrals des sphärischen
+    Spiegels zu dem des beugungsbegrenzten Parabolspiegels bei gleicher Vergrößerung:
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(9)</span>
+    Q<sub>vis</sub>(V) = ∫₀¹ m<sub>sr</sub>(ν) · m<sub>p</sub>(ν) · CSF(f<sub>cpd</sub>(ν,V)) dν<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;——————————————————————————————<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;∫₀¹ m<sub>p</sub>(ν) · CSF(f<sub>cpd</sub>(ν,V)) dν
+  </div>
+  <p>
+    Diese Definition hat drei wichtige Eigenschaften:
+  </p>
+  <p>
+    <strong>1. Grenzwert bei kleiner Vergrößerung:</strong> Für V → V<sub>min</sub> wird
+    CSF(f<sub>cpd</sub>) sehr klein für alle ν &gt; 0, da alle Teleskopfrequenzen weit über
+    dem Auflösungsvermögen liegen. Das Verhältnis wird von ν → 0 dominiert, wo
+    m<sub>sr</sub>(0) = 1 → Q<sub>vis</sub>(V<sub>min</sub>) → 1. Der sphärische Spiegel
+    ist bei niedrigen Vergrößerungen nicht von einem Parabolspiegel zu unterscheiden.
+  </p>
+  <p>
+    <strong>2. Grenzwert bei großer Vergrößerung:</strong> Für V → ∞ wandern alle
+    Teleskopfrequenzen unter den CSF-Peak (f<sub>cpd</sub> → 0). Da CSF(f → 0) → konst.,
+    kürzt es sich näherungsweise heraus, und Q<sub>vis</sub> nähert sich dem
+    CSF-gewichteten MTF-Formverlust — einem Wert nahe, aber nicht identisch mit
+    S<sub>exakt</sub>.
+  </p>
+  <p>
+    <strong>3. Kein Strehl-Vorfaktor:</strong> Anders als ältere Formulierungen
+    multiplizieren wir die absolute MTF m<sub>sa</sub> = m<sub>sr</sub> · m<sub>p</sub> · S
+    <em>nicht</em> mit S. Der Strehl-Effekt ist bereits in m<sub>sr</sub> enthalten;
+    ein zusätzlicher Faktor S würde die Qualitätsminderung doppelt zählen.
+  </p>
+
+  <h3>4.4 Numerische Implementierung</h3>
+  <p>
+    Das Integral (9) wird mit n = 200 äquidistanten Stützstellen in ν ∈ [0, 1] berechnet
+    (Trapezregel). Die Implementierung in <code>perceived_quality_exakt()</code> lautet:
+  </p>
+  <div class="eq-block">
+    fc    = D / (λ[mm] · 206265)          <span class="comment"># Grenzfrequenz [arcsec⁻¹]</span><br>
+    ν     = linspace(0, 1, 200)<br>
+    mp    = [mtf_para(ν_i)        for ν_i in ν]<br>
+    msr   = [mtf_sph_rel(ν_i, Wb) for ν_i in ν]<br>
+    w_csf = [csf(ν_i·fc·3600/V)   for ν_i in ν]<br>
+    <br>
+    Q_vis = trapz(msr · mp · w_csf, ν) / trapz(mp · w_csf, ν)
+  </div>
+  <p>
+    Eine Variante <code>perceived_quality_exakt_von_Wb(D, Wb, λ, V)</code> akzeptiert Wb
+    direkt, ohne Rückrechnung über D und f. Sie wird für die Schieber-Vergleichskurve
+    verwendet, bei der ein hypothetischer Spiegel mit einem Wunsch-Strehl S<sub>slide</sub>
+    simuliert wird.
+  </p>
+</section>
+
+<!-- ── 5 Näherungsformel ──────────────────────── -->
+<section>
+  <h2><span class="sec-num">5</span>Analytische Näherungsformel Q̃(V)</h2>
+
+  <h3>5.1 Herleitung</h3>
+  <p>
+    Für praktische Abschätzungen und schnelle Berechnungen ist eine analytische Näherung
+    wünschenswert. Wir formulieren Q̃(V) als interpolierende Funktion zwischen zwei
+    bekannten Grenzwerten:
+  </p>
+  <p>
+    Für V → V<sub>min</sub>: Q̃ → 1 (kein wahrnehmbarer Verlust)<br>
+    Für V → ∞: Q̃ → S<sub>exakt</sub> (Asymptote)
+  </p>
+  <p>
+    Eine einfache Dämpfungsfunktion w(V) mit w(V<sub>krit</sub>) = 0.5 erfüllt diese
+    Bedingungen:
+  </p>
+  <div class="eq-block">
+    <span class="eq-label">(10)</span>
+    w(V) = 1 / (1 + (V<sub>krit</sub>/V)²)    <span class="comment">mit V<sub>krit</sub> = D · 0.7 · √S<sub>exakt</sub></span>
+  </div>
+  <div class="eq-block">
+    <span class="eq-label">(11)</span>
+    Q̃(V) = S<sub>exakt</sub> + (1 − S<sub>exakt</sub>) · (1 − w(V))
+  </div>
+  <p>
+    Der Term (1 − w(V)) interpoliert zwischen 0 (bei V ≪ V<sub>krit</sub>) und 1
+    (bei V ≫ V<sub>krit</sub>). Bei V = V<sub>krit</sub> gilt w = 0.5, also
+    Q̃(V<sub>krit</sub>) = (1 + S<sub>exakt</sub>) / 2.
+  </p>
+
+  <h3>5.2 Grenzen der Näherung</h3>
+  <p>
+    Q̃(V) bildet das vergrößerungsabhängige Verhalten qualitativ korrekt ab, überschätzt
+    jedoch die wahrgenommene Qualität systematisch im mittleren V-Bereich um typisch 1–3 %,
+    da die bandpassförmige CSF nicht modelliert wird. Im Gegensatz zu Q<sub>vis</sub>(V)
+    hat Q̃ auch keine physikalisch begründete obere V-Schranke.
+  </p>
+
+  <table class="tbl">
+    <thead>
+      <tr><th>S = 0.90, D = 355 mm</th><th>Q_vis exakt</th><th>Q̃ Näherung</th><th>Differenz</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>V = 50×</td><td>0.971</td><td>0.981</td><td>+0.010</td></tr>
+      <tr><td>V = 100×</td><td>0.950</td><td>0.966</td><td>+0.016</td></tr>
+      <tr><td>V = 200×</td><td>0.932</td><td>0.958</td><td>+0.026</td></tr>
+      <tr><td>V = 400×</td><td>0.887</td><td>0.926</td><td>+0.039</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Das Programm zeigt beide Kurven überlagert im Wahrnehmungs-Diagramm: Q<sub>vis</sub>
+    durchgezogen (exakt), Q̃ gestrichelt (Näherung). Die Schraffur zwischen beiden
+    Kurven visualisiert das Modellresiduum.
+  </p>
+</section>
+
+<!-- ── 6 Implementierungsfehler ──────────────── -->
+<section>
+  <h2><span class="sec-num">6</span>Kritischer Implementierungsfehler: Wb-Inversion</h2>
+
+  <h3>6.1 Der Faktor-2-Fehler</h3>
+  <p>
+    Für die Schieber-Vergleichskurve wird zu einem gewünschten Strehl-Wert S<sub>slide</sub>
+    das zugehörige W<sub>b</sub> gesucht. Bis v5.0.0 wurde diese Inversion über die
+    Maréchal-Näherung durchgeführt:
+  </p>
+  <div class="eq-block">
+    W<sub>rms</sub> = √(−ln S) / (2π)<br>
+    W<sub>b,alt</sub> = W<sub>rms</sub> · 1.5 · √5
+  </div>
+  <p>
+    Da die Maréchal-Näherung für relevante Strehl-Werte (S &lt; 0.99) den wahren Strehl
+    überschätzt, ist die Umkehrfunktion zu einem gegebenen S systemat­isch zu groß. Die
+    numerische Analyse ergab einen Faktor von ca. 2.001–2.016 über den gesamten
+    praxisrelevanten Bereich:
+  </p>
+
+  <table class="tbl">
+    <thead>
+      <tr><th>S<sub>target</sub></th><th>W<sub>b,alt</sub> (Maréchal)</th><th>W<sub>b,neu</sub> (Bisektion)</th><th>Faktor</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.98</td><td>0.075875</td><td>0.037910</td><td>2.001×</td></tr>
+      <tr><td>0.95</td><td>0.120900</td><td>0.060340</td><td>2.004×</td></tr>
+      <tr><td>0.90</td><td>0.173275</td><td>0.086315</td><td>2.007×</td></tr>
+      <tr><td>0.85</td><td>0.215203</td><td>0.106988</td><td>2.011×</td></tr>
+      <tr><td>0.80</td><td>0.252167</td><td>0.125105</td><td>2.016×</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Ein doppelt zu großes W<sub>b</sub> führt zu einer stark übertriebenen Aberration in
+    der MTF-Berechnung. Die Schieber-Kurve zeigte daher die Qualität eines viel schlechteren
+    Spiegels als eingestellt. Bei S<sub>slide</sub> = 0.90 und V = 200× betrug der
+    Fehler in Q<sub>vis</sub> ca. 0.18 — ein Qualitätsunterschied, der im Diagramm als
+    große Abweichung zwischen exakter und Näherungskurve erschien.
+  </p>
+
+  <h3>6.2 Korrektur: Bisektionssuche im Pupillenintegral</h3>
+  <p>
+    Ab v5.0.1 wird W<sub>b</sub> über eine Bisektionssuche im exakten Pupillenintegral
+    bestimmt, sodass <code>_strehl_exakt(Wb) == S_target</code> gilt (auf 60
+    Bisektionsschritte, Genauigkeit &lt; 10⁻¹⁸):
+  </p>
+  <div class="eq-block">
+    lo, hi = 0.0, 0.44<br>
+    <span class="comment">for _ in range(60):</span><br>
+    &nbsp;&nbsp;mid = (lo + hi) / 2<br>
+    &nbsp;&nbsp;if _strehl_exakt(mid) &gt; S_target: lo = mid<br>
+    &nbsp;&nbsp;else: hi = mid<br>
+    W<sub>b</sub> = (lo + hi) / 2
+  </div>
+  <p>
+    Nach der Korrektur liegt die Abweichung zwischen Q<sub>vis</sub> und Q̃ für die
+    Schieber-Kurve im gleichen Bereich wie für die Sphäre-Kurve (1–4 %), was dem
+    erwarteten strukturellen Residuum der Näherungsformel entspricht.
+  </p>
+
+  <div class="note">
+    Hinweis: Die Näherungsformel Q̃ muss die physikalisch korrekte Asymptote
+    S<sub>ex,ph</sub> = _strehl_exakt(W<sub>b,neu</sub>) verwenden, nicht den virtuellen
+    Schieberwert S<sub>slide</sub>. Der Labeltext in der Legende zeigt weiterhin S<sub>slide</sub>
+    (den Wunschstrehl), während die Kurvenform auf S<sub>ex,ph</sub> basiert.
+  </div>
+</section>
+
+<!-- ── 7 Gültigkeitsbereich ──────────────────── -->
+<section>
+  <h2><span class="sec-num">7</span>Gültigkeitsbereich und Einschränkungen</h2>
+
+  <h3>7.1 Vergrößerungsbereich</h3>
+  <p>
+    Q<sub>vis</sub>(V) ist physikalisch sinnvoll im Bereich <strong>V = 30–400×</strong>.
+    Bei sehr kleinen V dominiert die Augenauflösung (CSF ≈ 0 für alle Teleskopfrequenzen),
+    Q<sub>vis</sub> → 1 trivial. Bei sehr hohen V (V &gt; 500×) verschiebt sich das CSF-Gewicht
+    in den Anstiegsbereich der CSF (&lt; 3 cpd), was zu einem numerischen Artefakt führt
+    (Q<sub>vis</sub> steigt wieder an). Das Programm begrenzt die Achse auf 400×.
+  </p>
+
+  <h3>7.2 Modellgrenzen</h3>
+  <p>
+    Das Modell berücksichtigt ausschließlich sphärische Aberration 4. Ordnung
+    (ρ⁴-Term). Koma, Astigmatismus, Sekundärspiegelabschattung und chromatische
+    Aberration (bei Katadioptrika) bleiben unberücksichtigt. Die CSF nach van Meeteren
+    ist eine mittlere Bevölkerungsnorm; individuelle Augenparameter und
+    Adaptationszustand werden nicht modelliert.
+  </p>
+</section>
+
+<!-- ── 8 Fazit ───────────────────────────────── -->
+<section>
+  <h2><span class="sec-num">8</span>Fazit</h2>
+  <p>
+    Der visuelle Qualitätsindex Q<sub>vis</sub>(V) ermöglicht eine differenzierte,
+    vergrößerungsabhängige Bewertung des Qualitätsverlusts sphärischer Newton-Spiegel.
+    Er kombiniert das physikalisch exakte MTF-Modell mit dem wahrnehmungsphysiologischen
+    CSF-Modell des menschlichen Auges und gibt damit an, was der Beobachter bei einer
+    konkreten Vergrößerung tatsächlich wahrnimmt — im Gegensatz zu vergrößerungsunabhängigen
+    Maßen wie Strehl oder MTF-Formverlust.
+  </p>
+  <p>
+    Die analytische Näherung Q̃(V) ist für praktische Abschätzungen geeignet und
+    zeigt das richtige qualitative Verhalten (Q̃ → 1 für V ≪ V<sub>krit</sub>,
+    Q̃ → S für V ≫ V<sub>krit</sub>), überschätzt die wahrgenommene Qualität
+    jedoch systematisch um 1–4 % im mittleren V-Bereich. Beide Kurven werden im
+    Programm parallel dargestellt, um das Modellresiduum transparent zu machen.
+  </p>
+  <p>
+    Ein kritischer Implementierungsfehler — die Verwendung der Maréchal-Umkehrung für
+    die Wb-Inversion — wurde in v5.0.1 durch eine Bisektionssuche im exakten
+    Pupillenintegral behoben. Der Fehler führte zu einem systematisch doppelt so großen
+    W<sub>b</sub> und damit zu einer stark übertriebenen Aberration in der
+    Schieber-Vergleichskurve.
+  </p>
+</section>
+
+<hr>
+
+<!-- ── Literatur ─────────────────────────────── -->
+<section>
+  <h2><span class="sec-num"></span>Quellen</h2>
+  <ol class="refs">
+    <li><span class="ref-key">[1]</span> H. R. Suiter, <em>Star Testing Astronomical Telescopes</em>, Willmann-Bell, 2nd ed. 2008. — Herkunft der Formel V<sub>krit</sub> = D · 0.7 · √S.</li>
+    <li><span class="ref-key">[2]</span> A. van Meeteren, „Calculations on the optical modulation transfer function of the human eye for white light," <em>Optica Acta</em> 21(5), 395–412, 1974. — Grundlage der hier verwendeten CSF.</li>
+    <li><span class="ref-key">[3]</span> A. B. Watson &amp; A. J. Ahumada, „A standard model for foveal detection of spatial contrast," <em>J. Vision</em> 5(9):6, 717–740, 2005. — Parametrisierung der CSF-Formel.</li>
+    <li><span class="ref-key">[4]</span> V. Sacek, <em>telescope-optics.net</em>, Abschnitt „Spherical aberration and MTF". — Herleitung des MTF-Integrals am paraxialen Fokus.</li>
+    <li><span class="ref-key">[5]</span> M. Born &amp; E. Wolf, <em>Principles of Optics</em>, 7th ed., Cambridge University Press 1999, Kap. 9. — Analytische Grundlagen des Talbot-Integrals und der Pupillenfunktion.</li>
+  </ol>
+</section>
+
+<footer>
+  Newton-Spiegel-Rechner v5.0.2 · newton_spiegel_rechner.py · Juni 2026
+</footer>
+
+</div><!-- .page -->
+</body>
+</html>

@@ -745,7 +745,7 @@ st.caption(f"v{VERSION}  ·  Kontrast- und Schärfeverlust sphärischer Hauptspi
 with st.expander("ℹ️ Über dieses Programm"):
     st.caption(f"Version {VERSION}")
     import re as _re, os as _os
-    _wp_candidates = ["whitepaper.html", "/app/whitepaper.html"]
+    _wp_candidates = ["qvis_paper.html", "/app/qvis_paper.html"]
     _wp_path = next((p for p in _wp_candidates if _os.path.exists(p)), None)
     if _wp_path:
         _wp_html = open(_wp_path, encoding="utf-8").read()
@@ -758,7 +758,7 @@ with st.expander("ℹ️ Über dieses Programm"):
         st.warning("whitepaper.html nicht gefunden — bitte Datei im Programmverzeichnis ablegen.")
 
 with st.expander("📐 Technische Dokumentation"):
-    doc_html = open("/app/documentation_v3.html").read() if __import__('os').path.exists("/app/documentation_v3.html") else open("documentation_v3.html").read()
+    doc_html = open("/app/newton_spiegel_rechner_doku.html").read() if __import__('os').path.exists("/app/newton_spiegel_rechner_doku.html") else open("newton_spiegel_rechner_doku.html").read()
     # Entferne @page CSS (nicht relevant im Browser) und body-Margins
     import re
     doc_html = re.sub(r'@page\s*\{[^}]*\}', '', doc_html)

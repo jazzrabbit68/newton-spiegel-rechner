@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Newton-Spiegel-Rechner v5.0.2 — Dokumentation</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --acc:   #534AB7;
+    --cor:   #D85A30;
+    --grn:   #0F6E56;
+    --head:  #1A1840;
+    --bg:    #F7F7FB;
+    --bg2:   #EEEEF8;
+    --bg3:   #E4E3F5;
+    --code:  #F0EFF9;
+    --text:  #222235;
+    --muted: #666685;
+    --rule:  #C8C7E8;
+    --w:     860px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text);
+    background: var(--bg);
+    padding: 0 0 80px;
+  }
+
+  /* ── Topbar ─────────────────────────────────────────── */
+  .topbar {
+    background: var(--head);
+    color: #fff;
+    padding: 32px 40px 28px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+    border-bottom: 3px solid var(--acc);
+  }
+  .topbar h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #fff;
+  }
+  .topbar .ver {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: #9995CC;
+    white-space: nowrap;
+  }
+  .topbar nav {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .topbar nav a {
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #9995CC;
+    text-decoration: none;
+    padding: 3px 8px;
+    border-radius: 3px;
+    transition: background .15s, color .15s;
+  }
+  .topbar nav a:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+  /* ── Layout ─────────────────────────────────────────── */
+  .wrap {
+    max-width: var(--w);
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  /* ── Abschnitte ─────────────────────────────────────── */
+  section {
+    margin-top: 60px;
+    padding-top: 8px;
+    border-top: 1px solid var(--rule);
+  }
+  section:first-of-type { border-top: none; }
+
+  h2.sec {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--acc);
+    margin-bottom: 6px;
+  }
+  h3.title {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--head);
+    line-height: 1.25;
+    margin-bottom: 18px;
+  }
+
+  h4 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--head);
+    margin: 28px 0 10px;
+    padding-left: 12px;
+    border-left: 3px solid var(--acc);
+  }
+
+  p { margin-bottom: 12px; }
+
+  /* ── Code inline ────────────────────────────────────── */
+  code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    background: var(--code);
+    color: var(--acc);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* ── Code-Block ─────────────────────────────────────── */
+  pre {
+    background: var(--head);
+    color: #C8C7E8;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 18px 22px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 14px 0 18px;
+  }
+  pre .kw  { color: #9995CC; }
+  pre .fn  { color: #7EC8A0; }
+  pre .cm  { color: #5A5880; font-style: italic; }
+  pre .nu  { color: #E8AA70; }
+  pre .st  { color: #70B8E8; }
+
+  /* ── Formel-Tabelle ─────────────────────────────────── */
+  .ftable {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px;
+    font-size: 14px;
+  }
+  .ftable td {
+    padding: 7px 14px;
+    vertical-align: top;
+  }
+  .ftable td:first-child {
+    width: 30%;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--head);
+    background: var(--bg2);
+    border-right: 2px solid var(--rule);
+    white-space: nowrap;
+  }
+  .ftable td:last-child {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: #2C2C5E;
+    background: var(--code);
+  }
+  .ftable tr:not(:last-child) td { border-bottom: 1px solid var(--rule); }
+
+  /* ── Funktions-Tabelle ──────────────────────────────── */
+  .fntable {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px;
+    font-size: 13.5px;
+  }
+  .fntable thead tr {
+    background: var(--head);
+    color: #fff;
+  }
+  .fntable thead th {
+    padding: 9px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .fntable tbody tr:nth-child(even) { background: var(--bg2); }
+  .fntable tbody tr:nth-child(odd)  { background: #fff; }
+  .fntable tbody td {
+    padding: 9px 14px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--rule);
+  }
+  .fntable tbody td:first-child {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--acc);
+    white-space: nowrap;
+  }
+  .fntable tbody td:nth-child(2) {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--grn);
+    white-space: nowrap;
+  }
+  .fntable tbody td:last-child { color: var(--text); line-height: 1.5; }
+
+  /* ── Info-Karte ─────────────────────────────────────── */
+  .card {
+    background: #fff;
+    border-left: 3px solid var(--acc);
+    padding: 14px 18px;
+    border-radius: 0 6px 6px 0;
+    margin: 14px 0 20px;
+    font-size: 14px;
+    line-height: 1.6;
+    box-shadow: 0 1px 4px rgba(83,74,183,.08);
+  }
+  .card.warn { border-left-color: var(--cor); }
+  .card.info { border-left-color: var(--grn); }
+  .card strong { font-weight: 600; color: var(--head); }
+
+  /* ── Badge ──────────────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-right: 4px;
+  }
+  .badge.new  { background: #E8F5F0; color: var(--grn); }
+  .badge.fix  { background: #FBF0EC; color: var(--cor); }
+  .badge.chg  { background: #EEEEF8; color: var(--acc); }
+
+  /* ── Liste ──────────────────────────────────────────── */
+  ul.doc {
+    list-style: none;
+    padding: 0;
+    margin: 10px 0 18px;
+  }
+  ul.doc li {
+    padding: 4px 0 4px 20px;
+    position: relative;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  ul.doc li::before {
+    content: "—";
+    position: absolute;
+    left: 0;
+    color: var(--acc);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+  }
+
+  /* ── Slider-Tabelle ─────────────────────────────────── */
+  .stable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin: 14px 0 20px;
+  }
+  .stable thead tr { background: var(--head); color: #fff; }
+  .stable thead th {
+    padding: 9px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .stable tbody tr:nth-child(even) { background: var(--bg2); }
+  .stable tbody tr:nth-child(odd)  { background: #fff; }
+  .stable tbody td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  .stable tbody td:first-child { font-weight: 600; color: var(--head); }
+  .stable tbody td:nth-child(2) {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .stable tbody td:nth-child(3) {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--acc);
+  }
+
+  /* ── Versions-Tabelle ───────────────────────────────── */
+  .vtable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin: 14px 0 20px;
+  }
+  .vtable tbody tr { border-bottom: 1px solid var(--rule); }
+  .vtable tbody tr:last-child { border-bottom: none; }
+  .vtable tbody td { padding: 12px 14px; vertical-align: top; line-height: 1.55; }
+  .vtable tbody td:first-child {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--acc);
+    width: 72px;
+    white-space: nowrap;
+  }
+  .vtable tbody td:nth-child(2) {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    width: 105px;
+    white-space: nowrap;
+  }
+
+  /* ── Tab-Karten ─────────────────────────────────────── */
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0 20px; }
+  .tab-card {
+    background: #fff;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(83,74,183,.06);
+  }
+  .tab-card .tab-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .tab-card .tab-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--head);
+    margin-bottom: 8px;
+  }
+  .tab-card p { font-size: 13px; line-height: 1.55; color: var(--muted); margin-bottom: 0; }
+
+  /* ── Architektur-Diagram ────────────────────────────── */
+  .arch {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin: 14px 0 20px;
+  }
+  .arch-box {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .arch-box .arch-head {
+    background: var(--head);
+    color: #fff;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 8px 12px;
+  }
+  .arch-box .arch-body {
+    padding: 10px 12px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--muted);
+    background: #fff;
+  }
+  .arch-box .arch-body code { font-size: 11px; }
+
+  /* ── Footer ─────────────────────────────────────────── */
+  footer {
+    margin-top: 80px;
+    border-top: 1px solid var(--rule);
+    padding-top: 24px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* ── Scroll-Offset für Ankerpunkte ──────────────────── */
+  [id] { scroll-margin-top: 72px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>newton_spiegel_rechner.py</h1>
+  <span class="ver">v5.0.2 · Juni 2026</span>
+  <nav>
+    <a href="#grundlagen">Grundlagen</a>
+    <a href="#struktur">Struktur</a>
+    <a href="#funktionen">Funktionen</a>
+    <a href="#gui">GUI</a>
+    <a href="#diagramme">Diagramme</a>
+    <a href="#versionen">Versionen</a>
+  </nav>
+</div>
+
+<div class="wrap">
+
+<!-- ── Überblick ────────────────────────────────────── -->
+<section id="ueberblick" style="margin-top:40px; border-top:none;">
+  <h2 class="sec">Überblick</h2>
+  <h3 class="title">Newton-Spiegel-Rechner</h3>
+  <p>
+    Berechnet Kontrast- und Schärfeverluste sphärischer Hauptspiegel in Newton-Teleskopen
+    gegenüber dem idealen Parabolspiegel. Kombiniert Wellenfront-Optik (Strehl, MTF) mit
+    einem wahrnehmungsphysiologischen Modell (CSF) und stellt alle Ergebnisse interaktiv
+    in sechs Diagramm-Tabs dar.
+  </p>
+  <div class="card info">
+    <strong>Abhängigkeiten:</strong> Python ≥ 3.10 · matplotlib · numpy · tkinter (Stdlib)<br>
+    <strong>Start:</strong> <code>python newton_spiegel_rechner.py</code>
+  </div>
+</section>
+
+<!-- ── Grundlagen ────────────────────────────────────── -->
+<section id="grundlagen">
+  <h2 class="sec">2 · Physikalische Grundlagen</h2>
+  <h3 class="title">Wellenfront, Strehl, MTF, Q_vis</h3>
+
+  <h4>2.1  Wellenfrontfehler</h4>
+  <p>Ein sphärischer Spiegel erzeugt sphärische Aberration 4. Ordnung. Der Wellenfrontfehler
+  hängt von Öffnung D, Brennweite f und Wellenlänge λ ab.</p>
+  <table class="ftable">
+    <tr><td>W_PtV (paraxial)</td>   <td>Wp = D⁴ / (1024 · f³ · λ)  [in Einheiten λ]</td></tr>
+    <tr><td>W_PtV (best focus)</td> <td>Wb = Wp / 4</td></tr>
+    <tr><td>W_RMS</td>              <td>Wrms = Wb / (1.5 · √5)</td></tr>
+    <tr><td>Öffnungsverhältnis</td> <td>N = f / D</td></tr>
+  </table>
+  <p><strong>Best Focus:</strong> Durch Defokussierung (Balancierung der 4. Ordnung mit
+  einem Defokus-Term) wird der RMS-Wellenfrontfehler minimiert.
+  Wellenfront: <code>W(ρ) = 8·Wb·(ρ⁴ − ρ²)</code></p>
+
+  <h4>2.2  Strehl-Quotient</h4>
+  <p>Misst das Peak-Intensitätsverhältnis gegenüber dem beugungsbegrenzten Parabolspiegel.</p>
+  <table class="ftable">
+    <tr><td>Maréchal-Näherung</td><td>S ≈ exp(−(2π · Wrms)²)   [gültig für Wrms &lt; 0.07λ]</td></tr>
+    <tr><td>Exakter Strehl</td>   <td>S = |∫₀¹ exp(i·2π·W(ρ)) · 2ρ dρ|²   [Pupillenintegral]</td></tr>
+    <tr><td>W(ρ) best focus</td>  <td>W(ρ) = 8·Wb·(ρ⁴ − ρ²)</td></tr>
+    <tr><td>Eff. Öffnung</td>     <td>D_eff = D · S^0.25  (Kontrast)</td></tr>
+  </table>
+  <div class="card warn">
+    <strong>Hinweis:</strong> Die Maréchal-Näherung überschätzt den Strehl bei schnellen
+    Spiegeln (f/D &lt; 8) deutlich. Ab v5.0.1 wird für alle wahrnehmungsrelevanten
+    Berechnungen der exakte Strehl aus dem Pupillenintegral verwendet.
+  </div>
+
+  <h4>2.3  MTF</h4>
+  <p>Die MTF beschreibt die Kontrastübertragung als Funktion der normierten Ortsfrequenz
+  ν ∈ [0, 1], wobei ν = 1 der Beugungsgrenzfrequenz
+  <code>fc = D/(λ · 206265) [arcsec⁻¹]</code> entspricht.</p>
+  <table class="ftable">
+    <tr><td>MTF Paraboloid</td>   <td>mp(ν) = (2/π)·(arccos(ν) − ν·√(1−ν²))</td></tr>
+    <tr><td>MTF Sphäre (rel.)</td><td>msr(ν,Wb) = |∫ exp(i·2π·ΔW(x)) dx| / Normierung</td></tr>
+    <tr><td>MTF Sphäre (abs.)</td><td>msa(ν,Wb) = msr(ν,Wb) · mp(ν)</td></tr>
+    <tr><td>Grenzfrequenz</td>    <td>fc = D / (λ[mm] · 206265)  [arcsec⁻¹]</td></tr>
+  </table>
+  <p>Zwei Fokus-Modi:</p>
+  <ul class="doc">
+    <li><strong>Best Focus</strong> (Standard): <code>W(x) = 8·Wb·(x⁴ − x²)</code> — entspricht Zemax / telescope-optics.net</li>
+    <li><strong>Paraxialer Fokus:</strong> <code>W(x) = 8·Wb·x⁴</code> — entspricht Sacek / Born &amp; Wolf</li>
+  </ul>
+
+  <h4>2.4  Visueller Qualitätsindex Q_vis</h4>
+  <p>Q_vis misst die wahrgenommene Bildqualität über das CSF-gewichtete MTF-Integral.</p>
+  <table class="ftable">
+    <tr><td>Q_vis (exakt)</td>  <td>∫₀¹ msr·mp·CSF(ν·fc·3600/V) dν  ÷  ∫₀¹ mp·CSF(ν·fc·3600/V) dν</td></tr>
+    <tr><td>CSF(f)</td>         <td>2.6·(0.0192 + 0.114·f)·exp(−(0.114·f)^1.1)  [van Meeteren]</td></tr>
+    <tr><td>Q̃ Näherung</td>    <td>S + (1−S)·(1 − 1/(1+(V_krit/V)²))</td></tr>
+    <tr><td>V_krit</td>         <td>D · 0.7 · √S_exakt   [nach Suiter]</td></tr>
+  </table>
+  <div class="card">
+    <strong>Gültiger V-Bereich:</strong> 30–400×. Bei sehr kleinen V dominiert das Auge
+    (CSF ≈ 0 für hohe Frequenzen → Q ≈ 1), bei sehr großen V entsteht ein numerisches
+    Artefakt durch den CSF-Peak. Die Näherungsformel Q̃ ist im mittleren Bereich um
+    typisch 1–3 % zu optimistisch.
+  </div>
+
+  <h4>2.5  Wb-Inversion (Bisektionssuche)</h4>
+  <p>Frühere Versionen invertierten die Maréchal-Näherung und überschätzten Wb um Faktor ≈ 2.
+  Ab v5.0.2 wird korrekt bisektiert:</p>
+<pre><span class="kw">def</span> <span class="fn">_Wb_von_S</span>(S, n=60):
+    <span class="cm"># findet Wb sodass _strehl_exakt(Wb) == S</span>
+    lo, hi = <span class="nu">0.0</span>, <span class="nu">0.44</span>
+    <span class="kw">for</span> _ <span class="kw">in</span> range(n):
+        mid = (lo + hi) / <span class="nu">2.0</span>
+        <span class="kw">if</span> <span class="fn">_strehl_exakt</span>(mid) > S: lo = mid
+        <span class="kw">else</span>:                     hi = mid
+    <span class="kw">return</span> (lo + hi) / <span class="nu">2.0</span></pre>
+</section>
+
+<!-- ── Struktur ───────────────────────────────────────── -->
+<section id="struktur">
+  <h2 class="sec">3 · Programmstruktur</h2>
+  <h3 class="title">Drei-Schichten-Aufbau</h3>
+
+  <div class="arch">
+    <div class="arch-box">
+      <div class="arch-head">Kernrechnung · Z. 54–391</div>
+      <div class="arch-body">
+        Reine Physikfunktionen ohne GUI-Abhängigkeiten. Direkt testbar und
+        wiederverwendbar. Kein tkinter-Import nötig.<br><br>
+        <code>_wellenfronten · _strehl_exakt · berechne · mtf_* · csf · perceived_quality_*</code>
+      </div>
+    </div>
+    <div class="arch-box">
+      <div class="arch-head">GUI-Klasse · Z. 393–1264</div>
+      <div class="arch-body">
+        <code>class App(tk.Tk)</code><br><br>
+        <code>_build_ui()</code> — Layout &amp; Widgets<br>
+        <code>_aktualisieren()</code> — Slider lesen, alle Karten &amp; Diagramme aktualisieren<br>
+        <code>_diagramm_*()</code> — sechs Tab-Methoden
+      </div>
+    </div>
+    <div class="arch-box">
+      <div class="arch-head">Einstiegspunkt · Z. 1266</div>
+      <div class="arch-body">
+        <code>if __name__ == "__main__":</code><br><br>
+        Standard: startet <code>App().mainloop()</code><br>
+        Mit <code>--cli</code>: Kommandozeilen-Modus
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Funktionen ─────────────────────────────────────── -->
+<section id="funktionen">
+  <h2 class="sec">4 · Kernfunktionen</h2>
+  <h3 class="title">API-Referenz</h3>
+
+  <h4>4.1  Wellenfront &amp; Strehl</h4>
+  <table class="fntable">
+    <thead><tr><th>Funktion</th><th>Rückgabe</th><th>Beschreibung</th></tr></thead>
+    <tbody>
+      <tr><td>_wellenfronten(D, f, lam)</td><td>tuple</td><td>Gemeinsame Basis: Wp, Wb, Wrms, S_mar. Einheitlich von allen anderen Funktionen genutzt.</td></tr>
+      <tr><td>_strehl_exakt(Wb, n=2000)</td><td>float</td><td>Exakter Strehl via Pupillenintegral. Korrekt auch für f/D &lt; 8 (Wb &gt; 0.08λ).</td></tr>
+      <tr><td>_Wb_von_S(S, n=60)</td><td>float</td><td>Bisektionssuche: findet Wb so dass _strehl_exakt(Wb) == S. Korrekte Inversion, kein Maréchal-Fehler.</td></tr>
+      <tr><td>berechne(D, f, lam)</td><td>dict</td><td>Vollständige vergrößerungsunabhängige Kenngrößen: Strehl, Wb, Wrms, D_eff, V_krit, blur, Auflösungsverlust.</td></tr>
+      <tr><td>berechne_von_S(D, S, lam)</td><td>dict</td><td>Wie berechne(), aber direkt aus einem Strehl-Wert.</td></tr>
+      <tr><td>berechne_vergr(D, f, lam, V)</td><td>dict</td><td>Vergrößerungsabhängige D_eff für Paraboloid und Sphäre unter Berücksichtigung von eye_res.</td></tr>
+      <tr><td>kurven_N(D, lam, ...)</td><td>5-Tupel</td><td>Strehl (Maréchal + exakt), D_eff und Auflösungsverlust als Funktion von N. 5 Arrays zurück.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>4.2  MTF</h4>
+  <table class="fntable">
+    <thead><tr><th>Funktion</th><th>Rückgabe</th><th>Beschreibung</th></tr></thead>
+    <tbody>
+      <tr><td>mtf_para(f)</td><td>float</td><td>Analytische MTF des beugungsbegrenzten Kreisteleskops. mp(0)=1, mp(1)=0.</td></tr>
+      <tr><td>mtf_sph_rel(f, Wb, n=80)</td><td>float</td><td>Relative MTF des sphärischen Spiegels, normiert msr(0)=1. LRU-gecacht. Unterstützt paraxial=True.</td></tr>
+      <tr><td>mtf_kurven(D, f, lam)</td><td>tuple</td><td>Arrays (freqs_as, fc, mp, msa, msr, S). msa = msr·mp·S.</td></tr>
+      <tr><td>mtf_kurven_von_S(D, S)</td><td>tuple</td><td>Wie mtf_kurven(), Eingang ist S statt f.</td></tr>
+      <tr><td>csf(f_cpd)</td><td>float</td><td>Contrast Sensitivity Function nach van Meeteren / Watson-Ahumada. Peak bei ~10 cpd.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>4.3  Visueller Qualitätsindex</h4>
+  <table class="fntable">
+    <thead><tr><th>Funktion</th><th>Rückgabe</th><th>Beschreibung</th></tr></thead>
+    <tbody>
+      <tr><td>perceived_quality_exakt(D, f, lam, V)</td><td>float</td><td>Q_vis exakt via MTF×CSF-Integral. Kein Strehl-Faktor, kein w(V). Asymptote = MTF-Formverlust.</td></tr>
+      <tr><td>perceived_quality_exakt_kurven(..., V_arr)</td><td>array</td><td>Array-Variante von perceived_quality_exakt.</td></tr>
+      <tr><td>perceived_quality_exakt_von_Wb(D, Wb, lam, V)</td><td>float</td><td>Wie perceived_quality_exakt, aber Wb direkt übergeben. Verwendet für die Schieber-Kurve.</td></tr>
+      <tr><td>perceived_quality_exakt_kurven_von_Wb(...)</td><td>array</td><td>Array-Variante von perceived_quality_exakt_von_Wb.</td></tr>
+      <tr><td>perceived_quality(D, f, lam, V)</td><td>float</td><td>Ältere Näherungsvariante mit Dämpfungsfunktion w(V). Noch für Q_perc-Karten in der GUI.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── GUI ───────────────────────────────────────────── -->
+<section id="gui">
+  <h2 class="sec">5 · GUI</h2>
+  <h3 class="title">Bedienelemente &amp; Ergebniskarten</h3>
+
+  <h4>5.1  Eingabe-Schieber</h4>
+  <table class="stable">
+    <thead><tr><th>Schieber</th><th>Bereich</th><th>Standard</th><th>Wirkung</th></tr></thead>
+    <tbody>
+      <tr><td>Öffnung D</td>       <td>50…500 mm</td>  <td>200 mm</td> <td>Spiegelöffnung; bestimmt Beugungsgrenze und Strehl-Empfindlichkeit.</td></tr>
+      <tr><td>Brennweite f</td>    <td>200…4000 mm</td><td>1000 mm</td><td>Brennweite; f/D = Öffnungsverhältnis. Kleineres N → mehr sphärische Aberration.</td></tr>
+      <tr><td>Strehl-Quotient</td> <td>0…100 %</td>    <td>0 %</td>    <td>Virtuelle Verbesserung (0 = realer Spiegel). Steuert Schieber-Vergleichskurven in allen Diagrammen.</td></tr>
+      <tr><td>Auge-Auflösung</td>  <td>20…180 "</td>   <td>60 "</td>   <td>Auflösungsvermögen des Auges. Beeinflusst V_krit und D_eff-Diagramm.</td></tr>
+      <tr><td>Vergrößerung</td>    <td>30…250×</td>    <td>150×</td>   <td>Aktuelle Beobachtungsvergrößerung. Markierung in Wahrnehmungs- und Beugungsdiagramm.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>5.2  Ergebniskarten</h4>
+  <p>Farbkodierung: <span style="color:var(--grn);font-weight:600;">grün ≥ 0.95</span> &nbsp;
+  <span style="color:#E65100;font-weight:600;">orange 0.80–0.95</span> &nbsp;
+  <span style="color:#C62828;font-weight:600;">rot &lt; 0.80</span></p>
+  <ul class="doc">
+    <li><strong>Kontrast:</strong> Öffnungsverhältnis, Wp / Wb / Wrms, Strehl Maréchal + exakt (Δ), D_eff, V_krit (real → Schieber)</li>
+    <li><strong>Schärfe:</strong> Auflösungsverlust gg. Paraboloid [%], effektiver Verlust bei Slider-Vergrößerung [mm]</li>
+    <li><strong>Q_perc:</strong> CSF-gewichteter Index bei 30×, 80×, 160× und Slider-Vergrößerung</li>
+  </ul>
+</section>
+
+<!-- ── Diagramme ──────────────────────────────────────── -->
+<section id="diagramme">
+  <h2 class="sec">6 · Diagramm-Tabs</h2>
+  <h3 class="title">Sechs interaktive Diagramme</h3>
+
+  <div class="tabs">
+    <div class="tab-card">
+      <div class="tab-num">Tab 1</div>
+      <div class="tab-name">Strehl vs. f/D</div>
+      <p>Zwei Kurven: Maréchal-Näherung (blau) und exakter Pupillenintegral-Strehl (violett, gestrichelt). Marker Kreis + Raute am aktuellen Betriebspunkt mit beiden Werten. Referenzlinien S = 0.80 und S = 0.95.</p>
+    </div>
+    <div class="tab-card">
+      <div class="tab-num">Tab 2</div>
+      <div class="tab-name">Eff. Öffnung vs. f/D</div>
+      <p>D_eff = D · S^0.25 als Funktion von N. Zeigt den absoluten Öffnungsverlust in mm gegenüber dem Parabolspiegel.</p>
+    </div>
+    <div class="tab-card">
+      <div class="tab-num">Tab 3</div>
+      <div class="tab-name">D_eff vs. Öffnung</div>
+      <p>Effektive Öffnung als Funktion von D bei festem Öffnungsverhältnis. Vergleich realer Spiegel vs. Schieber-Wert.</p>
+    </div>
+    <div class="tab-card">
+      <div class="tab-num">Tab 4</div>
+      <div class="tab-name">Beugungsgrenze</div>
+      <p>Dawes-Limit, Airy-Radius und geometrischer Unschärfeblur als Funktion der Vergrößerung. Zeigt ab welcher V die sphärische Aberration für das Auge erkennbar wird.</p>
+    </div>
+    <div class="tab-card">
+      <div class="tab-num">Tab 5</div>
+      <div class="tab-name">MTF</div>
+      <p>Klassisches Kurvendiagramm. Zwei Fokus-Modi: Best Focus (Zemax-kompatibel) und Paraxialer Fokus (Sacek/Born &amp; Wolf). Zweite x-Achse in Lp/mm fokal. Planeten-Detailmarken.</p>
+    </div>
+    <div class="tab-card">
+      <div class="tab-num">Tab 6</div>
+      <div class="tab-name">Wahrnehmung</div>
+      <p>Q_vis vs. V (30–400×). Exakte und Näherungskurven für Paraboloid, Sphäre und Schieber. Schraffur exakt↔Näherung, V_min, V_krit, Asymptote, Slider-Marker. Max. Abweichung im Titel.</p>
+    </div>
+  </div>
+
+  <h4>Wahrnehmungs-Diagramm — Kurvensystem</h4>
+  <table class="fntable">
+    <thead><tr><th>Kurve</th><th>Stil</th><th>Beschreibung</th></tr></thead>
+    <tbody>
+      <tr><td>Paraboloid exakt</td><td>grün, —</td><td>Referenz: Q_vis = 1.0 für alle V (Grenzwert)</td></tr>
+      <tr><td>Paraboloid Näherung</td><td>grün, - -</td><td>Q̃ = 1.0 immer (S=1 → konstant 1)</td></tr>
+      <tr><td>Sphäre exakt</td><td>orange, —</td><td>MTF×CSF-Integral mit Wb des realen Spiegels</td></tr>
+      <tr><td>Sphäre Näherung</td><td>orange, - -</td><td>Q̃(V) = S_exakt + (1−S)·(1−w(V))</td></tr>
+      <tr><td>Schieber exakt</td><td>violett, —</td><td>MTF×CSF mit Wb_s = _Wb_von_S(S_slide)</td></tr>
+      <tr><td>Schieber Näherung</td><td>violett, - -</td><td>Q̃ mit S_ex_s_ph als Asymptote (physikalisch korrekt)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="card">
+    <strong>Schieber-Label vs. Schieber-Physik:</strong> Das Label in der Legende zeigt
+    <code>S_slide</code> (den virtuell gewünschten Wert vom Schieber).
+    Die Kurvenform und Asymptote basieren jedoch auf
+    <code>S_ex_s_ph = _strehl_exakt(Wb_s)</code> — dem physikalisch korrekten
+    Pupillenintegral-Strehl zu dem per Bisektionssuche gefundenen Wb.
+  </div>
+</section>
+
+<!-- ── Einschränkungen ───────────────────────────────── -->
+<section id="einschraenkungen">
+  <h2 class="sec">7 · Bekannte Einschränkungen</h2>
+  <h3 class="title">Modellgrenzen</h3>
+  <ul class="doc">
+    <li>Nur sphärische Aberration 4. Ordnung. Koma, Astigmatismus und höhere Ordnungen werden nicht berücksichtigt.</li>
+    <li>CSF nach van Meeteren: mittlere Näherung. Individuelle Augenunterschiede und Adaptationszustand nicht modelliert.</li>
+    <li>Q_vis ist nur im Bereich V = 30–400× physikalisch sinnvoll.</li>
+    <li>Q̃-Näherung überschätzt die Qualität bei mittleren V typisch um 1–3 %. Die exakte Kurve ist das zuverlässigere Modell.</li>
+    <li><code>_strehl_exakt()</code> ist nicht LRU-gecacht. Bei <code>kurven_N()</code> mit vielen Stützstellen kann die Berechnung einige Sekunden dauern.</li>
+  </ul>
+</section>
+
+<!-- ── Versionen ─────────────────────────────────────── -->
+<section id="versionen">
+  <h2 class="sec">8 · Versionshistorie</h2>
+  <h3 class="title">Changelog</h3>
+
+  <table class="vtable">
+    <tbody>
+      <tr>
+        <td>5.0.2</td>
+        <td>2026-06-05</td>
+        <td>
+          <span class="badge chg">chg</span> MTF-Darstellungsauswahl auf "Klassisch" reduziert<br>
+          <span class="badge chg">chg</span> Versionsstring in app.py synchronisiert
+        </td>
+      </tr>
+      <tr>
+        <td>5.0.1</td>
+        <td>2026-06-05</td>
+        <td>
+          <span class="badge fix">fix</span> <code>_Wb_von_S</code>: Bisektionssuche statt Maréchal-Umkehrung (Faktor-2-Fehler behoben)<br>
+          <span class="badge fix">fix</span> Q̃-Asymptote korrigiert: <code>S_ex_s_ph</code> statt <code>S_slide</code><br>
+          <span class="badge chg">chg</span> V-Achse Wahrnehmungsdiagramm fest auf 400× begrenzt
+        </td>
+      </tr>
+      <tr>
+        <td>5.0.0</td>
+        <td>2026-06-04</td>
+        <td>
+          <span class="badge new">new</span> <code>_strehl_exakt()</code> via Pupillenintegral<br>
+          <span class="badge new">new</span> <code>perceived_quality_exakt*()</code> Funktionsfamilie<br>
+          <span class="badge new">new</span> Zweite Kurve im Strehl-Diagramm (exakt vs. Näherung)<br>
+          <span class="badge new">new</span> Wahrnehmungsdiagramm: exakte + Näherungskurven, Schieber via Wb_s<br>
+          <span class="badge fix">fix</span> Schieber-Kurve: <code>perceived_quality_exakt_kurven_von_Wb</code> statt falschem f_real
+        </td>
+      </tr>
+      <tr>
+        <td>4.4.0</td>
+        <td>2026-05-30</td>
+        <td>
+          Ausgangsbasis. Maréchal-Strehl, MTF-Integral, CSF-gewichteter Q_perc, sechs Diagramm-Tabs.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  newton_spiegel_rechner.py · v5.0.2 · Dokumentation Juni 2026
+</footer>
+
+</div><!-- .wrap -->
+</body>
+</html>
