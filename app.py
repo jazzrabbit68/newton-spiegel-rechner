@@ -18,7 +18,8 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION = "5.0.2 (2026-06-05)"
+VERSION  = "5.1.0 (2026-06-07)"
+EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ═════════════════════════════════════════════════════════════════════════════
 # KERNFUNKTIONEN (identisch mit newton_spiegel_rechner.py)
@@ -132,13 +133,6 @@ def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=400):
         strehls_exakt.append(_strehl_exakt(r["Wb"]))
     return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste), np.array(strehls_exakt)
 
-def strehl_to_f(S, D_mm, lam_nm=550.0):
-    """Äquivalente Brennweite zu einem Strehl-Wert (nur für Info-Anzeige)."""
-    if S >= 0.9999: return D_mm * 50.0
-    Wb  = _Wb_von_S(S)
-    Wp  = Wb * 4.0
-    f3  = D_mm**4 / (1024.0 * Wp * lam_nm * 1e-6)
-    return D_mm * (f3 ** (1.0/3.0)) / D_mm
 
 def mtf_para(f):
     if f <= 0: return 1.0
@@ -255,11 +249,157 @@ def perceived_quality_exakt_kurven_von_Wb(D_mm, Wb, lam_nm, V_arr):
 
 def beurteilung(strehl):
     if strehl >= 0.95:
-        return "✓ Sehr gut — nahezu gleichwertig mit Parabolspiegel (Strehl ≥ 0.95)", "#2e7d32"
+        return T("verdict_good"), "#2e7d32"
     elif strehl >= 0.80:
-        return ("⚠  Noch beugungsbegrenzt (Maréchal), spürbarer Kontrastverlust bei Planeten  (0.80 ≤ Strehl < 0.95)"), "#e65100"
+        return T("verdict_ok"), "#e65100"
     else:
-        return ("✗  Nicht beugungsbegrenzt — erheblicher Kontrast- und Schärfeverlust, Parabolspiegel dringend empfohlen (Strehl < 0.80)"), "#c62828"
+        return T("verdict_bad"), "#c62828"
+
+
+# ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
+
+STRINGS = {
+    "win_title":    {"de": "Newton-Spiegel Rechner", "en": "Newton Mirror Calculator"},
+    "caption":      {"de": f"v{VERSION}  ·  Kontrast- und Schärfeverlust sphärischer Hauptspiegel",
+                     "en": f"v{VERSION}  ·  Contrast and sharpness loss of spherical primary mirrors"},
+    "about":        {"de": "ℹ️ Über dieses Programm", "en": "ℹ️ About this program"},
+    "doc":          {"de": "📐 Technische Dokumentation", "en": "📐 Technical documentation"},
+    "grp_params":   {"de": "Teleskop-Parameter",     "en": "Telescope Parameters"},
+    "sl_D":         {"de": "Öffnung D [mm]",          "en": "Aperture D [mm]"},
+    "sl_f":         {"de": "Brennweite f [mm]",       "en": "Focal length f [mm]"},
+    "grp_quality":  {"de": "Spiegel-Qualität",        "en": "Mirror Quality"},
+    "sl_strehl":    {"de": "Strehl-Schieber [%]",     "en": "Strehl slider [%]"},
+    "sl_strehl_help": {"de": "0 % = theoretische Sphäre aus D/f  |  95 % = fast Paraboloid",
+                       "en": "0 % = theoretical sphere from D/f  |  95 % = near paraboloid"},
+    "diag_select":  {"de": "Diagramm wählen",         "en": "Select diagram"},
+    "diag_titles": {
+        "de": ["Wahrnehmung","MTF","Strehl vs. f/D","Eff. Öffnung vs. f/D","D_eff vs. Öffnung","Beugungsgrenze"],
+        "en": ["Perception","MTF","Strehl vs. f/D","Eff. aperture vs. f/D","D_eff vs. aperture","Diffraction limit"],
+    },
+    "fokus_opt": {
+        "de": ["Best Focus  (ρ⁴−ρ², Beobachter fokussiert optimal)",
+               "Paraxialer Fokus  (ρ⁴, Literaturvergleich Sacek)"],
+        "en": ["Best Focus  (ρ⁴−ρ², observer focuses optimally)",
+               "Paraxial Focus  (ρ⁴, literature comparison Sacek)"],
+    },
+    "results":      {"de": "Ergebnisse", "en": "Results"},
+    "diagrams":     {"de": "Diagramme",  "en": "Diagrams"},
+    "lang_lbl":     {"de": "Sprache / Language", "en": "Sprache / Language"},
+    # Ergebnis-Labels
+    "lbl_fD":       {"de": "f/D",               "en": "f/D"},
+    "lbl_strehl":   {"de": "Strehl",             "en": "Strehl"},
+    "lbl_strehl_sub": {"de": "Maréchal / exakt", "en": "Maréchal / exact"},
+    "lbl_deff_k":   {"de": "D_eff Kontrast",     "en": "D_eff contrast"},
+    "lbl_deff_s":   {"de": "D_eff Schärfe",      "en": "D_eff sharpness"},
+    "lbl_vkrit_naeh": {"de": "V½ Wendepunkt Q̃", "en": "V½ inflection Q̃"},
+    "lbl_vkrit_blur": {"de": "V_krit Blur sichtbar", "en": "V_crit blur visible"},
+    "lbl_vkrit_ex": {"de": "V_krit Kontrastverlust >10%", "en": "V_crit contrast loss >10%"},
+    # Bewertungstexte
+    "verdict_good": {
+        "de": "✓ Sehr gut — nahezu gleichwertig mit Parabolspiegel (Strehl ≥ 0.95)",
+        "en": "✓ Very good — nearly equivalent to paraboloid (Strehl ≥ 0.95)",
+    },
+    "verdict_ok": {
+        "de": "⚠  Noch beugungsbegrenzt (Rayleigh), spürbarer Kontrastverlust bei Planeten  (0.80 ≤ Strehl < 0.95)",
+        "en": "⚠  Still diffraction-limited (Rayleigh), noticeable contrast loss on planets  (0.80 ≤ Strehl < 0.95)",
+    },
+    "verdict_bad": {
+        "de": "✗  Nicht beugungsbegrenzt — erheblicher Kontrast- und Schärfeverlust, Parabolspiegel dringend empfohlen (Strehl < 0.80)",
+        "en": "✗  Not diffraction-limited — significant contrast and sharpness loss, paraboloid strongly recommended (Strehl < 0.80)",
+    },
+    # Achsbeschriftungen
+    "ax_fD":        {"de": "Öffnungsverhältnis f/D",              "en": "Focal ratio f/D"},
+    "ax_strehl":    {"de": "Strehl-Quotient",                      "en": "Strehl ratio"},
+    "ax_deff_mm":   {"de": "Effektive Öffnung D_eff [mm]",         "en": "Effective aperture D_eff [mm]"},
+    "ax_aufl_pct":  {"de": "Geom. Auflösungsverlust [%]",          "en": "Geom. resolution loss [%]"},
+    "ax_D_mm":      {"de": "Öffnung D [mm]",                       "en": "Aperture D [mm]"},
+    "ax_oeff_loss": {"de": "Öffnungsverlust [%]",                  "en": "Aperture loss [%]"},
+    "ax_f_mm":      {"de": "Brennweite f [mm]",                    "en": "Focal length f [mm]"},
+    "ax_nu_norm":   {"de": "Normierte Frequenz ν",                 "en": "Normalised frequency ν"},
+    "ax_lpmm":      {"de": "Räumliche Frequenz [Lp/mm] (fokal)",   "en": "Spatial frequency [lp/mm] (focal)"},
+    "ax_mtf":       {"de": "Kontrastübertragung (MTF)",            "en": "Contrast transfer (MTF)"},
+    "ax_vergr":     {"de": "Vergrößerung V  [×]",                  "en": "Magnification V  [×]"},
+    "ax_qvis":      {"de": "Visueller Qualitätsindex Q_vis",       "en": "Visual quality index Q_vis"},
+    # Footer
+    "footer": {
+        "de": "Formeln: Maréchal-Näherung · MTF via Pupillen-Autokorrelation · CSF nach Barten (1999) · Quellen: Sacek (telescope-optics.net) · Suiter (Star Testing)",
+        "en": "Formulae: Maréchal approximation · MTF via pupil autocorrelation · CSF after Barten (1999) · Sources: Sacek (telescope-optics.net) · Suiter (Star Testing)",
+    },
+}
+
+
+def T(key: str) -> str:
+    """Gibt den String in der aktiven Sprache zurück."""
+    entry = STRINGS.get(key)
+    if entry is None:
+        return key
+    if isinstance(entry, dict):
+        return entry.get(st.session_state.get("lang","de"),
+                         entry.get("de", key))
+    return str(entry)
+
+
+def v_krit_blur_direkt(D_mm, f_mm, eye_res_as=EYE_RES):
+    """V ab der geometrischer Blur am Auge >= Augenauflösung — direkte Berechnung.
+    d_blur = D³/(64·f²)  [Sacek §4.7.3]
+    V_krit = eye_res / (d_blur/f · 206265)
+    """
+    d_blur_mm     = D_mm**3 / (64.0 * f_mm**2)
+    alpha_blur_as = d_blur_mm / f_mm * 206265.0
+    if alpha_blur_as <= 0:
+        return 1e9
+    return eye_res_as / alpha_blur_as
+
+
+def v_krit_aus_qvis(D_mm, f_mm, lam_nm, rel_schwelle=0.90,
+                    V_min=30.0, V_max=600.0, n_pts=60):
+    """V_krit aus MTF×CSF: ab wann Q_vis < rel_schwelle · Q_para."""
+    _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
+    fc     = D_mm / (lam_nm * 1e-6 * 206265)
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    nu     = np.linspace(0.0, 1.0, n_pts)
+    mp     = np.array([mtf_para(fi)        for fi in nu])
+    msr    = np.array([mtf_sph_rel(fi, Wb) for fi in nu])
+    def qvis_rel(V):
+        w = np.array([csf(fi * 3600.0 / V) for fi in nu * fc])
+        return float(_trapz(msr * mp * w, nu) / max(_trapz(mp * w, nu), 1e-12))
+    if qvis_rel(V_min) < rel_schwelle:
+        return V_min
+    if qvis_rel(V_max) >= rel_schwelle:
+        return V_max
+    lo, hi = V_min, V_max
+    for _ in range(40):
+        mid = (lo + hi) / 2.0
+        if qvis_rel(mid) >= rel_schwelle:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+def v_krit_aus_qvis_von_Wb(D_mm, Wb, lam_nm, rel_schwelle=0.90,
+                            V_min=30.0, V_max=600.0, n_pts=60):
+    """Wie v_krit_aus_qvis(), aber direkt aus Wb."""
+    fc     = D_mm / (lam_nm * 1e-6 * 206265)
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    nu     = np.linspace(0.0, 1.0, n_pts)
+    mp     = np.array([mtf_para(fi)        for fi in nu])
+    msr    = np.array([mtf_sph_rel(fi, Wb) for fi in nu])
+    def qvis_rel(V):
+        w = np.array([csf(fi * 3600.0 / V) for fi in nu * fc])
+        return float(_trapz(msr * mp * w, nu) / max(_trapz(mp * w, nu), 1e-12))
+    if qvis_rel(V_min) < rel_schwelle:
+        return V_min
+    if qvis_rel(V_max) >= rel_schwelle:
+        return V_max
+    lo, hi = V_min, V_max
+    for _ in range(40):
+        mid = (lo + hi) / 2.0
+        if qvis_rel(mid) >= rel_schwelle:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
 
 def ax_fmt(ax):
     ax.grid(True, color="#e5e5e5", lw=0.3)
@@ -292,8 +432,8 @@ def fig_strehl(D, f, lam, S_slide):
     if S_slide > S_akt + 0.01:
         ax.axhline(S_slide, color=COR, lw=0.9, ls="-.", label=f"Schieber S={S_slide:.3f}")
     ax.set_xlim(3, 15); ax.set_ylim(0, 1.08)
-    ax.set_xlabel("Öffnungsverhältnis f/D", fontsize=5)
-    ax.set_ylabel("Strehl-Quotient", fontsize=5)
+    ax.set_xlabel(T("ax_fD"), fontsize=5)
+    ax.set_ylabel(T("ax_strehl"), fontsize=5)
     ax.set_title(f"Strehl vs. f/D  (D={D:.0f}mm, lam={lam:.0f}nm)", fontsize=5)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"f/{x:.0f}" if x == int(x) else ""))
     ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
@@ -320,7 +460,7 @@ def fig_oeffnung(D, f, lam, S_slide):
                    label=f"Schieber Kontrast: {r_sl['Deff_k']:.0f} mm")
     ax.set_xlim(3, 15)
     ax.set_ylim(0, D * 1.08)
-    ax.set_xlabel("Öffnungsverhältnis f/D", fontsize=5)
+    ax.set_xlabel(T("ax_fD"), fontsize=5)
     ax.set_ylabel("Effektive Öffnung D\u2091\u2091\u2096 [mm]", fontsize=5, color=ACC)
     ax.tick_params(axis="y", labelcolor=ACC)
     ax.spines["left"].set_color(ACC)
@@ -338,7 +478,7 @@ def fig_oeffnung(D, f, lam, S_slide):
         # da der Schieber nur S verändert, nicht die Brennweite
         pass
     ax2.set_ylim(0, 105)
-    ax2.set_ylabel("Geom. Auflösungsverlust [%]", fontsize=5, color=COR)
+    ax2.set_ylabel(T("ax_aufl_pct"), fontsize=5, color=COR)
     ax2.tick_params(axis="y", labelcolor=COR)
     ax2.spines["right"].set_color(COR)
 
@@ -387,8 +527,8 @@ def fig_deff_D(D_akt, N_akt, S_slide):
     ax.axhline(20, color="#BA7517", lw=0.9, ls="--", label="20% Verlust")
     ax.axhline(50, color="#c62828", lw=1.0, ls=":",  label="50% Verlust")
     ax.set_xlim(50, 420); ax.set_ylim(0, min(100, max(90, loss_a+15)))
-    ax.set_xlabel("Öffnung D [mm]", fontsize=5)
-    ax.set_ylabel("Öffnungsverlust [%]", fontsize=5)
+    ax.set_xlabel(T("ax_D_mm"), fontsize=5)
+    ax.set_ylabel(T("ax_oeff_loss"), fontsize=5)
     ax.set_title("Öffnungsverlust vs. Öffnung", fontsize=5)
     ax.legend(fontsize=5, loc="upper left"); ax_fmt(ax)
     fig.tight_layout(); return fig
@@ -425,13 +565,13 @@ def fig_beugung(D_akt, f_akt):
                 arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.85))
     ax.set_xlim(200, 2000); ax.set_ylim(0, 300)
-    ax.set_xlabel("Brennweite f [mm]", fontsize=5)
-    ax.set_ylabel("Öffnung D [mm]", fontsize=5)
+    ax.set_xlabel(T("ax_f_mm"), fontsize=5)
+    ax.set_ylabel(T("ax_D_mm"), fontsize=5)
     ax.set_title("Beugungsgrenze sphärischer Spiegel  (λ=550nm)", fontsize=5)
     ax.legend(fontsize=5, loc="upper left"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
-def fig_mtf(D, f, lam, S_slide, V, modus="gesamt", fokus="bestfocus"):
+def fig_mtf(D, f, lam, S_slide, V=150.0, modus="gesamt", fokus="bestfocus"):
     paraxial    = (fokus == "paraxial")
     fokus_label = "Paraxialer Fokus (ρ⁴)" if paraxial else "Best Focus (ρ⁴−ρ²)"
     fig, ax = plt.subplots(figsize=(5, 2.8), dpi=120)
@@ -478,17 +618,17 @@ def fig_mtf(D, f, lam, S_slide, V, modus="gesamt", fokus="bestfocus"):
                     label.replace("\n"," "), fontsize=4, color=col, rotation=90, va="top")
         ax2x = ax.twiny(); ax2x.set_facecolor("none")
         ax2x.set_xlim(0, fc_fokal)
-        ax2x.set_xlabel("Räumliche Frequenz [Lp/mm] (fokal)", fontsize=4)
+        ax2x.set_xlabel(T("ax_lpmm"), fontsize=4)
         ax2x.tick_params(axis="x", labelsize=4)
         ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
-        ax.set_xlabel("Normierte Frequenz ν", fontsize=5)
-        ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=5)
+        ax.set_xlabel(T("ax_nu_norm"), fontsize=5)
+        ax.set_ylabel(T("ax_mtf"), fontsize=5)
         ax.set_title(f"MTF-Kurven [{fokus_label}] — D={D:.0f}mm f/{f/D:.1f}  "
                      f"Strehl={strehl:.3f}  fc={fc_fokal:.1f}Lp/mm", fontsize=5)
         fc_color = "#2e7d32" if paraxial else ACC
         ax.text(0.98, 0.97,
                 f"{fokus_label}\n"
-                + ("Vergleich: Sacek / Born&Wolf" if paraxial
+                + ("Vergleich: Sacek §4.7" if paraxial
                    else "Vergleich: Zemax / telescope-optics.net"),
                 transform=ax.transAxes, ha="right", va="top", fontsize=4,
                 color=fc_color,
@@ -545,7 +685,7 @@ def fig_mtf(D, f, lam, S_slide, V, modus="gesamt", fokus="bestfocus"):
         ax.text(0.01, 0.215, "20%-Schwelle", transform=ax.get_yaxis_transform(),
                 fontsize=5, fontweight="bold", color="#BA7517")
         ax.set_ylim(0, 1.18)
-        ax.set_ylabel("Kontrastübertragung", fontsize=5)
+        ax.set_ylabel(T("ax_mtf"), fontsize=5)
         if modus == "absolut":
             ax.set_title(f"MTF absolut (Standard, ohne Strehl) — "
                          f"D={D:.0f}mm f/{f/D:.1f}  Strehl={strehl:.3f}", fontsize=5)
@@ -603,7 +743,7 @@ def fig_mtf(D, f, lam, S_slide, V, modus="gesamt", fokus="bestfocus"):
     ax.legend(fontsize=5, loc="upper right"); ax_fmt(ax)
     fig.tight_layout(); return fig
 
-def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
+def fig_wahrnehmung(D, f, lam, S_slide, S_real):
     """Wahrnehmungs-Diagramm nach v5.0.1:
     - Exakte Kurven via MTF×CSF-Integral (perceived_quality_exakt)
     - Näherungskurven via Dämpfungsfunktion w(V)
@@ -701,16 +841,6 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
                     fontweight="bold",
                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=col, alpha=0.80))
 
-    # Slider-Vergrößerung
-    q_v = perceived_quality_exakt(D, f, lam, V_slider)
-    ax.axvline(V_slider, color=ACC, lw=1.0, ls="-", alpha=0.9)
-    ax.scatter([V_slider], [q_v], color=ACC, s=22, zorder=7)
-    x_off = -65 if V_slider > V_max_plot * 0.8 else 12
-    ax.annotate(f"V={V_slider:.0f}x\nQ={q_v:.3f}", xy=(V_slider, q_v),
-                xytext=(V_slider + x_off, q_v + 0.04), fontsize=5,
-                color=ACC, fontweight="bold",
-                arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
-                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.88))
 
     # Schwelllinien
     for q_thresh, col, label in [(0.9, GRN, "Q=0.90 (sehr gut)"),
@@ -720,8 +850,8 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
 
     max_abw = float(np.max(np.abs(Qe_sph - Qn_sph)))
     ax.set_xlim(30, V_max_plot); ax.set_ylim(0, 1.12)
-    ax.set_xlabel("Vergroesserung V  [x]", fontsize=5)
-    ax.set_ylabel("Visueller Qualitaetsindex Q_vis", fontsize=5)
+    ax.set_xlabel(T("ax_vergr"), fontsize=5)
+    ax.set_ylabel(T("ax_qvis"), fontsize=5)
     ax.set_title(
         f"Visuelle Wahrnehmung  D={D:.0f}mm  f/{f/D:.1f}"
         f"  S_exakt={S_exakt:.3f}  max.Abw.={max_abw:.3f}", fontsize=5)
@@ -739,10 +869,26 @@ def fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real):
 st.set_page_config(page_title="Newton-Spiegel Rechner", layout="wide")
 st.markdown("<style>div.block-container{padding-top:1rem}</style>",
             unsafe_allow_html=True)
-st.title("Newton-Spiegel Rechner")
-st.caption(f"v{VERSION}  ·  Kontrast- und Schärfeverlust sphärischer Hauptspiegel")
 
-with st.expander("ℹ️ Über dieses Programm"):
+# ── Sprache ───────────────────────────────────────────────────────────────────
+if "lang" not in st.session_state:
+    st.session_state["lang"] = "de"
+
+lang_col1, lang_col2 = st.columns([8, 1])
+with lang_col2:
+    lang_choice = st.radio(T("lang_lbl"), ["de", "en"],
+                           index=0 if st.session_state["lang"] == "de" else 1,
+                           horizontal=True, label_visibility="collapsed")
+    if lang_choice != st.session_state["lang"]:
+        st.session_state["lang"] = lang_choice
+        st.rerun()
+
+with lang_col1:
+    st.title(T("win_title"))
+    st.caption(T("caption"))
+
+# ── Über / Doku ───────────────────────────────────────────────────────────────
+with st.expander(T("about")):
     st.caption(f"Version {VERSION}")
     import re as _re, os as _os
     _wp_candidates = ["qvis_paper.html", "/app/qvis_paper.html"]
@@ -750,96 +896,98 @@ with st.expander("ℹ️ Über dieses Programm"):
     if _wp_path:
         _wp_html = open(_wp_path, encoding="utf-8").read()
         _wp_html = _re.sub(r'@page\s*\{[^}]*\}', '', _wp_html)
-        _body = _re.search(r'<body[^>]*>(.*?)</body>', _wp_html, _re.DOTALL)
+        _body  = _re.search(r'<body[^>]*>(.*?)</body>', _wp_html, _re.DOTALL)
         _style = _re.search(r'<style>(.*?)</style>', _wp_html, _re.DOTALL)
-        _css = _style.group(1) if _style else ""
+        _css   = _style.group(1) if _style else ""
         st.html(f"<style>{_css}</style>{_body.group(1)}" if _body else _wp_html)
     else:
-        st.warning("whitepaper.html nicht gefunden — bitte Datei im Programmverzeichnis ablegen.")
+        st.warning("qvis_paper.html nicht gefunden.")
 
-with st.expander("📐 Technische Dokumentation"):
-    doc_html = open("/app/newton_spiegel_rechner_doku.html").read() if __import__('os').path.exists("/app/newton_spiegel_rechner_doku.html") else open("newton_spiegel_rechner_doku.html").read()
-    # Entferne @page CSS (nicht relevant im Browser) und body-Margins
-    import re
-    doc_html = re.sub(r'@page\s*\{[^}]*\}', '', doc_html)
-    doc_html = re.sub(r'margin:\s*-20mm[^;]+;', 'margin: 0;', doc_html)
-    # Nur den Body-Inhalt extrahieren
-    body_match = re.search(r'<body[^>]*>(.*?)</body>', doc_html, re.DOTALL)
-    if body_match:
-        body_content = body_match.group(1)
-        style_match  = re.search(r'<style>(.*?)</style>', doc_html, re.DOTALL)
-        style        = style_match.group(1) if style_match else ""
-        st.html(f"<style>{style}</style>{body_content}")
+with st.expander(T("doc")):
+    import re, os
+    _doku_candidates = ["newton_spiegel_rechner_doku.html", "/app/newton_spiegel_rechner_doku.html"]
+    _doku_path = next((p for p in _doku_candidates if os.path.exists(p)), None)
+    if _doku_path:
+        doc_html = open(_doku_path).read()
+        doc_html = re.sub(r'@page\s*\{[^}]*\}', '', doc_html)
+        body_match = re.search(r'<body[^>]*>(.*?)</body>', doc_html, re.DOTALL)
+        if body_match:
+            style_match = re.search(r'<style>(.*?)</style>', doc_html, re.DOTALL)
+            style = style_match.group(1) if style_match else ""
+            st.html(f"<style>{style}</style>{body_match.group(1)}")
+        else:
+            st.html(doc_html)
     else:
-        st.html(doc_html)
+        st.warning("Dokumentation nicht gefunden.")
 
 # ── Seitenleiste: Eingaben ────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("Teleskop-Parameter")
-    D   = st.slider("Öffnung D [mm]",       50,  500, 200, step=10)
-    f   = st.slider("Brennweite f [mm]",    200, 4000, 1000, step=50)
-    lam = 550.0  # fest
+    st.header(T("grp_params"))
+    D   = st.slider(T("sl_D"),  50,  500, 200, step=10)
+    f   = st.slider(T("sl_f"), 200, 4000, 1000, step=50)
+    lam = 550.0
 
     st.divider()
-    st.subheader("Spiegel-Qualität")
-    S_pct = st.slider("Strehl-Schieber [%]", 0, 95, 0, step=5,
-                      help="0 % = theoretische Sphäre aus D/f  |  95 % = fast Paraboloid")
-
-    st.divider()
-    st.subheader("Beobachtung")
-    V_slider = st.slider("Vergrößerung [×]", 30, 250, 150, step=10)
-    eye_res  = st.slider("Augen-Auflösung [\"]", 20, 180, 60, step=5)
+    st.subheader(T("grp_quality"))
+    S_pct = st.slider(T("sl_strehl"), 0, 95, 0, step=5,
+                      help=T("sl_strehl_help"))
 
 # ── Berechnungen ──────────────────────────────────────────────────────────────
-r      = berechne(D, f, lam)
+r       = berechne(D, f, lam)
 S_real  = r["strehl"]
 S_exakt = _strehl_exakt(r["Wb"])
 S_slide = S_real + (S_pct / 100.0) * (1.0 - S_real)
 S_slide = min(S_slide, 0.9999)
 
-rv  = berechne_vergr(D, f, lam, V_slider, eye_res)
-Vk  = v_kritisch(D, f, lam, eye_res)
+Vk      = v_kritisch(D, f, lam, EYE_RES)
+Wb_s    = _Wb_von_S(S_slide)
+
+Vk_naeh  = Vk["Vk_sph"]
+Vk_naeh_s = D * 0.7 * math.sqrt(max(S_slide, 1e-9))
+Vk_blur   = v_krit_blur_direkt(D, f, EYE_RES)
+Vk_ex     = v_krit_aus_qvis(D, f, lam)
+Vk_ex_s   = v_krit_aus_qvis_von_Wb(D, Wb_s, lam)
+
+alpha_blur = D**3 / (64 * f**2) / f * 206265
 
 Qp_30  = perceived_quality(D, f, lam, 30.0)
 Qp_80  = perceived_quality(D, f, lam, 80.0)
 Qp_160 = perceived_quality(D, f, lam, 160.0)
-Qp_V   = perceived_quality(D, f, lam, V_slider)
 
 verdict_text, verdict_color = beurteilung(S_real)
 
-# ── Ergebnisse kompakt ───────────────────────────────────────────────────────
-border = verdict_color  # already a hex color string
+# ── Ergebnisse ────────────────────────────────────────────────────────────────
 st.markdown(
     f"<div style='background:#f0f0f0;padding:7px 14px;border-radius:6px;"
-    f"border-left:4px solid {border};font-size:0.85em;margin-bottom:8px'>"
+    f"border-left:4px solid {verdict_color};font-size:0.85em;margin-bottom:8px'>"
     f"{verdict_text}</div>", unsafe_allow_html=True)
 
 def row(label, val, sub=""):
     sub_html = f"<span style='color:#888;font-size:0.8em'> {sub}</span>" if sub else ""
-    return f"<td style='padding:2px 14px 2px 0;white-space:nowrap'><b>{label}</b></td><td style='padding:2px 20px 2px 0;white-space:nowrap'>{val}{sub_html}</td>"
+    return (f"<td style='padding:2px 14px 2px 0;white-space:nowrap'><b>{label}</b></td>"
+            f"<td style='padding:2px 20px 2px 0;white-space:nowrap'>{val}{sub_html}</td>")
+
+def vk_ex_text(Ve):
+    return f"{Ve:.0f}×" if Ve > 30.5 else "< 30×"
 
 st.markdown(f"""
 <table style='font-size:0.88em;border-collapse:collapse;width:100%'>
 <tr>
-  {row("f/D", f"{r['N']:.1f}")}
-  {row("Strehl", f"{S_real:.4f}  /  {S_exakt:.4f}", "Marechal / exakt")}
-  {row("D_eff Kontrast", f"{r['Deff_k']:.1f} mm", f"−{r['loss_k']:.1f} mm")}
-  {row("D_eff Schärfe", f"{r['Deff_s']:.1f} mm", f"−{r['loss_s']:.1f} mm")}
-  {row("V_krit", f"{Vk['Vk_sph']:.0f}×")}
+  {row(T("lbl_fD"), f"{r['N']:.1f}")}
+  {row(T("lbl_strehl"), f"{S_real:.4f}  /  {S_exakt:.4f}", T("lbl_strehl_sub"))}
+  {row(T("lbl_deff_k"), f"{r['Deff_k']:.1f} mm", f"−{r['loss_k']:.1f} mm")}
+  {row(T("lbl_deff_s"), f"{r['Deff_s']:.1f} mm", f"−{r['loss_s']:.1f} mm")}
 </tr>
 <tr>
-  {row("Q₀.₂", f"{r['Q02']:.4f}")}
-  {row("Q₀.₄", f"{r['Q04']:.4f}")}
-  {row("Q₀.₆", f"{r['Q06']:.4f}")}
-  {row("Q_vis", f"{r['Qvis']:.4f}")}
-  {row(f"D_eff Sphäre ({V_slider}×)", f"{rv['Deff_sph']:.1f} mm", f"−{rv['verlust']:.1f} mm")}
+  {row(T("lbl_vkrit_naeh"), f"{Vk_naeh:.0f}×  →  {Vk_naeh_s:.0f}×")}
+  {row(T("lbl_vkrit_blur"), f"{Vk_blur:.0f}×  (α={alpha_blur:.1f}\")", "unabh. von S")}
+  {row(T("lbl_vkrit_ex"),   f"{vk_ex_text(Vk_ex)}  →  {vk_ex_text(Vk_ex_s)}")}
 </tr>
 <tr>
   {row("Q_perc  30×",  f"{Qp_30:.3f}")}
   {row("Q_perc  80×",  f"{Qp_80:.3f}")}
   {row("Q_perc 160×", f"{Qp_160:.3f}")}
-  {row(f"Q_perc {V_slider}×", f"{Qp_V:.3f}")}
-  <td></td><td></td>
+  {row("Q₀.₂ / Q₀.₄ / Q₀.₆", f"{r['Q02']:.3f} / {r['Q04']:.3f} / {r['Q06']:.3f}")}
 </tr>
 </table>
 """, unsafe_allow_html=True)
@@ -847,52 +995,42 @@ st.markdown(f"""
 st.divider()
 
 # ── Diagramme ─────────────────────────────────────────────────────────────────
-st.subheader("Diagramme")
-diagramm = st.selectbox("Diagramm wählen", [
-    "Wahrnehmung",
-    "MTF",
-    "Strehl vs. f/D",
-    "Eff. Öffnung vs. f/D",
-    "D_eff vs. Öffnung",
-    "Beugungsgrenze",
-])
+st.subheader(T("diagrams"))
+diag_titles = STRINGS["diag_titles"][st.session_state.get("lang","de")]
+diagramm = st.selectbox(T("diag_select"), diag_titles)
 
-if diagramm == "Strehl vs. f/D":
+# Interne Schlüssel aus Titel ableiten
+_diag_map = dict(zip(STRINGS["diag_titles"]["de"] + STRINGS["diag_titles"]["en"],
+                     ["Wahrnehmung","MTF","Strehl vs. f/D","Eff. Öffnung vs. f/D",
+                      "D_eff vs. Öffnung","Beugungsgrenze"] * 2))
+diag_key = _diag_map.get(diagramm, diagramm)
+
+if diag_key == "Strehl vs. f/D":
     fig = fig_strehl(D, f, lam, S_slide)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
+    st.pyplot(fig, use_container_width=True); plt.close(fig)
 
-elif diagramm == "Eff. Öffnung vs. f/D":
+elif diag_key == "Eff. Öffnung vs. f/D":
     fig = fig_oeffnung(D, f, lam, S_slide)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
+    st.pyplot(fig, use_container_width=True); plt.close(fig)
 
-elif diagramm == "D_eff vs. Öffnung":
+elif diag_key == "D_eff vs. Öffnung":
     fig = fig_deff_D(D, r["N"], S_slide)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
+    st.pyplot(fig, use_container_width=True); plt.close(fig)
 
-elif diagramm == "Beugungsgrenze":
+elif diag_key == "Beugungsgrenze":
     fig = fig_beugung(D, f)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
+    st.pyplot(fig, use_container_width=True); plt.close(fig)
 
-elif diagramm == "MTF":
-    fokus_opt = st.radio(
-        "Fokusebene",
-        ["Best Focus  (ρ⁴−ρ², Beobachter fokussiert optimal)",
-         "Paraxialer Fokus  (ρ⁴, Literaturvergleich Sacek/Born&Wolf)"],
-        horizontal=True, index=0, label_visibility="visible")
-    fokus_key = "bestfocus" if "Best" in fokus_opt else "paraxial"
-    fig = fig_mtf(D, f, lam, S_slide, V_slider, modus="klassisch", fokus=fokus_key)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
+elif diag_key == "MTF":
+    fokus_opts = STRINGS["fokus_opt"][st.session_state.get("lang","de")]
+    fokus_opt  = st.radio("", fokus_opts, horizontal=True, index=0)
+    fokus_key  = "bestfocus" if fokus_opts.index(fokus_opt) == 0 else "paraxial"
+    fig = fig_mtf(D, f, lam, S_slide, 150.0, modus="klassisch", fokus=fokus_key)
+    st.pyplot(fig, use_container_width=True); plt.close(fig)
 
-elif diagramm == "Wahrnehmung":
-    fig = fig_wahrnehmung(D, f, lam, V_slider, S_slide, S_real)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
+elif diag_key == "Wahrnehmung":
+    fig = fig_wahrnehmung(D, f, lam, S_slide, S_real)
+    st.pyplot(fig, use_container_width=True); plt.close(fig)
 
 st.divider()
-st.caption("Formeln: Maréchal-Näherung * MTF via Pupillen-Autokorrelation * CSF nach van Meeteren * "
-           "Quellen: telescope-optics.net * gordtulloch.com")
+st.caption(T("footer"))
