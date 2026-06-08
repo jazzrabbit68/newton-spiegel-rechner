@@ -828,18 +828,6 @@ def fig_wahrnehmung(D, f, lam, S_slide, S_real):
             ax.text(V_m + 2, 0.03, lbl, fontsize=5, color=col,
                     rotation=90, va="bottom", alpha=0.8)
 
-    # Feste Vergrößerungs-Markierungen
-    for V_mark, col, ls in [(80, "#888", "-."), (160, "#c62828", ":")]:
-        if V_mark > V_max_plot:
-            continue
-        idx = int(round((V_mark - 30) / (V_max_plot - 30) * (len(V_arr) - 1)))
-        q_m = float(Qe_sph[idx])
-        ax.axvline(V_mark, color=col, lw=0.7, ls=ls, alpha=0.5)
-        ax.scatter([V_mark], [q_m], color=col, s=14, zorder=6)
-        ax.annotate(f"{V_mark}x\n{q_m:.2f}", xy=(V_mark, q_m),
-                    xytext=(V_mark + 6, q_m - 0.05), fontsize=5, color=col,
-                    fontweight="bold",
-                    bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=col, alpha=0.80))
 
 
     # Schwelllinien
@@ -876,11 +864,14 @@ if "lang" not in st.session_state:
 
 lang_col1, lang_col2 = st.columns([8, 1])
 with lang_col2:
-    lang_choice = st.radio(T("lang_lbl"), ["de", "en"],
-                           index=0 if st.session_state["lang"] == "de" else 1,
-                           horizontal=True, label_visibility="collapsed")
-    if lang_choice != st.session_state["lang"]:
-        st.session_state["lang"] = lang_choice
+    _lang_labels = ["🇩🇪 Deutsch", "🇬🇧 English"]
+    _lang_keys   = ["de", "en"]
+    _lang_idx    = _lang_keys.index(st.session_state["lang"])
+    _lang_sel    = st.radio("🌐", _lang_labels, index=_lang_idx,
+                            horizontal=True, label_visibility="collapsed")
+    _lang_new    = _lang_keys[_lang_labels.index(_lang_sel)]
+    if _lang_new != st.session_state["lang"]:
+        st.session_state["lang"] = _lang_new
         st.rerun()
 
 with lang_col1:
@@ -976,7 +967,7 @@ st.markdown(f"""
   {row(T("lbl_fD"), f"{r['N']:.1f}")}
   {row(T("lbl_strehl"), f"{S_real:.4f}  /  {S_exakt:.4f}", T("lbl_strehl_sub"))}
   {row(T("lbl_deff_k"), f"{r['Deff_k']:.1f} mm", f"−{r['loss_k']:.1f} mm")}
-  {row(T("lbl_deff_s"), f"{r['Deff_s']:.1f} mm", f"−{r['loss_s']:.1f} mm")}
+  {row("W_PtV paraxial / best focus", f"{r['Wp']:.4f} λ  /  {r['Wb']:.4f} λ")}
 </tr>
 <tr>
   {row(T("lbl_vkrit_naeh"), f"{Vk_naeh:.0f}×  →  {Vk_naeh_s:.0f}×")}
@@ -987,7 +978,7 @@ st.markdown(f"""
   {row("Q_perc  30×",  f"{Qp_30:.3f}")}
   {row("Q_perc  80×",  f"{Qp_80:.3f}")}
   {row("Q_perc 160×", f"{Qp_160:.3f}")}
-  {row("Q₀.₂ / Q₀.₄ / Q₀.₆", f"{r['Q02']:.3f} / {r['Q04']:.3f} / {r['Q06']:.3f}")}
+  <td></td><td></td>
 </tr>
 </table>
 """, unsafe_allow_html=True)
