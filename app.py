@@ -18,7 +18,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "5.1.0 (2026-06-07)"
+VERSION  = "5.2.0 (2026-06-08)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -269,12 +269,13 @@ STRINGS = {
     "sl_f":         {"de": "Brennweite f [mm]",       "en": "Focal length f [mm]"},
     "grp_quality":  {"de": "Spiegel-Qualität",        "en": "Mirror Quality"},
     "sl_strehl":    {"de": "Strehl-Schieber [%]",     "en": "Strehl slider [%]"},
+    "sl_blende":    {"de": "Blende D [mm]",        "en": "Stop D [mm]"},
     "sl_strehl_help": {"de": "0 % = theoretische Sphäre aus D/f  |  95 % = fast Paraboloid",
                        "en": "0 % = theoretical sphere from D/f  |  95 % = near paraboloid"},
     "diag_select":  {"de": "Diagramm wählen",         "en": "Select diagram"},
     "diag_titles": {
-        "de": ["Wahrnehmung","MTF","Strehl vs. f/D","Eff. Öffnung vs. f/D","D_eff vs. Öffnung","Beugungsgrenze"],
-        "en": ["Perception","MTF","Strehl vs. f/D","Eff. aperture vs. f/D","D_eff vs. aperture","Diffraction limit"],
+        "de": ["Wahrnehmung","Blende","MTF","Strehl vs. f/D","Eff. Öffnung vs. f/D","D_eff vs. Öffnung","Beugungsgrenze"],
+        "en": ["Perception","Stop","MTF","Strehl vs. f/D","Eff. aperture vs. f/D","D_eff vs. aperture","Diffraction limit"],
     },
     "fokus_opt": {
         "de": ["Best Focus  (ρ⁴−ρ², Beobachter fokussiert optimal)",
@@ -400,6 +401,100 @@ def v_krit_aus_qvis_von_Wb(D_mm, Wb, lam_nm, rel_schwelle=0.90,
         else:
             hi = mid
     return (lo + hi) / 2.0
+
+
+def fig_blende(D, f, lam, D_blend):
+    """Blenden-Diagramm: Q̃(V) für Original und Blendenstufen (S exakt)."""
+    fig, ax = plt.subplots(figsize=(8.0, 4.8), dpi=96)
+    fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
+
+    lam_mm     = lam * 1e-6
+    V_arr      = np.linspace(30, 400, 150)
+    V_max_plot = 400.0
+
+    def S_von_D(Db):
+        _, _, Wb, _, _ = _wellenfronten(Db, f, lam)
+        return _strehl_exakt(Wb)
+
+    def Q_naeh_kurve(Db):
+        S  = S_von_D(Db)
+        Vk = Db * 0.7 * math.sqrt(max(S, 1e-9))
+        w  = 1.0 / (1.0 + (Vk / np.maximum(V_arr, 1e-9))**2)
+        return S + (1 - S) * (1 - w), S, Vk
+
+    Q_orig, S_orig, Vk_orig = Q_naeh_kurve(D)
+    ax.plot(V_arr, Q_orig, color=COR, lw=2.5, ls="-",
+            label=f"Original  D={D:.0f}mm  S={S_orig:.3f}  V½={Vk_orig:.0f}×")
+    ax.axhline(S_orig, color=COR, lw=0.8, ls=":", alpha=0.5)
+
+    # Zwischenstufen
+    colors_blend = ["#1565c0", "#2e7d32", "#7b1fa2", "#c8860a"]
+    if D_blend < D * 0.98:
+        n_steps = 4
+        for i in range(1, n_steps):
+            Db  = D_blend + i * (D - D_blend) / n_steps
+            Q_b, S_b, Vk_b = Q_naeh_kurve(Db)
+            col = colors_blend[i % len(colors_blend)]
+            ax.plot(V_arr, Q_b, color=col, lw=1.2, ls="--", alpha=0.6,
+                    label=f"D={Db:.0f}mm ({Db/D*100:.0f}%)  S={S_b:.3f}  V½={Vk_b:.0f}×")
+
+    # Gewählte Blende
+    if D_blend < D * 0.98:
+        Q_bl, S_bl, Vk_bl = Q_naeh_kurve(D_blend)
+        ax.plot(V_arr, Q_bl, color=ACC, lw=2.5, ls="-",
+                label=f"Blende  D={D_blend:.0f}mm ({D_blend/D*100:.0f}%)  "
+                      f"S={S_bl:.3f}  V½={Vk_bl:.0f}×")
+        ax.axhline(S_bl, color=ACC, lw=0.8, ls=":", alpha=0.5)
+        ax.text(V_max_plot*0.98, S_bl+0.012, f"Asymptote S={S_bl:.3f}",
+                fontsize=8, color=ACC, ha="right", alpha=0.85)
+        Q_bl_at_Vk = float(np.interp(Vk_orig, V_arr, Q_bl))
+        Q_or_at_Vk = float(np.interp(Vk_orig, V_arr, Q_orig))
+        ax.annotate(
+            f"bei V={Vk_orig:.0f}×:\nOriginal Q={Q_or_at_Vk:.2f}\n"
+            f"Blende   Q={Q_bl_at_Vk:.2f}  (+{Q_bl_at_Vk-Q_or_at_Vk:.2f})",
+            xy=(Vk_orig, Q_or_at_Vk),
+            xytext=(min(Vk_orig+25, 350), Q_or_at_Vk+0.12),
+            fontsize=8, color=ACC, fontweight="bold",
+            arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
+            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.88))
+
+    # Optimale Blende
+    D_scan = np.linspace(D * 0.40, D, 60)
+    Q_opt  = np.zeros(len(V_arr))
+    for j, V in enumerate(V_arr):
+        best_q = -1
+        for Db in D_scan:
+            S_b = S_von_D(Db)
+            Vk  = Db * 0.7 * math.sqrt(max(S_b, 1e-9))
+            w   = 1.0 / (1.0 + (Vk / max(V, 1e-9))**2)
+            q   = S_b + (1 - S_b) * (1 - w)
+            if q > best_q:
+                best_q = q
+        Q_opt[j] = best_q
+    ax.plot(V_arr, Q_opt, color=GRN, lw=1.8, ls="-.",
+            label="Optimale Blende (max Q̃ je V)")
+
+    ax.text(V_max_plot*0.98, S_orig+0.012, f"Asymptote S={S_orig:.3f}",
+            fontsize=8, color=COR, ha="right", alpha=0.85)
+    for q_thresh, col, lbl in [(0.9, GRN, "Q=0.90"), (0.7, "#BA7517", "Q=0.70")]:
+        ax.axhline(q_thresh, color=col, lw=0.8, ls=":", alpha=0.6)
+        ax.text(32, q_thresh+0.008, lbl, fontsize=7, color=col, alpha=0.8)
+    if 30 <= Vk_orig <= V_max_plot:
+        ax.axvline(Vk_orig, color=COR, lw=1.0, ls="--", alpha=0.5)
+        ax.text(Vk_orig+2, 0.03, f"V½={Vk_orig:.0f}×",
+                fontsize=7, color=COR, rotation=90, va="bottom", alpha=0.7)
+
+    ax.set_xlim(30, V_max_plot); ax.set_ylim(0, 1.12)
+    ax.set_xlabel(T("ax_vergr"), fontsize=10)
+    ax.set_ylabel("Q̃(V)  visueller Qualitätsindex  (S exakt, Q̃ Näherung)", fontsize=10)
+    ax.set_title(
+        f"Blendeneffekt  —  D={D:.0f}mm  f/{f/D:.1f}  S_orig={S_orig:.3f}"
+        f"  |  Blende={D_blend:.0f}mm  ({D_blend/D*100:.0f}%)"
+        f"  [lok. Min. bei f/5–6 physikalisch korrekt]", fontsize=8)
+    ax.legend(fontsize=8, loc="lower right")
+    ax.grid(True, color="#ddd", lw=0.5)
+    fig.tight_layout()
+    return fig
 
 def ax_fmt(ax):
     ax.grid(True, color="#e5e5e5", lw=0.3)
@@ -922,6 +1017,8 @@ with st.sidebar:
     st.subheader(T("grp_quality"))
     S_pct = st.slider(T("sl_strehl"), 0, 95, 0, step=5,
                       help=T("sl_strehl_help"))
+    st.divider()
+    D_blend = st.slider(T("sl_blende"), int(D*0.3), int(D*0.99), int(D*0.75), step=10)
 
 # ── Berechnungen ──────────────────────────────────────────────────────────────
 r       = berechne(D, f, lam)
@@ -992,7 +1089,7 @@ diagramm = st.selectbox(T("diag_select"), diag_titles)
 
 # Interne Schlüssel aus Titel ableiten
 _diag_map = dict(zip(STRINGS["diag_titles"]["de"] + STRINGS["diag_titles"]["en"],
-                     ["Wahrnehmung","MTF","Strehl vs. f/D","Eff. Öffnung vs. f/D",
+                     ["Wahrnehmung","Blende","MTF","Strehl vs. f/D","Eff. Öffnung vs. f/D",
                       "D_eff vs. Öffnung","Beugungsgrenze"] * 2))
 diag_key = _diag_map.get(diagramm, diagramm)
 
@@ -1021,6 +1118,10 @@ elif diag_key == "MTF":
 
 elif diag_key == "Wahrnehmung":
     fig = fig_wahrnehmung(D, f, lam, S_slide, S_real)
+    st.pyplot(fig, use_container_width=True); plt.close(fig)
+
+elif diag_key == "Blende":
+    fig = fig_blende(D, f, lam, D_blend)
     st.pyplot(fig, use_container_width=True); plt.close(fig)
 
 st.divider()
