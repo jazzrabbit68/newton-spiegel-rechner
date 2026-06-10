@@ -7,8 +7,6 @@ import numpy as np
 from functools import lru_cache
 import streamlit as st
 
-
-
 # ── Kernrechnung ──────────────────────────────────────────────────────────────
 
 def _wellenfronten(D_mm: float, f_mm: float, lam_nm: float):
@@ -1485,9 +1483,6 @@ with st.sidebar:
                       help=T("sl_strehl_help"))
     st.divider()
     D_blend = st.slider(T("sl_blende"), int(D*0.3), int(D*0.99), int(D*0.75), step=10)
-    d_fang_def = int(d_fang_min(D, f) * 1.1)
-    d_fang_val = st.slider(T("sl_dfang"), 0, int(D*0.5), d_fang_def, step=5,
-                           help=T("sl_dfang_help"))
 
 # ── Berechnungen ──────────────────────────────────────────────────────────────
 r       = berechne(D, f, lam)
