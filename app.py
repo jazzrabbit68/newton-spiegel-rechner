@@ -712,7 +712,6 @@ STRINGS = {
     "tab_mtf":         {"de": "  MTF  ",                    "en": "  MTF  "},
     "tab_wahrnehmung": {"de": "  Wahrnehmung  ",            "en": "  Perception  "},
     "tab_blende":      {"de": "  Blende  ",                 "en": "  Stop  "},
-    "tab_blende":      {"de": "  Blende  ",                 "en": "  Stop-down  "},
     # MTF-Beschriftungen
     "mtf_fokus_lbl":   {"de": "Fokusebene:",     "en": "Focus plane:"},
     "mtf_bf":  {"de": "Best Focus  (ρ⁴−ρ²,  telescope-optics.net)",
@@ -760,6 +759,43 @@ STRINGS = {
                  "en": "< 30×  — loss already at lowest magnif."},
     # Sprachumschalter
     "lang_lbl": {"de": "Sprache / Language:", "en": "Sprache / Language:"},
+    # Streamlit-spezifisch
+    "caption":    {"de": f"v{VERSION}  ·  Kontrast- und Schärfeverlust sphärischer Hauptspiegel",
+                   "en": f"v{VERSION}  ·  Contrast and sharpness loss of spherical primary mirrors"},
+    "about":      {"de": "ℹ️ Über dieses Programm", "en": "ℹ️ About this program"},
+    "doc":        {"de": "📐 Technische Dokumentation", "en": "📐 Technical documentation"},
+    "grp_quality":{"de": "Spiegel-Qualität",    "en": "Mirror Quality"},
+    "sl_strehl_help": {"de": "0 % = theoretische Sphäre aus D/f  |  95 % = fast Paraboloid",
+                       "en": "0 % = theoretical sphere from D/f  |  95 % = near paraboloid"},
+    "sl_dfang":   {"de": "Fangspiegel ∅ [mm]",  "en": "Secondary ∅ [mm]"},
+    "sl_dfang_help": {"de": "0 = kein Fangspiegel  |  Minimum wird automatisch berechnet",
+                      "en": "0 = no secondary  |  minimum is auto-calculated"},
+    "results":    {"de": "Ergebnisse",           "en": "Results"},
+    "diagrams":   {"de": "Diagramme",            "en": "Diagrams"},
+    "diag_select":{"de": "Diagramm wählen",      "en": "Select diagram"},
+    "diag_titles": {
+        "de": ["Wahrnehmung","Blende","MTF","Strehl vs. f/D","Eff. Öffnung vs. f/D","D_eff vs. Öffnung","Beugungsgrenze"],
+        "en": ["Perception","Stop","MTF","Strehl vs. f/D","Eff. aperture vs. f/D","D_eff vs. aperture","Diffraction limit"],
+    },
+    "fokus_opt": {
+        "de": ["Best Focus  (ρ⁴−ρ², Beobachter fokussiert optimal)",
+               "Paraxialer Fokus  (ρ⁴, Literaturvergleich Sacek)"],
+        "en": ["Best Focus  (ρ⁴−ρ², observer focuses optimally)",
+               "Paraxial Focus  (ρ⁴, literature comparison Sacek)"],
+    },
+    # Ergebnis-Labels
+    "lbl_fD":         {"de": "f/D",                    "en": "f/D"},
+    "lbl_strehl":     {"de": "Strehl",                  "en": "Strehl"},
+    "lbl_strehl_sub": {"de": "Maréchal / exakt",        "en": "Maréchal / exact"},
+    "lbl_deff_k":     {"de": "D_eff Kontrast",          "en": "D_eff contrast"},
+    "lbl_vkrit_naeh": {"de": "V½ Wendepunkt Q̃",        "en": "V½ inflection Q̃"},
+    "lbl_vkrit_blur": {"de": "V_krit Blur sichtbar",    "en": "V_crit blur visible"},
+    "lbl_vkrit_ex":   {"de": "V_krit Kontrastverlust >10%", "en": "V_crit contrast loss >10%"},
+    # Footer
+    "footer": {
+        "de": "Formeln: Maréchal-Näherung · MTF via Pupillen-Autokorrelation · CSF nach Barten (1999) · Quellen: Sacek (telescope-optics.net) · Suiter (Star Testing)",
+        "en": "Formulae: Maréchal approximation · MTF via pupil autocorrelation · CSF after Barten (1999) · Sources: Sacek (telescope-optics.net) · Suiter (Star Testing)",
+    },
 }
 
 def T(key: str) -> str:
