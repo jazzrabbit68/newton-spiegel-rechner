@@ -1581,19 +1581,22 @@ class App(tk.Tk):
         V_arr      = np.linspace(30, 400, 150)
         V_max_plot = 400.0
 
-        # Sinnvoller Vergrößerungsbereich — abhängig von Original-Öffnung
-        V_min_orig  = D / 7.0    # AP = 7mm (Grenze dunkeladaptiertes Auge)
-        V_max_orig  = D / 0.5    # AP = 0.5mm (theoretisches Maximum)
-        # Beim Abblenden: Grenzen verschieben sich mit D_blend
-        V_min_blend = D_blend / 7.0
-        V_max_blend = D_blend / 0.5
-
-        d_fang  = d_fang_min(D, f)
+        d_fang   = d_fang_min(D, f)
         eps_orig = d_fang / D
 
         def S_von_D(Db):
             _, _, Wb, _, _ = _wellenfronten(Db, f, lam)
             return _strehl_exakt(Wb)
+
+        # Sinnvoller Vergrößerungsbereich — abhängig von Original-Öffnung
+        V_min_orig  = D / 7.0
+        V_max_AP    = D / 0.5
+        V_krit_orig = D * 0.7 * math.sqrt(max(S_von_D(D), 1e-9))
+        V_max_orig  = min(V_max_AP, V_krit_orig * 2.0)
+        V_min_blend = D_blend / 7.0
+        V_max_AP_bl = D_blend / 0.5
+        V_krit_bl   = D_blend * 0.7 * math.sqrt(max(S_von_D(D_blend), 1e-9))
+        V_max_blend = min(V_max_AP_bl, V_krit_bl * 2.0)
 
         def Q_opt_kurve(Db):
             """Optische Qualität normiert auf Original-Paraboloid — MTF×CSF.
@@ -1682,8 +1685,30 @@ class App(tk.Tk):
         D_scan  = np.linspace(D * 0.40, D, 12)   # 12 Stichproben reichen
         Q_stack = np.array([Q_opt_kurve(Db)[0] for Db in D_scan])
         Q_opt_line = Q_stack.max(axis=0)
+
+        # Optimale Blende pro Vergrößerung — welches D gibt max Q?
+        D_opt_arr = np.array([D_scan[Q_stack[:, j].argmax()] for j in range(len(V_arr))])
+
+        # Repräsentativer Wert: bei V_krit_orig
+        idx_vk  = int(np.argmin(np.abs(V_arr - V_krit_orig)))
+        D_opt_vk = D_opt_arr[idx_vk]
+        Q_opt_vk = Q_opt_line[idx_vk]
+        # Und im sinnvollen Bereich: Mittelwert der optimalen Blende
+        mask_sinn = (V_arr >= V_min_orig) & (V_arr <= V_max_orig)
+        D_opt_mean = float(D_opt_arr[mask_sinn].mean()) if mask_sinn.any() else D_opt_vk
+
         ax.plot(V_arr, Q_opt_line, color=GRN, lw=1.8, ls="-.",
-                label="Optimale Blende (max Q je V)")
+                label=f"Optimale Blende (max Q je V)  ⌀≈{D_opt_mean:.0f}mm im sinnv. Bereich")
+
+        # Annotation bei V_krit_orig
+        ax.annotate(
+            f"bei V={V_krit_orig:.0f}×:\nopt. Blende ≈{D_opt_vk:.0f}mm\nQ={Q_opt_vk:.3f}",
+            xy=(V_krit_orig, Q_opt_vk),
+            xytext=(min(V_krit_orig + 30, 350), Q_opt_vk + 0.08),
+            fontsize=8, color=GRN, fontweight="bold",
+            arrowprops=dict(arrowstyle="-", color=GRN, lw=0.8),
+            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=GRN, alpha=0.88)
+        )
 
         # ── Referenzlinien ────────────────────────────────────────────────────
         ax.text(V_max_plot * 0.98, S_orig + 0.012,
@@ -1704,15 +1729,19 @@ class App(tk.Tk):
         if V_max_orig < V_max_plot:
             ax.axvspan(min(V_max_orig, V_max_plot), V_max_plot,
                        color="#888", alpha=0.08, zorder=0)
-        for V_m, lbl in [(V_min_orig, f"V_min={V_min_orig:.0f}×\n(AP=7mm)"),
-                          (V_max_orig, f"V_max={V_max_orig:.0f}×\n(AP=0.5mm)")]:
+        for V_m, lbl in [
+            (V_min_orig, f"V_min={V_min_orig:.0f}×\n(AP=7mm)"),
+            (V_max_orig, f"V_max={V_max_orig:.0f}×\n({'AP=0.5mm' if V_max_orig >= V_max_AP*0.99 else '2×V_krit'})"),
+        ]:
             if 30 < V_m < V_max_plot:
                 ax.axvline(V_m, color="#999", lw=1.0, ls=":", alpha=0.8)
                 ax.text(V_m + 2, 0.55, lbl, fontsize=7, color="#777",
                         rotation=90, va="center", alpha=0.9)
         if D_blend < D * 0.98:
-            for V_m, lbl in [(V_min_blend, f"V_min={V_min_blend:.0f}×\n(Blende)"),
-                              (V_max_blend, f"V_max={V_max_blend:.0f}×\n(Blende)")]:
+            for V_m, lbl in [
+                (V_min_blend, f"V_min={V_min_blend:.0f}×\n(Blende)"),
+                (V_max_blend, f"V_max={V_max_blend:.0f}×\n({'AP' if V_max_blend >= V_max_AP_bl*0.99 else '2×V_krit'} Blende)"),
+            ]:
                 if 30 < V_m < V_max_plot:
                     ax.axvline(V_m, color=ACC, lw=1.0, ls=":", alpha=0.6)
                     ax.text(V_m + 2, 0.35, lbl, fontsize=7, color=ACC,
