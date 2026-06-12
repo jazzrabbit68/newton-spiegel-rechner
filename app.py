@@ -1206,20 +1206,32 @@ def fig_wahrnehmung(D, f, lam, S_slide, S_real):
 
 
 def fig_blende(D, f, lam, D_blend):
-    """Blenden-Diagramm für Streamlit."""
-    fig, (ax, ax2) = plt.subplots(2, 1, figsize=(9.0, 7.0), dpi=96)
+    """Blenden-Diagramm für Streamlit — mit V-Bereich, opt. Blende, Leuchtdichte."""
+    fig, (ax, ax2) = plt.subplots(2, 1, figsize=(9.0, 7.5), dpi=96)
     fig.patch.set_facecolor("#f5f5f5")
     ax.set_facecolor("#f5f5f5"); ax2.set_facecolor("#f5f5f5")
+
+    """Blenden-Diagramm: Q̃(V) für Original und Blendenstufen + Leuchtdichte-Effekt."""
 
     V_arr      = np.linspace(30, 400, 150)
     V_max_plot = 400.0
 
-    d_fang  = d_fang_min(D, f)
+    d_fang   = d_fang_min(D, f)
     eps_orig = d_fang / D
 
     def S_von_D(Db):
         _, _, Wb, _, _ = _wellenfronten(Db, f, lam)
         return _strehl_exakt(Wb)
+
+    # Sinnvoller Vergrößerungsbereich — abhängig von Original-Öffnung
+    V_min_orig  = D / 7.0
+    V_max_AP    = D / 0.5
+    V_krit_orig = D * 0.7 * math.sqrt(max(S_von_D(D), 1e-9))
+    V_max_orig  = min(V_max_AP, V_krit_orig * 2.0)
+    V_min_blend = D_blend / 7.0
+    V_max_AP_bl = D_blend / 0.5
+    V_krit_bl   = D_blend * 0.7 * math.sqrt(max(S_von_D(D_blend), 1e-9))
+    V_max_blend = min(V_max_AP_bl, V_krit_bl * 2.0)
 
     def Q_opt_kurve(Db):
         """Optische Qualität normiert auf Original-Paraboloid — MTF×CSF.
@@ -1308,8 +1320,30 @@ def fig_blende(D, f, lam, D_blend):
     D_scan  = np.linspace(D * 0.40, D, 12)   # 12 Stichproben reichen
     Q_stack = np.array([Q_opt_kurve(Db)[0] for Db in D_scan])
     Q_opt_line = Q_stack.max(axis=0)
+
+    # Optimale Blende pro Vergrößerung — welches D gibt max Q?
+    D_opt_arr = np.array([D_scan[Q_stack[:, j].argmax()] for j in range(len(V_arr))])
+
+    # Repräsentativer Wert: bei V_krit_orig
+    idx_vk  = int(np.argmin(np.abs(V_arr - V_krit_orig)))
+    D_opt_vk = D_opt_arr[idx_vk]
+    Q_opt_vk = Q_opt_line[idx_vk]
+    # Und im sinnvollen Bereich: Mittelwert der optimalen Blende
+    mask_sinn = (V_arr >= V_min_orig) & (V_arr <= V_max_orig)
+    D_opt_mean = float(D_opt_arr[mask_sinn].mean()) if mask_sinn.any() else D_opt_vk
+
     ax.plot(V_arr, Q_opt_line, color=GRN, lw=1.8, ls="-.",
-            label="Optimale Blende (max Q je V)")
+            label=f"Optimale Blende (max Q je V)  ⌀≈{D_opt_mean:.0f}mm im sinnv. Bereich")
+
+    # Annotation bei V_krit_orig
+    ax.annotate(
+        f"bei V={V_krit_orig:.0f}×:\nopt. Blende ≈{D_opt_vk:.0f}mm\nQ={Q_opt_vk:.3f}",
+        xy=(V_krit_orig, Q_opt_vk),
+        xytext=(min(V_krit_orig + 30, 350), Q_opt_vk + 0.08),
+        fontsize=8, color=GRN, fontweight="bold",
+        arrowprops=dict(arrowstyle="-", color=GRN, lw=0.8),
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=GRN, alpha=0.88)
+    )
 
     # ── Referenzlinien ────────────────────────────────────────────────────
     ax.text(V_max_plot * 0.98, S_orig + 0.012,
@@ -1323,6 +1357,30 @@ def fig_blende(D, f, lam, D_blend):
         ax.axvline(Vk_orig, color=COR, lw=1.0, ls="--", alpha=0.5)
         ax.text(Vk_orig + 2, 0.03, f"V½={Vk_orig:.0f}×",
                 fontsize=7, color=COR, rotation=90, va="bottom", alpha=0.7)
+
+    # ── Sinnvoller Vergrößerungsbereich ──────────────────────────────────
+    ax.axvspan(30, min(V_min_orig, V_max_plot),
+               color="#888", alpha=0.08, zorder=0)
+    if V_max_orig < V_max_plot:
+        ax.axvspan(min(V_max_orig, V_max_plot), V_max_plot,
+                   color="#888", alpha=0.08, zorder=0)
+    for V_m, lbl in [
+        (V_min_orig, f"V_min={V_min_orig:.0f}×\n(AP=7mm)"),
+        (V_max_orig, f"V_max={V_max_orig:.0f}×\n({'AP=0.5mm' if V_max_orig >= V_max_AP*0.99 else '2×V_krit'})"),
+    ]:
+        if 30 < V_m < V_max_plot:
+            ax.axvline(V_m, color="#999", lw=1.0, ls=":", alpha=0.8)
+            ax.text(V_m + 2, 0.55, lbl, fontsize=7, color="#777",
+                    rotation=90, va="center", alpha=0.9)
+    if D_blend < D * 0.98:
+        for V_m, lbl in [
+            (V_min_blend, f"V_min={V_min_blend:.0f}×\n(Blende)"),
+            (V_max_blend, f"V_max={V_max_blend:.0f}×\n({'AP' if V_max_blend >= V_max_AP_bl*0.99 else '2×V_krit'} Blende)"),
+        ]:
+            if 30 < V_m < V_max_plot:
+                ax.axvline(V_m, color=ACC, lw=1.0, ls=":", alpha=0.6)
+                ax.text(V_m + 2, 0.35, lbl, fontsize=7, color=ACC,
+                        rotation=90, va="center", alpha=0.8)
 
     ax.set_xlim(30, V_max_plot)
     ax.set_ylim(0, min(1.15, max(float(Q_orig.max()), float(Q_bl.max()) if D_blend < D*0.98 else 0) * 1.15))
@@ -1403,116 +1461,37 @@ def fig_blende(D, f, lam, D_blend):
     if 30 <= Vk_orig <= V_max_plot:
         ax2.axvline(Vk_orig, color=COR, lw=1.0, ls="--", alpha=0.5)
 
+    # ── Sinnvoller Bereich im unteren Panel ──────────────────────────────
+    ax2.axvspan(30, min(V_min_orig, V_max_plot),
+                color="#888", alpha=0.08, zorder=0)
+    if V_max_orig < V_max_plot:
+        ax2.axvspan(min(V_max_orig, V_max_plot), V_max_plot,
+                    color="#888", alpha=0.08, zorder=0)
+    for V_m, lbl in [(V_min_orig, f"V_min={V_min_orig:.0f}×"),
+                      (V_max_orig, f"V_max={V_max_orig:.0f}×")]:
+        if 30 < V_m < V_max_plot:
+            ax2.axvline(V_m, color="#999", lw=1.0, ls=":", alpha=0.8)
+            ax2.text(V_m + 2, y_min + (y_max-y_min)*0.05, lbl,
+                     fontsize=7, color="#777", rotation=90, va="bottom")
+    if D_blend < D * 0.98:
+        for V_m, lbl in [(V_min_blend, f"V_min={V_min_blend:.0f}×\n(Blende)"),
+                          (V_max_blend, f"V_max={V_max_blend:.0f}×\n(Blende)")]:
+            if 30 < V_m < V_max_plot:
+                ax2.axvline(V_m, color=ACC, lw=1.0, ls=":", alpha=0.6)
+                ax2.text(V_m + 2, y_min + (y_max-y_min)*0.25, lbl,
+                         fontsize=7, color=ACC, rotation=90, va="bottom")
+
     ax2.set_xlim(30, V_max_plot)
     ax2.set_xlabel(T("ax_vergr"), fontsize=10)
     ax2.set_ylabel("Gain-Faktor  Q_blend / Q_orig", fontsize=9)
     ax2.legend(fontsize=7, loc="upper right", ncol=2)
     ax_fmt(ax2)
+
+    fig.tight_layout();
+
     fig.tight_layout()
-
-
     return fig
 
-st.set_page_config(page_title="Newton-Spiegel Rechner", layout="wide")
-st.markdown("<style>div.block-container{padding-top:1rem}</style>",
-            unsafe_allow_html=True)
-
-# ── Sprache ───────────────────────────────────────────────────────────────────
-if "lang" not in st.session_state:
-    st.session_state["lang"] = "de"
-
-lang_col1, lang_col2 = st.columns([8, 1])
-with lang_col2:
-    _lang_labels = ["🇩🇪 Deutsch", "🇬🇧 English"]
-    _lang_keys   = ["de", "en"]
-    _lang_idx    = _lang_keys.index(st.session_state["lang"])
-    _lang_sel    = st.radio("🌐", _lang_labels, index=_lang_idx,
-                            horizontal=True, label_visibility="collapsed")
-    _lang_new    = _lang_keys[_lang_labels.index(_lang_sel)]
-    if _lang_new != st.session_state["lang"]:
-        st.session_state["lang"] = _lang_new
-        st.rerun()
-
-with lang_col1:
-    st.title(T("win_title"))
-    st.caption(T("caption"))
-
-# ── Über / Doku ───────────────────────────────────────────────────────────────
-with st.expander(T("about")):
-    st.caption(f"Version {VERSION}")
-    import re as _re, os as _os
-    _wp_candidates = ["qvis_paper.html", "/app/qvis_paper.html"]
-    _wp_path = next((p for p in _wp_candidates if _os.path.exists(p)), None)
-    if _wp_path:
-        _wp_html = open(_wp_path, encoding="utf-8").read()
-        _wp_html = _re.sub(r'@page\s*\{[^}]*\}', '', _wp_html)
-        _body  = _re.search(r'<body[^>]*>(.*?)</body>', _wp_html, _re.DOTALL)
-        _style = _re.search(r'<style>(.*?)</style>', _wp_html, _re.DOTALL)
-        _css   = _style.group(1) if _style else ""
-        st.html(f"<style>{_css}</style>{_body.group(1)}" if _body else _wp_html)
-    else:
-        st.warning("qvis_paper.html nicht gefunden.")
-
-with st.expander(T("doc")):
-    import re, os
-    _doku_candidates = ["newton_spiegel_rechner_doku.html", "/app/newton_spiegel_rechner_doku.html"]
-    _doku_path = next((p for p in _doku_candidates if os.path.exists(p)), None)
-    if _doku_path:
-        doc_html = open(_doku_path).read()
-        doc_html = re.sub(r'@page\s*\{[^}]*\}', '', doc_html)
-        body_match = re.search(r'<body[^>]*>(.*?)</body>', doc_html, re.DOTALL)
-        if body_match:
-            style_match = re.search(r'<style>(.*?)</style>', doc_html, re.DOTALL)
-            style = style_match.group(1) if style_match else ""
-            st.html(f"<style>{style}</style>{body_match.group(1)}")
-        else:
-            st.html(doc_html)
-    else:
-        st.warning("Dokumentation nicht gefunden.")
-
-# ── Seitenleiste: Eingaben ────────────────────────────────────────────────────
-with st.sidebar:
-    st.header(T("grp_params"))
-    D   = st.slider(T("sl_D"),  50,  500, 200, step=10)
-    f   = st.slider(T("sl_f"), 200, 4000, 1000, step=50)
-    lam = 550.0
-
-    st.divider()
-    st.subheader(T("grp_quality"))
-    S_pct = st.slider(T("sl_strehl"), 0, 95, 0, step=5,
-                      help=T("sl_strehl_help"))
-    st.divider()
-    D_blend = st.slider(T("sl_blende"), int(D*0.3), int(D*0.99), int(D*0.75), step=10)
-
-# ── Berechnungen ──────────────────────────────────────────────────────────────
-r       = berechne(D, f, lam)
-S_real  = r["strehl"]
-S_exakt = _strehl_exakt(r["Wb"])
-S_slide = S_real + (S_pct / 100.0) * (1.0 - S_real)
-S_slide = min(S_slide, 0.9999)
-
-Vk      = v_kritisch(D, f, lam, EYE_RES)
-Wb_s    = _Wb_von_S(S_slide)
-
-Vk_naeh  = Vk["Vk_sph"]
-Vk_naeh_s = D * 0.7 * math.sqrt(max(S_slide, 1e-9))
-Vk_blur   = v_krit_blur_direkt(D, f, EYE_RES)
-Vk_ex     = v_krit_aus_qvis(D, f, lam)
-Vk_ex_s   = v_krit_aus_qvis_von_Wb(D, Wb_s, lam)
-
-alpha_blur = D**3 / (64 * f**2) / f * 206265
-
-Qp_30  = perceived_quality(D, f, lam, 30.0)
-Qp_80  = perceived_quality(D, f, lam, 80.0)
-Qp_160 = perceived_quality(D, f, lam, 160.0)
-
-verdict_text, verdict_color = beurteilung(S_real)
-
-# ── Ergebnisse ────────────────────────────────────────────────────────────────
-st.markdown(
-    f"<div style='background:#f0f0f0;padding:7px 14px;border-radius:6px;"
-    f"border-left:4px solid {verdict_color};font-size:0.85em;margin-bottom:8px'>"
-    f"{verdict_text}</div>", unsafe_allow_html=True)
 
 def row(label, val, sub=""):
     sub_html = f"<span style='color:#888;font-size:0.8em'> {sub}</span>" if sub else ""
