@@ -1493,29 +1493,6 @@ def fig_blende(D, f, lam, D_blend):
     return fig
 
 
-# ── Berechnungen ──────────────────────────────────────────────────────────────
-r       = berechne(D, f, lam)
-S_real  = r["strehl"]
-S_exakt = _strehl_exakt(r["Wb"])
-S_slide = S_real + (S_pct / 100.0) * (1.0 - S_real)
-S_slide = min(S_slide, 0.9999)
-
-Vk      = v_kritisch(D, f, lam, EYE_RES)
-Wb_s    = _Wb_von_S(S_slide)
-
-Vk_naeh  = Vk["Vk_sph"]
-Vk_naeh_s = D * 0.7 * math.sqrt(max(S_slide, 1e-9))
-Vk_blur   = v_krit_blur_direkt(D, f, EYE_RES)
-Vk_ex     = v_krit_aus_qvis(D, f, lam)
-Vk_ex_s   = v_krit_aus_qvis_von_Wb(D, Wb_s, lam)
-
-alpha_blur = D**3 / (64 * f**2) / f * 206265
-
-Qp_30  = perceived_quality(D, f, lam, 30.0)
-Qp_80  = perceived_quality(D, f, lam, 80.0)
-Qp_160 = perceived_quality(D, f, lam, 160.0)
-
-verdict_text, verdict_color = beurteilung(S_real)
 
 # ── Ergebnisse ────────────────────────────────────────────────────────────────
 st.markdown(
