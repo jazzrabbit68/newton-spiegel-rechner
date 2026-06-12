@@ -601,7 +601,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "5.4.0 (2026-06-10)"
+VERSION  = "5.4.1 (2026-06-11)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -1206,7 +1206,7 @@ def fig_wahrnehmung(D, f, lam, S_slide, S_real):
 
 
 def fig_blende(D, f, lam, D_blend):
-    """Blenden-Diagramm für Streamlit — mit V-Bereich, opt. Blende, Leuchtdichte."""
+    """Blenden-Diagramm für Streamlit."""
     fig, (ax, ax2) = plt.subplots(2, 1, figsize=(9.0, 7.5), dpi=96)
     fig.patch.set_facecolor("#f5f5f5")
     ax.set_facecolor("#f5f5f5"); ax2.set_facecolor("#f5f5f5")
@@ -1492,6 +1492,66 @@ def fig_blende(D, f, lam, D_blend):
     fig.tight_layout()
     return fig
 
+
+# ── Berechnungen ──────────────────────────────────────────────────────────────
+r       = berechne(D, f, lam)
+S_real  = r["strehl"]
+S_exakt = _strehl_exakt(r["Wb"])
+S_slide = S_real + (S_pct / 100.0) * (1.0 - S_real)
+S_slide = min(S_slide, 0.9999)
+
+Vk      = v_kritisch(D, f, lam, EYE_RES)
+Wb_s    = _Wb_von_S(S_slide)
+
+Vk_naeh  = Vk["Vk_sph"]
+Vk_naeh_s = D * 0.7 * math.sqrt(max(S_slide, 1e-9))
+Vk_blur   = v_krit_blur_direkt(D, f, EYE_RES)
+Vk_ex     = v_krit_aus_qvis(D, f, lam)
+Vk_ex_s   = v_krit_aus_qvis_von_Wb(D, Wb_s, lam)
+
+alpha_blur = D**3 / (64 * f**2) / f * 206265
+
+Qp_30  = perceived_quality(D, f, lam, 30.0)
+Qp_80  = perceived_quality(D, f, lam, 80.0)
+Qp_160 = perceived_quality(D, f, lam, 160.0)
+
+verdict_text, verdict_color = beurteilung(S_real)
+
+# ── Ergebnisse ────────────────────────────────────────────────────────────────
+st.markdown(
+    f"<div style='background:#f0f0f0;padding:7px 14px;border-radius:6px;"
+    f"border-left:4px solid {verdict_color};font-size:0.85em;margin-bottom:8px'>"
+    f"{verdict_text}</div>", unsafe_allow_html=True)
+
+def row(label, val, sub=""):
+    sub_html = f"<span style='color:#888;font-size:0.8em'> {sub}</span>" if sub else ""
+    return (f"<td style='padding:2px 14px 2px 0;white-space:nowrap'><b>{label}</b></td>"
+            f"<td style='padding:2px 20px 2px 0;white-space:nowrap'>{val}{sub_html}</td>")
+
+def vk_ex_text(Ve):
+    return f"{Ve:.0f}×" if Ve > 30.5 else "< 30×"
+
+st.markdown(f"""
+<table style='font-size:0.88em;border-collapse:collapse;width:100%'>
+<tr>
+  {row(T("lbl_fD"), f"{r['N']:.1f}")}
+  {row(T("lbl_strehl"), f"{S_real:.4f}  /  {S_exakt:.4f}", T("lbl_strehl_sub"))}
+  {row(T("lbl_deff_k"), f"{r['Deff_k']:.1f} mm", f"−{r['loss_k']:.1f} mm")}
+  {row("W_PtV paraxial / best focus", f"{r['Wp']:.4f} λ  /  {r['Wb']:.4f} λ")}
+</tr>
+<tr>
+  {row(T("lbl_vkrit_naeh"), f"{Vk_naeh:.0f}×  →  {Vk_naeh_s:.0f}×")}
+  {row(T("lbl_vkrit_blur"), f"{Vk_blur:.0f}×  (α={alpha_blur:.1f}\")", "unabh. von S")}
+  {row(T("lbl_vkrit_ex"),   f"{vk_ex_text(Vk_ex)}  →  {vk_ex_text(Vk_ex_s)}")}
+</tr>
+<tr>
+  {row("Q_perc  30×",  f"{Qp_30:.3f}")}
+  {row("Q_perc  80×",  f"{Qp_80:.3f}")}
+  {row("Q_perc 160×", f"{Qp_160:.3f}")}
+  <td></td><td></td>
+</tr>
+</table>
+""", unsafe_allow_html=True)
 
 def row(label, val, sub=""):
     sub_html = f"<span style='color:#888;font-size:0.8em'> {sub}</span>" if sub else ""
