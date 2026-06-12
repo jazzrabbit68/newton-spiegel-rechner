@@ -6,61 +6,6 @@ import matplotlib.ticker as ticker
 import numpy as np
 from functools import lru_cache
 import streamlit as st
-"""
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel V5.1
-============================================================================
-Berücksichtigt:
-  - Wellenfrontfehler und Strehl-Quotient (Kontrast)
-  - Geometrischen Unschärfefleck am besten Fokus (Schärfe)
-  - Vergrößerungsabhängigen Schärfeverlust durch das Auge
-
-Formeln:
-  Kontrast (Strehl):
-    W_PtV (paraxial)  = D⁴ / (1024·f³·λ)         [Sacek §4.7.1]
-    W_PtV (best focus)= W_PtV_paraxial / 4         [Sacek §4.7.2]
-    W_RMS             = W_PtV_bestfocus / (1.5·√5) [Sacek §4.7.2]
-    Strehl (Näherung) = exp(-(2π·W_RMS)²)          [Maréchal 1947, zit. n. Sacek §4.8]
-    Strehl (exakt)    = |⟨exp(i·2π·W(ρ))⟩|²        [Standardformel, vgl. Sacek §4.8]
-    D_eff (Kontrast)  = D · S^0.25                 [eigene Näherung]
-
-  Schärfe:
-    r_Airy [arcsec]   = 1.22·λ/D·206265
-    d_blur [mm]       = D³ / (64·f²)               [Sacek §4.7.3]
-    Dawes [arcsec]    = 116 / D[mm]
-
-  Kritische Vergrößerung:
-    V_krit            = D[mm] · 0.7 · √Strehl      [eigene Erw. von Suiter Kap. 6]
-
-  MTF:
-    Paraboloid:  analytisch (Kreisapertur)          [Sacek §4.1]
-    Sphäre rel.: OTF-Faltungsintegral, numerisch    [Sacek §4.7]
-      Wellenfrontform W(ρ) = Wp·(ρ⁴−ρ²)  [best focus]
-                   oder Wp·ρ⁴             [paraxialer Fokus]
-      Amplitude: Wp = 8·Wb
-        (PtV von ρ⁴−ρ² liegt bei ρ=1/√2: Minimum = −1/4
-         → Wb = Wp/4  →  Wp = 4·Wb = 8·Wb_bestfocus; konsistent mit Sacek)
-
-  Wahrnehmung:
-    CSF nach Barten (1999):
-      csf(f) = 2.6·(0.0192 + 0.114·f)·exp(−(0.114·f)^1.1)   [Barten 1999]
-    Q_vis = ∫(MTF_sph · MTF_para · CSF) dν / ∫(MTF_para · CSF) dν
-    Q̃(V) = S + (1−S)·(1−w(V))   [eigene Näherungsformel]
-      mit w(V) = 1 / (1 + (V_krit/V)²)
-
-Quellen:
-  [Sacek]    V. Sacek, "Notes on Amateur Telescope Optics",
-             https://www.telescope-optics.net  (laufend aktualisiert)
-  [Suiter]   H.R. Suiter, "Star Testing Astronomical Telescopes",
-             2nd ed., Willmann-Bell (2009)
-  [Barten]   P.G.J. Barten, "Contrast Sensitivity of the Human Eye and Its Effects
-             on Image Quality", SPIE Press (1999), ISBN 978-0-8194-3296-4
-
-Abhängigkeiten: pip install matplotlib numpy
-"""
-
-import math
-import numpy as np
-from functools import lru_cache
 
 # ── Kernrechnung ──────────────────────────────────────────────────────────────
 
