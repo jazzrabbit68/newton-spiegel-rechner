@@ -116,8 +116,10 @@ def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr,
 
 def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
     """Grundlegende optische Kenngrößen (vergrößerungsunabhängig)."""
-    lam_mm, Wp, Wb, Wrms, S = _wellenfronten(D_mm, f_mm, lam_nm)
-    r = _kennzahlen_von_S(D_mm, S, Wb)
+    lam_mm, Wp, Wb, Wrms, S_mar = _wellenfronten(D_mm, f_mm, lam_nm)
+    S_exakt = _strehl_exakt(Wb)          # exaktes Pupillenintegral
+    r = _kennzahlen_von_S(D_mm, S_exakt, Wb)
+    r["strehl_marechal"] = S_mar         # Maréchal-Wert für Vergleich/Doku
     # Geometrischer Unschärfefleck [Sacek §4.7.3]
     d_blur_mm = D_mm**3 / (64.0 * f_mm**2)
     d_blur_as = d_blur_mm / f_mm * 206265.0
@@ -765,8 +767,8 @@ def fig_strehl(D, f, lam, S_slide):
     fig.patch.set_facecolor("#f5f5f5"); ax.set_facecolor("#f5f5f5")
     ns, sts, _, _, sts_exakt = kurven_N(D, lam)
     r = berechne(D, f, lam)
-    N_akt = r["N"]; S_akt = r["strehl"]
-    S_akt_exakt = _strehl_exakt(r["Wb"])
+    N_akt = r["N"]; S_akt = r["strehl"]        # exakter Strehl
+    S_akt_mar = r["strehl_marechal"]            # Maréchal-Näherung (für Vergleich)
     ax.fill_between(ns, S_akt, 1.0, color=ACC, alpha=0.10)
     ax.axhline(1.00, color=GRN,      lw=0.9, ls="-",  label="Paraboloid (S=1.0)")
     ax.plot(ns, sts,       color=ACC,       lw=2.0, ls="-",  label="Strehl Marechal (Naherung)")
@@ -774,12 +776,12 @@ def fig_strehl(D, f, lam, S_slide):
     ax.axhline(0.986, color="#1565c0", lw=0.7, ls=":",  label="Rayleigh-Grenze  S=0.986  (Wp=lam/4)")
     ax.axhline(0.80,  color="#BA7517", lw=0.7, ls="--", label="Marechal  S=0.80  (beugungsbegrenzt)")
     ax.axvline(N_akt, color="#ccc", lw=0.8, ls=":")
-    ax.scatter([N_akt], [S_akt],       color=ACC,       s=16, zorder=5)
-    ax.scatter([N_akt], [S_akt_exakt], color="#534AB7", s=12, zorder=5, marker="D")
-    ax.annotate(f"f/{N_akt:.1f}  S={S_akt:.3f} (Mar.) / S={S_akt_exakt:.3f} (exakt)",
-                xy=(N_akt, S_akt), xytext=(8, 10), textcoords="offset points",
+    ax.scatter([N_akt], [S_akt_mar], color=ACC,       s=16, zorder=5)
+    ax.scatter([N_akt], [S_akt],    color="#534AB7", s=12, zorder=5, marker="D")
+    ax.annotate(f"f/{N_akt:.1f}  S={S_akt_mar:.3f} (Mar.) / S={S_akt:.3f} (exakt)",
+                xy=(N_akt, S_akt_mar), xytext=(8, 10), textcoords="offset points",
                 fontsize=5, color="#333", arrowprops=dict(arrowstyle="-", color="#aaa"))
-    if S_slide > S_akt + 0.01:
+    if S_slide > S_akt_mar + 0.01:
         ax.axhline(S_slide, color=COR, lw=0.9, ls="-.", label=f"Schieber S={S_slide:.3f}")
     ax.set_xlim(3, 15); ax.set_ylim(0, 1.08)
     ax.set_xlabel(T("ax_fD"), fontsize=5)
@@ -1266,9 +1268,10 @@ def fig_blende(D, f, lam, D_blend):
     ax.plot(V_arr, Q_orig, color=COR, lw=2.5, ls="-",
             label=f"Original  D={D:.0f}mm  S={S_orig:.3f}  V½={Vk_orig:.0f}×")
     ax.axhline(float(Q_orig[-1]), color=COR, lw=0.8, ls=":", alpha=0.5)
+    # Asymptote-Label: rechts, knapp über der Linie
     ax.text(V_max_plot * 0.98, float(Q_orig[-1]) + 0.012,
             f"Asymptote orig={float(Q_orig[-1]):.3f}",
-            fontsize=8, color=COR, ha="right", alpha=0.85)
+            fontsize=7, color=COR, ha="right", alpha=0.85)
 
     # ── Blendenstufen: 4 Zwischenwerte zwischen D_blend und D ─────────────
     D_steps = []
@@ -1294,21 +1297,22 @@ def fig_blende(D, f, lam, D_blend):
                 label=f"Blende  D={D_blend:.0f}mm ({pct_bl:.0f}%)  "
                       f"S={S_bl:.3f}  V½={Vk_bl:.0f}×")
         ax.axhline(float(Q_bl[-1]), color=ACC, lw=0.8, ls=":", alpha=0.5)
-        ax.text(V_max_plot * 0.98, float(Q_bl[-1]) + 0.012,
+        ax.text(V_max_plot * 0.98, float(Q_bl[-1]) - 0.022,
                 f"Asymptote blend={float(Q_bl[-1]):.3f}",
-                fontsize=8, color=ACC, ha="right", alpha=0.85)
+                fontsize=7, color=ACC, ha="right", va="top", alpha=0.85)
 
-        # Gewinn/Verlust durch Blende bei V½_orig
+        # Gewinn/Verlust durch Blende — Annotation links von V½ (um Kollision mit opt-Blende zu vermeiden)
         Q_bl_at_Vk = float(np.interp(Vk_orig, V_arr, Q_bl))
         Q_or_at_Vk = float(np.interp(Vk_orig, V_arr, Q_orig))
         delta = Q_bl_at_Vk - Q_or_at_Vk
+        x_ann = max(Vk_orig - 80, 50)   # links von V½, aber nicht zu nah am Rand
         ax.annotate(
             f"bei V={Vk_orig:.0f}×:\n"
             f"Original Q={Q_or_at_Vk:.2f}\n"
             f"Blende   Q={Q_bl_at_Vk:.2f}  "
             f"({'+'if delta>=0 else ''}{delta:.2f})",
             xy=(Vk_orig, Q_or_at_Vk),
-            xytext=(min(Vk_orig + 25, 350), Q_or_at_Vk + 0.08),
+            xytext=(x_ann, Q_or_at_Vk + 0.12),
             fontsize=8, color=ACC if delta >= 0 else "#c62828",
             fontweight="bold",
             arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
@@ -1333,20 +1337,19 @@ def fig_blende(D, f, lam, D_blend):
     ax.plot(V_arr, Q_opt_line, color=GRN, lw=1.8, ls="-.",
             label=f"Optimale Blende (max Q je V)  ⌀≈{D_opt_mean:.0f}mm im sinnv. Bereich")
 
-    # Annotation bei V_krit_orig
+    # Annotation bei V_krit_orig — rechts oben im Plot, klar von Blende-Box getrennt
+    x_opt = min(V_krit_orig + 50, 340)
+    y_opt = max(Q_opt_vk - 0.12, 0.05)
     ax.annotate(
         f"bei V={V_krit_orig:.0f}×:\nopt. Blende ≈{D_opt_vk:.0f}mm\nQ={Q_opt_vk:.3f}",
         xy=(V_krit_orig, Q_opt_vk),
-        xytext=(min(V_krit_orig + 30, 350), Q_opt_vk + 0.08),
+        xytext=(x_opt, y_opt),
         fontsize=8, color=GRN, fontweight="bold",
         arrowprops=dict(arrowstyle="-", color=GRN, lw=0.8),
         bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=GRN, alpha=0.88)
     )
 
-    # ── Referenzlinien ────────────────────────────────────────────────────
-    ax.text(V_max_plot * 0.98, S_orig + 0.012,
-            f"Asymptote S={S_orig:.3f}",
-            fontsize=8, color=COR, ha="right", alpha=0.85)
+    # ── Referenzlinien Q=0.90 / Q=0.70 ──────────────────────────────────
     for q_thresh, col, lbl in [(0.9, GRN, "Q=0.90"), (0.7, "#BA7517", "Q=0.70")]:
         ax.axhline(q_thresh, color=col, lw=0.8, ls=":", alpha=0.6)
         ax.text(32, q_thresh + 0.008, lbl, fontsize=7, color=col, alpha=0.8)
@@ -1368,7 +1371,8 @@ def fig_blende(D, f, lam, D_blend):
     ]:
         if 30 < V_m < V_max_plot:
             ax.axvline(V_m, color="#999", lw=1.0, ls=":", alpha=0.8)
-            ax.text(V_m + 2, 0.55, lbl, fontsize=7, color="#777",
+            # y-Position: oberes Drittel, damit keine Kurve überdeckt wird
+            ax.text(V_m + 2, 0.72, lbl, fontsize=7, color="#777",
                     rotation=90, va="center", alpha=0.9)
     if D_blend < D * 0.98:
         for V_m, lbl in [
@@ -1377,7 +1381,8 @@ def fig_blende(D, f, lam, D_blend):
         ]:
             if 30 < V_m < V_max_plot:
                 ax.axvline(V_m, color=ACC, lw=1.0, ls=":", alpha=0.6)
-                ax.text(V_m + 2, 0.35, lbl, fontsize=7, color=ACC,
+                # Blenden-Limits etwas tiefer als Original-Limits
+                ax.text(V_m + 2, 0.50, lbl, fontsize=7, color=ACC,
                         rotation=90, va="center", alpha=0.8)
 
     ax.set_xlim(30, V_max_plot)
@@ -1385,17 +1390,17 @@ def fig_blende(D, f, lam, D_blend):
     ax.set_xlabel("")
     ax.set_ylabel("Q_vis normiert auf Original-Paraboloid  (MTF×CSF)", fontsize=9)
 
-    # Rayleigh-Hinweis wenn S >= 0.80
+    # Rayleigh-Hinweis: ins Diagramm oben links (nicht über dem Titel)
     rayleigh_ok = S_orig >= 0.80
     titel_farbe = "#2e7d32" if rayleigh_ok else "#c62828"
     rayleigh_text = (
-        "✓ Rayleigh-Kriterium erfüllt (S ≥ 0.80) — Abblenden nicht sinnvoll"
+        "✓ Rayleigh S ≥ 0.80 — Abblenden nicht sinnvoll"
         if rayleigh_ok else
-        f"✗ Rayleigh nicht erfüllt (S={S_orig:.3f} < 0.80) — Abblenden kann helfen"
+        f"✗ Rayleigh nicht erfüllt (S={S_orig:.3f}) — Abblenden kann helfen"
     )
-    ax.text(0.5, 1.04, rayleigh_text,
-            transform=ax.transAxes, ha="center", va="bottom",
-            fontsize=9, fontweight="bold", color=titel_farbe,
+    ax.text(0.02, 0.97, rayleigh_text,
+            transform=ax.transAxes, ha="left", va="top",
+            fontsize=8, fontweight="bold", color=titel_farbe,
             bbox=dict(boxstyle="round,pad=0.3", fc="white",
                       ec=titel_farbe, alpha=0.9))
 
@@ -1562,8 +1567,8 @@ with st.sidebar:
 
 # ── Berechnungen ──────────────────────────────────────────────────────────────
 r       = berechne(D, f, lam)
-S_real  = r["strehl"]
-S_exakt = _strehl_exakt(r["Wb"])
+S_real   = r["strehl"]                  # exakter Strehl (Pupillenintegral)
+S_mar    = r["strehl_marechal"]         # Maréchal-Näherung (nur für Anzeige)
 S_slide = S_real + (S_pct / 100.0) * (1.0 - S_real)
 S_slide = min(S_slide, 0.9999)
 
@@ -1602,7 +1607,7 @@ st.markdown(f"""
 <table style='font-size:0.88em;border-collapse:collapse;width:100%'>
 <tr>
   {row(T("lbl_fD"), f"{r['N']:.1f}")}
-  {row(T("lbl_strehl"), f"{S_real:.4f}  /  {S_exakt:.4f}", T("lbl_strehl_sub"))}
+  {row(T("lbl_strehl"), f"{S_mar:.4f}  /  {S_real:.4f}", T("lbl_strehl_sub"))}
   {row(T("lbl_deff_k"), f"{r['Deff_k']:.1f} mm", f"−{r['loss_k']:.1f} mm")}
   {row("W_PtV paraxial / best focus", f"{r['Wp']:.4f} λ  /  {r['Wb']:.4f} λ")}
 </tr>

@@ -177,8 +177,10 @@ def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr,
 
 def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
     """Grundlegende optische Kenngrößen (vergrößerungsunabhängig)."""
-    lam_mm, Wp, Wb, Wrms, S = _wellenfronten(D_mm, f_mm, lam_nm)
-    r = _kennzahlen_von_S(D_mm, S, Wb)
+    lam_mm, Wp, Wb, Wrms, S_mar = _wellenfronten(D_mm, f_mm, lam_nm)
+    S_exakt = _strehl_exakt(Wb)          # exaktes Pupillenintegral
+    r = _kennzahlen_von_S(D_mm, S_exakt, Wb)
+    r["strehl_marechal"] = S_mar         # Maréchal-Wert für Vergleich/Doku
     # Geometrischer Unschärfefleck [Sacek §4.7.3]
     d_blur_mm = D_mm**3 / (64.0 * f_mm**2)
     d_blur_as = d_blur_mm / f_mm * 206265.0
@@ -1118,9 +1120,9 @@ class App(tk.Tk):
         rv2["rWrms"].config( text=f"{r['Wrms']:.5f} λ")
         rv2["rS"].config(    text=f"{S_real:.4f}  →  {S_slide:.4f}")
 
-        S_exakt = _strehl_exakt(r["Wb"])
-        _col_ex = "#2e7d32" if S_exakt >= 0.95 else "#e65100" if S_exakt >= 0.80 else "#c62828"
-        rv2["rS_exakt"].config(text=f"{S_exakt:.4f}  (Δ {S_exakt - S_real:+.4f})", fg=_col_ex)
+        S_mar = r["strehl_marechal"]
+        _col_ex = "#2e7d32" if S_real >= 0.95 else "#e65100" if S_real >= 0.80 else "#c62828"
+        rv2["rS_exakt"].config(text=f"{S_real:.4f}  (Δ vs. Mar. {S_real - S_mar:+.4f})", fg=_col_ex)
         rv2["rDeff_k"].config( text=f"{r['Deff_k']:.1f} → {Deff_k_slide:.1f} mm")
 
         Vk_naeh  = Vk["Vk_sph"]
@@ -1204,8 +1206,7 @@ class App(tk.Tk):
         fig, ax, canvas = self._tab_strehl
         ax.cla()
         ns, sts, _, _, sts_exakt = kurven_N(D, lam)
-        _, _, Wb_akt, _, _ = _wellenfronten(D, f, lam)
-        S_akt_exakt = _strehl_exakt(Wb_akt)
+        _, _, Wb_akt, _, S_akt_mar = _wellenfronten(D, f, lam)  # S_akt_mar = Maréchal
         ax.fill_between(ns, S_sph if S_sph else S_akt, 1.0,
                         color=ACC, alpha=0.10, label="Bereich Paraboloid→Sphäre")
         ax.axhline(1.00, color=GRN,       lw=1.5, ls="-",  label="Paraboloid (S=1.0)")
@@ -1214,14 +1215,14 @@ class App(tk.Tk):
         ax.axhline(0.80, color="#BA7517", lw=1.2, ls="--", label="Rayleigh S=0.80")
         ax.axhline(0.95, color="#888",    lw=1.0, ls=":",  label="S=0.95")
         ax.axvline(N_akt, color="#ccc", lw=0.8, ls=":")
-        ax.scatter([N_akt], [S_akt],       color=ACC,       s=60, zorder=5)
-        ax.scatter([N_akt], [S_akt_exakt], color="#534AB7", s=40, zorder=5, marker="D")
-        ax.annotate(f"f/{N_akt:.1f}  S={S_akt:.3f} (Maréchal) / "
-                    f"S={S_akt_exakt:.3f} (exakt)",
-                    xy=(N_akt, S_akt), xytext=(8, 10),
+        ax.scatter([N_akt], [S_akt_mar], color=ACC,       s=60, zorder=5)
+        ax.scatter([N_akt], [S_akt],    color="#534AB7", s=40, zorder=5, marker="D")
+        ax.annotate(f"f/{N_akt:.1f}  S={S_akt_mar:.3f} (Maréchal) / "
+                    f"S={S_akt:.3f} (exakt)",
+                    xy=(N_akt, S_akt_mar), xytext=(8, 10),
                     textcoords="offset points", fontsize=9, color="#333",
                     arrowprops=dict(arrowstyle="-", color="#aaa"))
-        if S_sph and S_sph > S_akt:
+        if S_sph and S_sph > S_akt_mar:
             ax.axhline(S_sph, color=COR, lw=1.5, ls="-.",
                        label=f"Verbessert S={S_sph:.3f}")
             ax.annotate(f"S={S_sph:.3f}", xy=(14.5, S_sph),
@@ -1635,7 +1636,7 @@ class App(tk.Tk):
         ax.axhline(float(Q_orig[-1]), color=COR, lw=0.8, ls=":", alpha=0.5)
         ax.text(V_max_plot * 0.98, float(Q_orig[-1]) + 0.012,
                 f"Asymptote orig={float(Q_orig[-1]):.3f}",
-                fontsize=8, color=COR, ha="right", alpha=0.85)
+                fontsize=7, color=COR, ha="right", alpha=0.85)
 
         # ── Blendenstufen: 4 Zwischenwerte zwischen D_blend und D ─────────────
         D_steps = []
@@ -1661,21 +1662,23 @@ class App(tk.Tk):
                     label=f"Blende  D={D_blend:.0f}mm ({pct_bl:.0f}%)  "
                           f"S={S_bl:.3f}  V½={Vk_bl:.0f}×")
             ax.axhline(float(Q_bl[-1]), color=ACC, lw=0.8, ls=":", alpha=0.5)
-            ax.text(V_max_plot * 0.98, float(Q_bl[-1]) + 0.012,
+            # Asymptote blend: unterhalb der Linie, damit kein Overlap mit orig
+            ax.text(V_max_plot * 0.98, float(Q_bl[-1]) - 0.022,
                     f"Asymptote blend={float(Q_bl[-1]):.3f}",
-                    fontsize=8, color=ACC, ha="right", alpha=0.85)
+                    fontsize=7, color=ACC, ha="right", va="top", alpha=0.85)
 
-            # Gewinn/Verlust durch Blende bei V½_orig
+            # Gewinn/Verlust durch Blende — links von V½ (weg von opt-Blende-Annotation)
             Q_bl_at_Vk = float(np.interp(Vk_orig, V_arr, Q_bl))
             Q_or_at_Vk = float(np.interp(Vk_orig, V_arr, Q_orig))
             delta = Q_bl_at_Vk - Q_or_at_Vk
+            x_ann = max(Vk_orig - 80, 50)
             ax.annotate(
                 f"bei V={Vk_orig:.0f}×:\n"
                 f"Original Q={Q_or_at_Vk:.2f}\n"
                 f"Blende   Q={Q_bl_at_Vk:.2f}  "
                 f"({'+'if delta>=0 else ''}{delta:.2f})",
                 xy=(Vk_orig, Q_or_at_Vk),
-                xytext=(min(Vk_orig + 25, 350), Q_or_at_Vk + 0.08),
+                xytext=(x_ann, Q_or_at_Vk + 0.12),
                 fontsize=8, color=ACC if delta >= 0 else "#c62828",
                 fontweight="bold",
                 arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
@@ -1700,20 +1703,19 @@ class App(tk.Tk):
         ax.plot(V_arr, Q_opt_line, color=GRN, lw=1.8, ls="-.",
                 label=f"Optimale Blende (max Q je V)  ⌀≈{D_opt_mean:.0f}mm im sinnv. Bereich")
 
-        # Annotation bei V_krit_orig
+        # Annotation opt. Blende: rechts und unterhalb, weg von Blende-Box
+        x_opt = min(V_krit_orig + 50, 340)
+        y_opt = max(Q_opt_vk - 0.12, 0.05)
         ax.annotate(
             f"bei V={V_krit_orig:.0f}×:\nopt. Blende ≈{D_opt_vk:.0f}mm\nQ={Q_opt_vk:.3f}",
             xy=(V_krit_orig, Q_opt_vk),
-            xytext=(min(V_krit_orig + 30, 350), Q_opt_vk + 0.08),
+            xytext=(x_opt, y_opt),
             fontsize=8, color=GRN, fontweight="bold",
             arrowprops=dict(arrowstyle="-", color=GRN, lw=0.8),
             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=GRN, alpha=0.88)
         )
 
-        # ── Referenzlinien ────────────────────────────────────────────────────
-        ax.text(V_max_plot * 0.98, S_orig + 0.012,
-                f"Asymptote S={S_orig:.3f}",
-                fontsize=8, color=COR, ha="right", alpha=0.85)
+        # ── Referenzlinien Q=0.90 / Q=0.70 ──────────────────────────────────
         for q_thresh, col, lbl in [(0.9, GRN, "Q=0.90"), (0.7, "#BA7517", "Q=0.70")]:
             ax.axhline(q_thresh, color=col, lw=0.8, ls=":", alpha=0.6)
             ax.text(32, q_thresh + 0.008, lbl, fontsize=7, color=col, alpha=0.8)
@@ -1735,7 +1737,7 @@ class App(tk.Tk):
         ]:
             if 30 < V_m < V_max_plot:
                 ax.axvline(V_m, color="#999", lw=1.0, ls=":", alpha=0.8)
-                ax.text(V_m + 2, 0.55, lbl, fontsize=7, color="#777",
+                ax.text(V_m + 2, 0.72, lbl, fontsize=7, color="#777",
                         rotation=90, va="center", alpha=0.9)
         if D_blend < D * 0.98:
             for V_m, lbl in [
@@ -1744,7 +1746,7 @@ class App(tk.Tk):
             ]:
                 if 30 < V_m < V_max_plot:
                     ax.axvline(V_m, color=ACC, lw=1.0, ls=":", alpha=0.6)
-                    ax.text(V_m + 2, 0.35, lbl, fontsize=7, color=ACC,
+                    ax.text(V_m + 2, 0.50, lbl, fontsize=7, color=ACC,
                             rotation=90, va="center", alpha=0.8)
 
         ax.set_xlim(30, V_max_plot)
@@ -1752,17 +1754,17 @@ class App(tk.Tk):
         ax.set_xlabel("")
         ax.set_ylabel("Q_vis normiert auf Original-Paraboloid  (MTF×CSF)", fontsize=9)
 
-        # Rayleigh-Hinweis wenn S >= 0.80
+        # Rayleigh-Hinweis: ins Diagramm oben links (nicht über dem Titel)
         rayleigh_ok = S_orig >= 0.80
         titel_farbe = "#2e7d32" if rayleigh_ok else "#c62828"
         rayleigh_text = (
-            "✓ Rayleigh-Kriterium erfüllt (S ≥ 0.80) — Abblenden nicht sinnvoll"
+            "✓ Rayleigh S ≥ 0.80 — Abblenden nicht sinnvoll"
             if rayleigh_ok else
-            f"✗ Rayleigh nicht erfüllt (S={S_orig:.3f} < 0.80) — Abblenden kann helfen"
+            f"✗ Rayleigh nicht erfüllt (S={S_orig:.3f}) — Abblenden kann helfen"
         )
-        ax.text(0.5, 1.04, rayleigh_text,
-                transform=ax.transAxes, ha="center", va="bottom",
-                fontsize=9, fontweight="bold", color=titel_farbe,
+        ax.text(0.02, 0.97, rayleigh_text,
+                transform=ax.transAxes, ha="left", va="top",
+                fontsize=8, fontweight="bold", color=titel_farbe,
                 bbox=dict(boxstyle="round,pad=0.3", fc="white",
                           ec=titel_farbe, alpha=0.9))
 
