@@ -24,6 +24,7 @@ def _wellenfronten(D_mm: float, f_mm: float, lam_nm: float):
     S    = math.exp(-(2 * math.pi * Wrms) ** 2)
     return lam_mm, Wp, Wb, Wrms, S
 
+@lru_cache(maxsize=1024)
 def _strehl_exakt(Wb: float, n: int = 2000) -> float:
     """Exakter Strehl via Pupillenintegral.
 
@@ -1213,7 +1214,7 @@ def fig_blende(D, f, lam, D_blend):
     fig.patch.set_facecolor("#f5f5f5")
     ax.set_facecolor("#f5f5f5"); ax2.set_facecolor("#f5f5f5")
 
-    V_arr      = np.linspace(30, 400, 150)
+    V_arr      = np.linspace(30, 400, 80)   # 80 Punkte reichen für Plot (war 150)
     V_max_plot = 400.0
 
     d_fang  = d_fang_min(D, f)
@@ -1233,35 +1234,52 @@ def fig_blende(D, f, lam, D_blend):
     V_krit_bl   = D_blend * 0.7 * math.sqrt(max(S_von_D(D_blend), 1e-9))
     V_max_blend = min(V_max_AP_bl, V_krit_bl * 2.0)
 
+    _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    _N_MTF  = 40                                   # MTF-Stützpunkte (war 80)
+    _nu     = np.linspace(0.0, 1.0, _N_MTF)       # einmal berechnen, nicht per V
+
+    # MTF-Arrays für Original-Paraboloid (hängen nicht von V ab) — einmal berechnen
+    _mp_orig = np.array([mtf_para(ni) for ni in _nu])
+    _fc_orig = D / (lam * 1e-6 * 206265)
+
+    _q_cache: dict = {}   # lokaler Cache: Db → (Q_arr, S, Vk)
+
     def Q_opt_kurve(Db):
         """Optische Qualität normiert auf Original-Paraboloid — MTF×CSF.
 
         Obstruktion: ε = d_fang/Db — wächst beim Abblenden.
+        Ergebnis wird gecacht: gleiche Blende wird nicht zweimal gerechnet.
         """
+        key = round(Db, 2)
+        if key in _q_cache:
+            return _q_cache[key]
+
         _, _, Wb, _, _ = _wellenfronten(Db, f, lam)
-        S       = _strehl_exakt(Wb)
+        S       = _strehl_exakt(Wb)          # gecacht durch @lru_cache
         Vk      = Db * 0.7 * math.sqrt(max(S, 1e-9))
         eps     = min(d_fang / Db, 0.99)
-        fc_orig = D  / (lam * 1e-6 * 206265)
         fc_bl   = Db / (lam * 1e-6 * 206265)
-        f_ratio = fc_bl / fc_orig
-        _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
-        n       = 80
-        Q_arr   = np.zeros(len(V_arr))
+        f_ratio = fc_bl / _fc_orig
+
+        # Blenden-MTF-Arrays einmal für alle V berechnen
+        nu_bl = _nu / max(f_ratio, 1e-6)
+        mp_bl = np.array([mtf_para_obstr(min(ni, 1.0), eps) for ni in nu_bl])
+        ms_bl = np.array([mtf_sph_rel(min(ni, 1.0), Wb)     for ni in nu_bl])
+        cutoff_mask = _nu > f_ratio
+        mp_bl[cutoff_mask] = 0.0
+        ms_bl[cutoff_mask] = 0.0
+        mtf_bl = ms_bl * mp_bl   # kombinierte Blenden-MTF (V-unabhängig)
+
+        Q_arr = np.zeros(len(V_arr))
         for j, V in enumerate(V_arr):
-            nu    = np.linspace(0.0, 1.0, n)
-            nu_bl = nu / max(f_ratio, 1e-6)
-            mp_bl = np.array([mtf_para_obstr(min(ni,1.0), eps) for ni in nu_bl])
-            ms_bl = np.array([mtf_sph_rel(min(ni,1.0), Wb)     for ni in nu_bl])
-            mp_bl[nu > f_ratio] = 0.0
-            ms_bl[nu > f_ratio] = 0.0
-            # Normierung: Paraboloid OHNE Obstruktion (ideal)
-            mp_orig = np.array([mtf_para(ni) for ni in nu])
-            w = np.array([csf(ni * fc_orig * 3600.0 / V) for ni in nu])
-            num   = float(_trapz(ms_bl * mp_bl * w, nu))
-            denom = float(_trapz(mp_orig * w, nu))
+            w     = np.array([csf(ni * _fc_orig * 3600.0 / V) for ni in _nu])
+            num   = float(_trapz(mtf_bl  * w, _nu))
+            denom = float(_trapz(_mp_orig * w, _nu))
             Q_arr[j] = num / max(denom, 1e-12)
-        return Q_arr, S, Vk
+
+        result = (Q_arr, S, Vk)
+        _q_cache[key] = result
+        return result
 
     # ── Original-Spiegel ─────────────────────────────────────────────────
     Q_orig, S_orig, Vk_orig = Q_opt_kurve(D)
@@ -1319,7 +1337,7 @@ def fig_blende(D, f, lam, D_blend):
             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.88))
 
     # ── "optimale Blende" — max Q je Vergrößerung (aus Stichproben) ────────
-    D_scan  = np.linspace(D * 0.40, D, 12)   # 12 Stichproben reichen
+    D_scan  = np.linspace(D * 0.40, D, 8)    # 8 Stichproben reichen (war 12)
     Q_stack = np.array([Q_opt_kurve(Db)[0] for Db in D_scan])
     Q_opt_line = Q_stack.max(axis=0)
 
@@ -1362,9 +1380,18 @@ def fig_blende(D, f, lam, D_blend):
     # ── Sinnvoller Vergrößerungsbereich ──────────────────────────────────
     ax.axvspan(30, min(V_min_orig, V_max_plot),
                color="#888", alpha=0.08, zorder=0)
+    if V_min_orig > 32:   # Bereich links groß genug zum Beschriften
+        ax.text((30 + min(V_min_orig, V_max_plot)) / 2, 0.96,
+                "nicht sinnvoll\n(zu niedrig)",
+                transform=ax.get_xaxis_transform(), ha="center", va="top",
+                fontsize=7, color="#999", style="italic", zorder=1)
     if V_max_orig < V_max_plot:
         ax.axvspan(min(V_max_orig, V_max_plot), V_max_plot,
                    color="#888", alpha=0.08, zorder=0)
+        ax.text((V_max_orig + V_max_plot) / 2, 0.96,
+                "nicht sinnvoll\n(zu hoch)",
+                transform=ax.get_xaxis_transform(), ha="center", va="top",
+                fontsize=7, color="#999", style="italic", zorder=1)
     for V_m, lbl in [
         (V_min_orig, f"V_min={V_min_orig:.0f}×\n(AP=7mm)"),
         (V_max_orig, f"V_max={V_max_orig:.0f}×\n({'AP=0.5mm' if V_max_orig >= V_max_AP*0.99 else '2×V_krit'})"),
@@ -1451,7 +1478,7 @@ def fig_blende(D, f, lam, D_blend):
 
     # Rayleigh-Linie: ab welcher Blende ist S=0.80 erreicht?
     D_rayleigh = None
-    for Db in np.linspace(D * 0.4, D, 200):
+    for Db in np.linspace(D * 0.4, D, 40):   # 40 reichen; _strehl_exakt gecacht
         if S_von_D(Db) >= 0.80:
             D_rayleigh = Db
             break
@@ -1467,9 +1494,18 @@ def fig_blende(D, f, lam, D_blend):
     # ── Sinnvoller Bereich im unteren Panel ──────────────────────────────
     ax2.axvspan(30, min(V_min_orig, V_max_plot),
                 color="#888", alpha=0.08, zorder=0)
+    if V_min_orig > 32:
+        ax2.text((30 + min(V_min_orig, V_max_plot)) / 2, 0.96,
+                 "nicht sinnvoll\n(zu niedrig)",
+                 transform=ax2.get_xaxis_transform(), ha="center", va="top",
+                 fontsize=7, color="#999", style="italic", zorder=1)
     if V_max_orig < V_max_plot:
         ax2.axvspan(min(V_max_orig, V_max_plot), V_max_plot,
                     color="#888", alpha=0.08, zorder=0)
+        ax2.text((V_max_orig + V_max_plot) / 2, 0.96,
+                 "nicht sinnvoll\n(zu hoch)",
+                 transform=ax2.get_xaxis_transform(), ha="center", va="top",
+                 fontsize=7, color="#999", style="italic", zorder=1)
     for V_m, lbl in [(V_min_orig, f"V_min={V_min_orig:.0f}×"),
                       (V_max_orig, f"V_max={V_max_orig:.0f}×")]:
         if 30 < V_m < V_max_plot:
