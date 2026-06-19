@@ -34,7 +34,7 @@ def _strehl_exakt(Wb: float, n: int = 2000) -> float:
     """
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
     rho   = np.linspace(0.0, 1.0, n)
-    W     = 8.0 * Wb * (rho**4 - rho**2)
+    W     = 4.0 * Wb * (rho**4 - rho**2)
     W_m   = float(_trapz(W * rho, rho) / 0.5)   # flächengewichteter Mittelwert
     Wc    = W - W_m
     phase = 2.0 * math.pi * Wc
