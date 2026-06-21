@@ -225,16 +225,20 @@ def mtf_para(f: float) -> float:
 def mtf_para_obstr(f: float, eps: float = 0.0) -> float:
     if f <= 0: return 1.0
     if f >= 1: return 0.0
-    def ring_area(r1, r2, f):
-        def seg(r):
-            if r <= f/2: return 0.0
-            x = max(-1.0, min(1.0, (r**2 + (f/2)**2 - 1.0) / (2.0 * r * (f/2))))
-            t = math.acos(x)
-            return r**2 * t + (f/2)**2 * math.acos(max(-1.0, min(1.0,
-                   (r**2 + 1.0 - (f/2)**2) / (2.0 * r)))) - 0.5 * math.sqrt(
-                   max(0.0, (r + f/2 + 1.0) * (r + f/2 - 1.0) *
-                       (1.0 - r + f/2) * (1.0 + r - f/2)))
-        return seg(r2) - seg(r1) if r2 > r1 else 0.0
+    def seg(r, fv):
+        """Kreissegment-Integralterm; fv=0 ergibt Kreisfläche."""
+        if fv <= 0:
+            # f→0: ganzer Kreisanteil = π*r² (normiert auf Einheitskreis)
+            return math.pi * r**2 if r <= 1.0 else math.pi
+        hf = fv / 2.0
+        if r <= hf: return 0.0
+        x1 = max(-1.0, min(1.0, (r**2 + hf**2 - 1.0) / (2.0 * r * hf)))
+        x2 = max(-1.0, min(1.0, (r**2 + 1.0 - hf**2) / (2.0 * r)))
+        disc = max(0.0, (r + hf + 1.0) * (r + hf - 1.0) *
+                        (1.0 - r + hf) * (1.0 + r - hf))
+        return r**2 * math.acos(x1) + hf**2 * math.acos(x2) - 0.5 * math.sqrt(disc)
+    def ring_area(r1, r2, fv):
+        return seg(r2, fv) - seg(r1, fv) if r2 > r1 else 0.0
     A_full = ring_area(eps, 1.0, f)
     A_norm = ring_area(eps, 1.0, 0.0)
     if A_norm < 1e-10: return 0.0
@@ -1087,70 +1091,67 @@ def main():
 
     verdict_text, verdict_color = beurteilung(S_real)
 
-    # ── Kennzahlen-Übersicht ─────────────────────────────────────────────────
-    def _qcolor(q):
-        return "green" if q >= 0.90 else "orange" if q >= 0.70 else "red"
+    # ── Kennzahlen-Übersicht (kompakt) ──────────────────────────────────────
+    def _qc(q):
+        return "#2e7d32" if q >= 0.90 else "#e65100" if q >= 0.70 else "#c62828"
 
-    st.markdown(f"<div style='background:{verdict_color};color:white;padding:8px 14px;"
-                f"border-radius:6px;font-weight:bold;margin-bottom:8px'>{verdict_text}</div>",
-                unsafe_allow_html=True)
+    def _vk_ex_text(v):
+        if v <= 30:  return "< 30x"
+        if v >= 600: return ">= 600x"
+        return f"{v:.0f}x"
 
-    col1, col2, col3 = st.columns(3)
+    delta_s    = S_real - S_mar
+    delta_halb = Vk_halb - Vk_naeh
+    avp        = r_real["aufl_verlust_pct"]
+    alpha_blur = D**3 / (64 * f**2) / f * 206265
 
-    with col1:
-        st.subheader("Kontrast")
-        st.metric("Öffnungsverhältnis f/D", f"{N:.2f}")
-        st.metric("W_PtV paraxial [λ]",     f"{r_real['Wp']:.4f}")
-        st.metric("W_PtV best focus [λ]",   f"{r_real['Wb']:.4f}")
-        st.metric("W_RMS [λ]",              f"{r_real['Wrms']:.5f}")
-        delta_s = S_real - S_mar
-        st.metric("Strehl Maréchal",         f"{S_mar:.4f} → {S_slide:.4f}")
-        st.metric("Strehl exakt (Pupillenintegral)",
-                  f"{S_real:.4f}",
-                  delta=f"Δ vs. Maréchal {delta_s:+.4f}",
-                  delta_color="off")
-        st.metric("Eff. Öffnung Kontrast [mm]", f"{r_real['Deff_k']:.1f} → {Deff_k_sl:.1f}")
+    s_col = "#2e7d32" if S_real >= 0.95 else "#e65100" if S_real >= 0.80 else "#c62828"
 
-    with col2:
-        st.subheader("Vergrößerung")
-        delta_halb = Vk_halb - Vk_naeh
-        st.metric("V½  Wendepunkt Q̃(V) = D·0.7·√S",
-                  f"{Vk_naeh:.0f}× → {Vk_naeh_s:.0f}×",
-                  delta=f"exakt: {Vk_halb:.0f}×  (Δ {delta_halb:+.0f}×)",
-                  delta_color="off")
-        if Vk_blur > 1:
-            alpha_blur = D**3 / (64 * f**2) / f * 206265
-            st.metric("V_krit  Blur sichtbar (geometrisch)",
-                      f"{Vk_blur:.0f}×",
-                      delta=f"α_blur={alpha_blur:.1f}\"  unabh. von S",
-                      delta_color="off")
-        else:
-            st.metric("V_krit  Blur sichtbar", "< 1× — Blur dominiert immer")
+    st.markdown(
+        f"<div style='background:{verdict_color};color:white;padding:5px 10px;"
+        f"border-radius:5px;font-size:0.82em;font-weight:bold;margin-bottom:5px'>"
+        f"{verdict_text}</div>",
+        unsafe_allow_html=True)
 
-        def _vk_ex_text(v):
-            if v <= 30:  return "< 30× — Verlust schon bei kleinster Vergr."
-            if v >= 600: return "≥ 600× — kaum Verlust im Nutzbereich"
-            return f"{v:.0f}×"
-        st.metric("V_krit  Kontrastverlust >10%  (MTF×CSF)",
-                  f"{_vk_ex_text(Vk_exakt)} → {_vk_ex_text(Vk_exakt_s)}")
+    def _row(lbl, val, color="#222"):
+        return (f"<tr>"
+                f"<td style='color:#666;font-size:0.76em;padding:1px 10px 1px 2px;white-space:nowrap'>{lbl}</td>"
+                f"<td style='font-weight:bold;font-size:0.76em;color:{color};font-family:monospace;white-space:nowrap'>{val}</td>"
+                f"</tr>")
 
-        avp = r_real["aufl_verlust_pct"]
-        st.metric("Aufl.verlust gg. Paraboloid",
-                  f"{avp:.1f}%  (Blur {r_real['d_blur_as']:.1f}\")")
-        st.metric("Verlust bei V=150× [mm]",
-                  f"{rv['verlust']:.1f} mm")
-        st.caption(f"⚡ V_krit={Vk['Vk_sph']:.0f}× → Verbessert: {Vk_slide['Vk_sph']:.0f}×  |  "
-                   f"Paraboloid: {Vk['Vk_para']:.0f}×  |  V_max: {Vk['Vmax']:.0f}×")
+    def _hdr(title):
+        return (f"<tr><td colspan='2' style='font-weight:bold;font-size:0.78em;"
+                f"padding:5px 0 1px;color:#333;border-bottom:1px solid #ddd'>{title}</td></tr>")
 
-    with col3:
-        st.subheader("Wahrgenommener Kontrast Q_perc (CSF-gewichtet)")
-        def _qmetric(label, q):
-            color = _qcolor(q)
-            st.metric(label, f"{q:.3f}")
-        _qmetric("Q_perc  bei  30×",  Qp_80)
-        _qmetric("Q_perc  bei  80×",  Qp_200)
-        _qmetric("Q_perc  bei 160×",  Qp_350)
-        _qmetric("Q_perc  bei 150×",  Qp_V)
+    rows  = _hdr("Kontrast / Wellenfront")
+    rows += _row("f/D",                  f"{N:.2f}")
+    rows += _row("W_PtV paraxial",       f"{r_real['Wp']:.4f} &#955;")
+    rows += _row("W_PtV best focus",     f"{r_real['Wb']:.4f} &#955;")
+    rows += _row("W_RMS",                f"{r_real['Wrms']:.5f} &#955;")
+    rows += _row("Strehl Marechal",      f"{S_mar:.4f} &#8594; {S_slide:.4f}")
+    rows += _row("Strehl exakt",
+                 f"{S_real:.4f}  (&#916; Mar. {delta_s:+.4f})", s_col)
+    rows += _row("D_eff Kontrast",       f"{r_real['Deff_k']:.1f} &#8594; {Deff_k_sl:.1f} mm")
+    rows += _hdr("Vergr&#246;&#223;erung")
+    rows += _row("V&#189;  D&#183;0.7&#183;&#8730;S",
+                 f"{Vk_naeh:.0f}x &#8594; {Vk_naeh_s:.0f}x  | exakt: {Vk_halb:.0f}x  (&#916; {delta_halb:+.0f}x)")
+    rows += _row("V_krit Blur (geom.)",
+                 f"{Vk_blur:.0f}x  &#945;_blur={alpha_blur:.1f}\"" if Vk_blur > 1 else "< 1x - Blur dominiert immer")
+    rows += _row("V_krit MTF&#215;CSF >10%",
+                 f"{_vk_ex_text(Vk_exakt)} &#8594; {_vk_ex_text(Vk_exakt_s)}")
+    rows += _row("Aufl.verlust",         f"{avp:.1f}%  (Blur {r_real['d_blur_as']:.1f}\")")
+    rows += _row("Verlust bei 150x",     f"{rv['verlust']:.1f} mm")
+    rows += _row("V_krit / Vmax",
+                 f"{Vk['Vk_sph']:.0f}x &#8594; {Vk_slide['Vk_sph']:.0f}x  | Para: {Vk['Vk_para']:.0f}x  | Vmax: {Vk['Vmax']:.0f}x",
+                 "#534AB7")
+    rows += _hdr("Q_perc (CSF-gewichtet)")
+    for lbl_q, q in [("Q bei  30x", Qp_80), ("Q bei  80x", Qp_200),
+                     ("Q bei 160x", Qp_350), ("Q bei 150x", Qp_V)]:
+        rows += _row(lbl_q, f"{q:.3f}", _qc(q))
+
+    st.markdown(
+        f"<table style='border-collapse:collapse;width:100%;margin-bottom:4px'>{rows}</table>",
+        unsafe_allow_html=True)
 
     st.markdown("---")
 
