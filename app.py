@@ -827,92 +827,225 @@ def plot_wahrnehmung(D, f, lam, S_slide=None, S_real=None):
 
 
 def plot_blende(D, f, lam, D_blend):
-    V_arr  = np.linspace(30, 400, 150)
-    n_pts  = 150
+    """Blenden-Diagramm exakt wie newton_spiegel_rechner.py:
+    Oberes Panel: Q_vis-Kurven für Original, Blendenstufen, gewählte Blende, optimale Blende.
+    Unteres Panel: Gain-Faktor mit Leuchtdichte-Effekt.
+    """
+    V_arr      = np.linspace(30, 400, 80)
     V_max_plot = 400.0
+
+    d_fang   = d_fang_min(D, f)
+    eps_orig = d_fang / D
 
     def S_von_D(Db):
         _, _, Wb_, _, _ = _wellenfronten(Db, f, lam)
         return _strehl_exakt(Wb_)
 
     S_orig  = S_von_D(D)
-    S_blend = S_von_D(D_blend)
-    d_fang  = d_fang_min(D, f)
-    eps_orig = d_fang / D
+    V_min_orig  = D / 7.0
+    V_max_AP    = D / 0.5
+    V_krit_orig = D * 0.7 * math.sqrt(max(S_orig, 1e-9))
+    V_max_orig  = min(V_max_AP, V_krit_orig * 2.0)
+    V_min_blend = D_blend / 7.0
+    V_max_AP_bl = D_blend / 0.5
+    V_krit_bl   = D_blend * 0.7 * math.sqrt(max(S_von_D(D_blend), 1e-9))
+    V_max_blend = min(V_max_AP_bl, V_krit_bl * 2.0)
 
-    def Q_naeh_arr(V_a, S, Deff):
-        Vk = Deff * 0.7 * math.sqrt(max(S, 1e-9))
-        w  = 1.0 / (1.0 + (Vk / np.maximum(V_a, 1e-9))**2)
-        return S + (1.0 - S) * (1.0 - w)
+    _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    _N_MTF  = 40
+    _nu     = np.linspace(0.0, 1.0, _N_MTF)
+    _mp_orig = np.array([mtf_para(ni) for ni in _nu])
+    _fc_orig = D / (lam * 1e-6 * 206265)
 
-    Q_orig  = Q_naeh_arr(V_arr, S_orig,  D)
-    Q_bl    = Q_naeh_arr(V_arr, S_blend, D_blend)
+    _q_cache = {}
 
-    V_min_orig   = D / 7.0
-    V_max_AP     = D / 0.5
-    V_krit_orig  = D * 0.7 * math.sqrt(max(S_orig, 1e-9))
-    Vk_orig      = V_krit_orig
-    V_max_orig   = min(V_max_AP, 2 * V_krit_orig)
-    V_min_blend  = D_blend / 7.0
-    V_max_AP_bl  = D_blend / 0.5
-    V_max_blend  = min(V_max_AP_bl, 2 * D_blend * 0.7 * math.sqrt(max(S_blend, 1e-9)))
+    def Q_opt_kurve(Db):
+        key = round(Db, 2)
+        if key in _q_cache:
+            return _q_cache[key]
+        _, _, Wb_, _, _ = _wellenfronten(Db, f, lam)
+        S   = _strehl_exakt(Wb_)
+        Vk  = Db * 0.7 * math.sqrt(max(S, 1e-9))
+        eps = min(d_fang / Db, 0.99)
+        fc_bl   = Db / (lam * 1e-6 * 206265)
+        f_ratio = fc_bl / _fc_orig
+        nu_bl = _nu / max(f_ratio, 1e-6)
+        mp_bl = np.array([mtf_para_obstr(min(ni, 1.0), eps) for ni in nu_bl])
+        ms_bl = np.array([mtf_sph_rel(min(ni, 1.0), Wb_)   for ni in nu_bl])
+        cutoff = _nu > f_ratio
+        mp_bl[cutoff] = 0.0
+        ms_bl[cutoff] = 0.0
+        mtf_bl = ms_bl * mp_bl
+        Q_arr = np.zeros(len(V_arr))
+        for j, V in enumerate(V_arr):
+            w     = np.array([csf(ni * _fc_orig * 3600.0 / V) for ni in _nu])
+            num   = float(_trapz(mtf_bl   * w, _nu))
+            denom = float(_trapz(_mp_orig * w, _nu))
+            Q_arr[j] = num / max(denom, 1e-12)
+        result = (Q_arr, S, Vk)
+        _q_cache[key] = result
+        return result
 
-    # Optimale Blende je Vergrößerung
-    D_arr_opt = np.linspace(D * 0.4, D, 40)
-    Q_opt_line = np.zeros(len(V_arr))
-    D_opt_arr  = np.zeros(len(V_arr))
-    for j, V in enumerate(V_arr):
-        q_best = -1.0; d_best = D
-        for Db in D_arr_opt:
-            s_ = S_von_D(Db)
-            q_ = (s_ + (1-s_) * (1 - 1/(1+(Db*0.7*math.sqrt(max(s_,1e-9))/max(V,1))**2)))
-            if q_ > q_best:
-                q_best = q_; d_best = Db
-        Q_opt_line[j] = q_best; D_opt_arr[j] = d_best
-
-    mask_sinn  = (V_arr >= V_min_orig) & (V_arr <= V_max_orig)
-    D_opt_vk   = float(D_opt_arr[np.argmin(np.abs(V_arr - Vk_orig))]) if len(V_arr) else D
-    Q_opt_vk   = float(Q_opt_line[np.argmin(np.abs(V_arr - Vk_orig))]) if len(V_arr) else 0
-    D_opt_mean = float(D_opt_arr[mask_sinn].mean()) if mask_sinn.any() else D_opt_vk
-
+    # ── Figur ────────────────────────────────────────────────────────────────
     fig, (ax, ax2) = plt.subplots(2, 1, figsize=(9, 8))
     fig.patch.set_facecolor(BG)
+    ax.set_facecolor(BG); ax2.set_facecolor(BG)
 
-    # Oberes Panel
-    ax.plot(V_arr, Q_orig, color=ACC, lw=2.2, ls="-",
-            label=f"Original D={D:.0f}mm  ε={eps_orig:.3f}  S={S_orig:.3f}")
+    # ── Original ─────────────────────────────────────────────────────────────
+    Q_orig, S_orig_k, Vk_orig = Q_opt_kurve(D)
+    ax.plot(V_arr, Q_orig, color=COR, lw=2.5, ls="-",
+            label=f"Original  D={D:.0f}mm  S={S_orig_k:.3f}  V½={Vk_orig:.0f}×")
+    ax.axhline(float(Q_orig[-1]), color=COR, lw=0.8, ls=":", alpha=0.5)
+    ax.text(V_max_plot * 0.98, float(Q_orig[-1]) + 0.012,
+            f"Asymptote orig={float(Q_orig[-1]):.3f}",
+            fontsize=7, color=COR, ha="right", alpha=0.85)
+
+    # ── Blendenstufen (3 Zwischenwerte) ──────────────────────────────────────
+    D_steps = []
     if D_blend < D * 0.98:
-        ax.plot(V_arr, Q_bl, color=COR, lw=2.0, ls="-.",
-                label=f"Abgeblendet D={D_blend:.0f}mm  ε={d_fang/D_blend:.3f}  S={S_blend:.3f}")
-    ax.plot(V_arr, Q_opt_line, color=GRN, lw=1.8, ls="-.",
-            label=f"Optimale Blende (max Q)  ⌀≈{D_opt_mean:.0f}mm")
+        n_steps = 4
+        for i in range(1, n_steps):
+            D_steps.append(D_blend + i * (D - D_blend) / n_steps)
 
+    colors_blend = ["#1565c0", "#2e7d32", "#7b1fa2", "#c8860a"]
+    for i, Db in enumerate(D_steps):
+        Q_b, S_b, Vk_b = Q_opt_kurve(Db)
+        col = colors_blend[i % len(colors_blend)]
+        pct = Db / D * 100
+        ax.plot(V_arr, Q_b, color=col, lw=1.2, ls="--", alpha=0.6,
+                label=f"D={Db:.0f}mm ({pct:.0f}%)  S={S_b:.3f}  V½={Vk_b:.0f}×")
+
+    # ── Gewählte Blende ───────────────────────────────────────────────────────
+    Q_bl = None
+    if D_blend < D * 0.98:
+        Q_bl, S_bl, Vk_bl = Q_opt_kurve(D_blend)
+        pct_bl = D_blend / D * 100
+        ax.plot(V_arr, Q_bl, color=ACC, lw=2.5, ls="-",
+                label=f"Blende  D={D_blend:.0f}mm ({pct_bl:.0f}%)  "
+                      f"S={S_bl:.3f}  V½={Vk_bl:.0f}×")
+        ax.axhline(float(Q_bl[-1]), color=ACC, lw=0.8, ls=":", alpha=0.5)
+        ax.text(V_max_plot * 0.98, float(Q_bl[-1]) - 0.022,
+                f"Asymptote blend={float(Q_bl[-1]):.3f}",
+                fontsize=7, color=ACC, ha="right", va="top", alpha=0.85)
+        Q_bl_at_Vk = float(np.interp(Vk_orig, V_arr, Q_bl))
+        Q_or_at_Vk = float(np.interp(Vk_orig, V_arr, Q_orig))
+        delta = Q_bl_at_Vk - Q_or_at_Vk
+        x_ann = max(Vk_orig - 80, 50)
+        ax.annotate(
+            f"bei V={Vk_orig:.0f}×:\n"
+            f"Original Q={Q_or_at_Vk:.2f}\n"
+            f"Blende   Q={Q_bl_at_Vk:.2f}  "
+            f"({'+'if delta>=0 else ''}{delta:.2f})",
+            xy=(Vk_orig, Q_or_at_Vk),
+            xytext=(x_ann, Q_or_at_Vk + 0.12),
+            fontsize=8, color=ACC if delta >= 0 else "#c62828",
+            fontweight="bold",
+            arrowprops=dict(arrowstyle="-", color=ACC, lw=0.8),
+            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=ACC, alpha=0.88))
+
+    # ── Optimale Blende ───────────────────────────────────────────────────────
+    D_scan  = np.linspace(D * 0.40, D, 8)
+    Q_stack = np.array([Q_opt_kurve(Db)[0] for Db in D_scan])
+    Q_opt_line = Q_stack.max(axis=0)
+    D_opt_arr  = np.array([D_scan[Q_stack[:, j].argmax()] for j in range(len(V_arr))])
+    idx_vk     = int(np.argmin(np.abs(V_arr - Vk_orig)))
+    D_opt_vk   = D_opt_arr[idx_vk]
+    Q_opt_vk   = Q_opt_line[idx_vk]
+    mask_sinn  = (V_arr >= V_min_orig) & (V_arr <= V_max_orig)
+    D_opt_mean = float(D_opt_arr[mask_sinn].mean()) if mask_sinn.any() else D_opt_vk
+
+    ax.plot(V_arr, Q_opt_line, color=GRN, lw=1.8, ls="-.",
+            label=f"Optimale Blende (max Q je V)  ⌀≈{D_opt_mean:.0f}mm im sinnv. Bereich")
+    x_opt = min(Vk_orig + 50, 340)
+    y_opt = max(Q_opt_vk - 0.12, 0.05)
+    ax.annotate(
+        f"bei V={Vk_orig:.0f}×:\nopt. Blende ≈{D_opt_vk:.0f}mm\nQ={Q_opt_vk:.3f}",
+        xy=(Vk_orig, Q_opt_vk),
+        xytext=(x_opt, y_opt),
+        fontsize=8, color=GRN, fontweight="bold",
+        arrowprops=dict(arrowstyle="-", color=GRN, lw=0.8),
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=GRN, alpha=0.88))
+
+    # ── Referenzlinien ────────────────────────────────────────────────────────
     for q_thresh, col, lbl in [(0.9, GRN, "Q=0.90"), (0.7, "#BA7517", "Q=0.70")]:
         ax.axhline(q_thresh, color=col, lw=0.8, ls=":", alpha=0.6)
         ax.text(32, q_thresh + 0.008, lbl, fontsize=7, color=col, alpha=0.8)
+
+    # Rayleigh
+    D_rayleigh = None
+    for Db in np.linspace(D * 0.4, D, 40):
+        if S_von_D(Db) >= 0.80:
+            D_rayleigh = Db
+            break
+    if D_rayleigh is not None and D_rayleigh > D * 0.42:
+        ax.axhline(0.80, color="#BA7517", lw=1.0, ls="--", alpha=0.7)
+        ax.text(32, 0.81, f"Rayleigh S=0.80  (D_blend≥{D_rayleigh:.0f}mm)",
+                fontsize=7, color="#BA7517", alpha=0.9)
+
     if 30 <= Vk_orig <= V_max_plot:
         ax.axvline(Vk_orig, color=COR, lw=1.0, ls="--", alpha=0.5)
         ax.text(Vk_orig + 2, 0.03, f"V½={Vk_orig:.0f}×",
                 fontsize=7, color=COR, rotation=90, va="bottom", alpha=0.7)
+
+    # Sinnvoller Vergrößerungsbereich
+    ax.axvspan(30, min(V_min_orig, V_max_plot), color="#888", alpha=0.08, zorder=0)
+    if V_min_orig > 32:
+        ax.text((30 + min(V_min_orig, V_max_plot)) / 2, 0.96,
+                "nicht sinnvoll\n(zu niedrig)",
+                transform=ax.get_xaxis_transform(), ha="center", va="top",
+                fontsize=7, color="#999", style="italic", zorder=1)
+    if V_max_orig < V_max_plot:
+        ax.axvspan(min(V_max_orig, V_max_plot), V_max_plot,
+                   color="#888", alpha=0.08, zorder=0)
+        ax.text((V_max_orig + V_max_plot) / 2, 0.96,
+                "nicht sinnvoll\n(zu hoch)",
+                transform=ax.get_xaxis_transform(), ha="center", va="top",
+                fontsize=7, color="#999", style="italic", zorder=1)
+    for V_m, lbl in [
+        (V_min_orig, f"V_min={V_min_orig:.0f}×\n(AP=7mm)"),
+        (V_max_orig, f"V_max={V_max_orig:.0f}×\n({'AP=0.5mm' if V_max_orig >= V_max_AP*0.99 else '2×V_krit'})"),
+    ]:
+        if 30 < V_m < V_max_plot:
+            ax.axvline(V_m, color="#999", lw=1.0, ls=":", alpha=0.8)
+            ax.text(V_m + 2, 0.72, lbl, fontsize=7, color="#777",
+                    rotation=90, va="center", alpha=0.9)
+    if D_blend < D * 0.98:
+        for V_m, lbl in [
+            (V_min_blend, f"V_min={V_min_blend:.0f}×\n(Blende)"),
+            (V_max_blend, f"V_max={V_max_blend:.0f}×\n({'AP' if V_max_blend >= V_max_AP_bl*0.99 else '2×V_krit'} Blende)"),
+        ]:
+            if 30 < V_m < V_max_plot:
+                ax.axvline(V_m, color=ACC, lw=1.0, ls=":", alpha=0.6)
+                ax.text(V_m + 2, 0.50, lbl, fontsize=7, color=ACC,
+                        rotation=90, va="center", alpha=0.8)
+
+    y_max_ax = min(1.15, max(float(Q_orig.max()),
+                              float(Q_bl.max()) if Q_bl is not None else 0,
+                              float(Q_opt_line.max())) * 1.15)
     ax.set_xlim(30, V_max_plot)
-    ax.set_ylim(0, min(1.15, max(float(Q_orig.max()), float(Q_bl.max()) if D_blend < D*0.98 else 0) * 1.15))
-    ax.set_ylabel("Q_vis normiert auf Paraboloid  (MTF×CSF)", fontsize=9)
+    ax.set_ylim(0, y_max_ax)
+    ax.set_ylabel("Q_vis normiert auf Original-Paraboloid  (MTF×CSF)", fontsize=9)
+
     rayleigh_ok = S_orig >= 0.80
     titel_farbe = "#2e7d32" if rayleigh_ok else "#c62828"
-    rayleigh_text = ("✓ Rayleigh S ≥ 0.80 — Abblenden nicht sinnvoll"
-                     if rayleigh_ok else
-                     f"✗ Rayleigh nicht erfüllt (S={S_orig:.3f}) — Abblenden kann helfen")
-    ax.text(0.02, 0.97, rayleigh_text, transform=ax.transAxes, ha="left", va="top",
+    rayleigh_text = (
+        "✓ Rayleigh S ≥ 0.80 — Abblenden nicht sinnvoll"
+        if rayleigh_ok else
+        f"✗ Rayleigh nicht erfüllt (S={S_orig:.3f}) — Abblenden kann helfen"
+    )
+    ax.text(0.02, 0.97, rayleigh_text,
+            transform=ax.transAxes, ha="left", va="top",
             fontsize=8, fontweight="bold", color=titel_farbe,
             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=titel_farbe, alpha=0.9))
     ax.set_title(
         f"Blendeneffekt  —  D={D:.0f}mm  f/{f/D:.1f}  S={S_orig:.3f}"
         f"  |  Blende={D_blend:.0f}mm ({D_blend/D*100:.0f}%)"
-        f"  |  d_fang={d_fang:.0f}mm  ε={eps_orig:.3f}→{d_fang/D_blend:.3f}", fontsize=8)
+        f"  |  d_fang={d_fang:.0f}mm  ε={eps_orig:.3f}→{d_fang/D_blend:.3f}",
+        fontsize=8)
     ax.legend(fontsize=7, loc="lower right")
     _ax_fmt(ax)
 
-    # Unteres Panel: Gain-Faktor
+    # ── Unterer Panel: Gain-Faktor mit Leuchtdichte-Effekt ───────────────────
     objekte_lum = [
         ("Jupiter",           6000, "#e65100"),
         ("Mars/Saturn",        500, "#c8860a"),
@@ -928,18 +1061,43 @@ def plot_blende(D, f, lam, D_blend):
     for li, (name, L_obj, col) in enumerate(objekte_lum):
         gain = gain_mat[:, li]
         ls = "-" if L_obj >= 500 else ("--" if L_obj >= 5 else ":")
-        ax2.plot(V_arr, gain, color=col, lw=1.8, ls=ls, label=f"{name}  (L≈{L_obj:.0f} cd/m²)")
+        ax2.plot(V_arr, gain, color=col, lw=1.8, ls=ls,
+                 label=f"{name}  (L≈{L_obj:.0f} cd/m²)")
 
-    ax2.axhline(1.0, color="#888", lw=1.2)
-    ax2.text(V_max_plot * 0.98, 1.02, "Abblenden lohnt sich ↑", fontsize=8, color="#2e7d32", ha="right")
-    ax2.text(V_max_plot * 0.98, 0.96, "Abblenden schadet ↓",    fontsize=8, color="#c62828", ha="right")
+    ax2.axhline(1.0, color="#888", lw=1.2, ls="-")
+    ax2.text(V_max_plot * 0.98, 1.02, "Abblenden lohnt sich ↑",
+             fontsize=8, color="#2e7d32", ha="right")
+    ax2.text(V_max_plot * 0.98, 0.96, "Abblenden schadet ↓",
+             fontsize=8, color="#c62828", ha="right")
+
     y_max = min(float(gain_mat.max()) * 1.1, 4.0)
     y_min = max(float(gain_mat.min()) * 0.95, 0.3)
     ax2.set_ylim(y_min, y_max)
     ax2.fill_between(V_arr, 1.0, y_max, color="#2e7d32", alpha=0.04)
     ax2.fill_between(V_arr, y_min, 1.0, color="#c62828", alpha=0.06)
+
     if 30 <= Vk_orig <= V_max_plot:
         ax2.axvline(Vk_orig, color=COR, lw=1.0, ls="--", alpha=0.5)
+
+    # Sinnvoller Bereich unten
+    ax2.axvspan(30, min(V_min_orig, V_max_plot), color="#888", alpha=0.08, zorder=0)
+    if V_max_orig < V_max_plot:
+        ax2.axvspan(min(V_max_orig, V_max_plot), V_max_plot,
+                    color="#888", alpha=0.08, zorder=0)
+    for V_m, lbl in [(V_min_orig, f"V_min={V_min_orig:.0f}×"),
+                      (V_max_orig, f"V_max={V_max_orig:.0f}×")]:
+        if 30 < V_m < V_max_plot:
+            ax2.axvline(V_m, color="#999", lw=1.0, ls=":", alpha=0.8)
+            ax2.text(V_m + 2, y_min + (y_max - y_min) * 0.05, lbl,
+                     fontsize=7, color="#777", rotation=90, va="bottom")
+    if D_blend < D * 0.98:
+        for V_m, lbl in [(V_min_blend, f"V_min={V_min_blend:.0f}×\n(Blende)"),
+                          (V_max_blend, f"V_max={V_max_blend:.0f}×\n(Blende)")]:
+            if 30 < V_m < V_max_plot:
+                ax2.axvline(V_m, color=ACC, lw=1.0, ls=":", alpha=0.6)
+                ax2.text(V_m + 2, y_min + (y_max - y_min) * 0.25, lbl,
+                         fontsize=7, color=ACC, rotation=90, va="bottom")
+
     ax2.set_xlim(30, V_max_plot)
     ax2.set_xlabel("Vergrößerung V  [×]", fontsize=10)
     ax2.set_ylabel("Gain-Faktor  Q_blend / Q_orig", fontsize=9)
