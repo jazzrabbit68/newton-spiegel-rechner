@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page {
+  size: A4;
+  margin: 20mm 15mm;
+  @bottom-right {
+    content: counter(page);
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 9pt; color: #777;
+  }
+  @bottom-left {
+    content: "Technische Dokumentation v6.1: Newton-Spiegel-Rechner";
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 9pt; color: #777;
+  }
+}
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: #333333; line-height: 1.5; font-size: 10.5pt;
+  background-color: #ffffff; margin: 0; padding: 0;
+}
+.header-banner {
+  background-color: #534AB7; color: #ffffff;
+  margin: -20mm -15mm 25px -15mm;
+  padding: 30px 15mm 25px 15mm;
+  border-bottom: 4px solid #D85A30;
+}
+.header-banner h1 { margin: 0; font-size: 22pt; font-weight: 700; letter-spacing: -0.5px; }
+.header-banner .subtitle { margin: 5px 0 0 0; font-size: 12pt; color: #e8e8e8; font-weight: 300; }
+h2 {
+  color: #534AB7; font-size: 14pt;
+  border-left: 4px solid #D85A30; padding-left: 10px;
+  margin-top: 25px; margin-bottom: 12px; page-break-after: avoid;
+}
+h3 { color: #2e7d32; font-size: 11.5pt; margin-top: 18px; margin-bottom: 6px; page-break-after: avoid; }
+p { margin-top: 0; margin-bottom: 10px; text-align: justify; }
+ul { margin-top: 0; margin-bottom: 12px; padding-left: 20px; }
+li { margin-bottom: 6px; }
+.math-block {
+  text-align: center; margin: 12px 0; font-size: 11pt;
+  background-color: #f8f9fa; padding: 10px; border-radius: 4px;
+  border: 1px solid #e8e8e8; page-break-inside: avoid;
+}
+.math { font-family: 'Times New Roman', Times, serif; font-style: italic; font-weight: bold; color: #2b2b2b; }
+.callout {
+  background-color: #f5f5f5; border-left: 3.5px solid #534AB7;
+  padding: 10px 12px; margin: 15px 0; border-radius: 0 4px 4px 0; page-break-inside: avoid;
+}
+.callout-title { font-weight: bold; color: #534AB7; margin-bottom: 4px; font-size: 10pt; }
+.callout-warn {
+  background-color: #fff8f0; border-left: 3.5px solid #D85A30;
+  padding: 10px 12px; margin: 15px 0; border-radius: 0 4px 4px 0; page-break-inside: avoid;
+}
+.callout-warn .callout-title { color: #D85A30; }
+.callout-green {
+  background-color: #f1f8f1; border-left: 3.5px solid #2e7d32;
+  padding: 10px 12px; margin: 15px 0; border-radius: 0 4px 4px 0; page-break-inside: avoid;
+}
+.callout-green .callout-title { color: #2e7d32; }
+.diagram-box {
+  background-color: #fdfdfd; border: 1px solid #e2e8f0;
+  border-radius: 6px; padding: 15px; margin: 15px 0; page-break-inside: avoid;
+}
+.diagram-title { font-weight: bold; color: #534AB7; font-size: 11pt; margin-bottom: 8px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 4px; }
+table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 10pt; page-break-inside: avoid; }
+th { background-color: #534AB7; color: white; font-weight: bold; text-align: left; padding: 8px 10px; border: 1px solid #534AB7; }
+td { padding: 8px 10px; border: 1px solid #e0e0e0; vertical-align: top; }
+tr:nth-child(even) td { background-color: #fcfcfc; }
+code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; background-color: #f0f0f0; padding: 1px 4px; border-radius: 3px; }
+.badge-new {
+  display: inline-block; background-color: #2e7d32; color: white;
+  font-size: 8pt; font-weight: bold; padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle;
+}
+.badge-fix {
+  display: inline-block; background-color: #D85A30; color: white;
+  font-size: 8pt; font-weight: bold; padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle;
+}
+.footer-note { margin-top: 30px; font-size: 9pt; color: #666; border-top: 1px solid #e0e0e0; padding-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header-banner">
+  <h1>Technische Gesamtdokumentation</h1>
+  <div class="subtitle">Newton-Spiegel-Rechner v6.1.0 &mdash; Mathematisch-Physikalische Modelle &amp; Grafische Analysen</div>
+</div>
+
+<p>Diese Dokumentation beschreibt die vollständigen mathematischen und optischen Modelle des Programms <code>newton_spiegel_rechner.py</code> (Desktop, tkinter) sowie der Web-App <code>app.py</code> (Streamlit) in Version 6.1.0. Gegenüber v4.4 wurden die Strehl-Berechnung auf ein exaktes Pupillenintegral umgestellt, die leuchtdichteabhängige CSF eingeführt, ein vollständiger <strong>Blenden-Tab</strong> (Tab 7) sowie ein <strong>Foucault-Auswertungs-Tab</strong> (Tab 8) ergänzt.</p>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>1. Optische Grundlagen &amp; Wellenfrontfehler</h2>
+
+<p>Sphärische Spiegel erzeugen im Gegensatz zu idealen Parabolspiegeln <strong>sphärische Aberration</strong>. Alle wellenoptischen Berechnungen erfolgen für <span class="math">&lambda; = 550 nm</span> (grün-gelb, Maximum der photopischen Augenempfindlichkeit, fest kodiert ab v6.0).</p>
+
+<h3>1.1 Wellenfrontfehler (Peak-to-Valley &amp; RMS)</h3>
+<ul>
+  <li><strong>Öffnungsverhältnis:</strong>
+    <div class="math-block"><span class="math">N = f / D</span></div>
+  </li>
+  <li><strong>Paraxialer Wellenfrontfehler <span class="math">W<sub>p</sub></span> [in Einheiten &lambda;]:</strong>
+    <div class="math-block"><span class="math">W<sub>p</sub> = D<sup>4</sup> / (1024 &middot; f<sup>3</sup> &middot; &lambda;<sub>mm</sub>)</span></div>
+  </li>
+  <li><strong>Wellenfrontfehler im besten Fokus <span class="math">W<sub>b</sub></span>:</strong>
+    <div class="math-block"><span class="math">W<sub>b</sub> = W<sub>p</sub> / 4</span></div>
+    Durch Defokussierung zur Mitte der Kaustik lässt sich der PtV-Fehler vierteln.
+  </li>
+  <li><strong>RMS-Wellenfrontfehler:</strong>
+    <div class="math-block"><span class="math">W<sub>rms</sub> = W<sub>b</sub> / (1.5 &middot; &radic;5) &asymp; W<sub>b</sub> / 3.354</span></div>
+    Exakt für primäre sphärische Aberration der Form <span class="math">W(&rho;) = A&middot;(&rho;<sup>4</sup> &minus; &rho;<sup>2</sup>)</span>, wobei PtV = A/8.
+  </li>
+</ul>
+
+<h3>1.2 Strehl-Quotient &mdash; Maréchal-Näherung und exaktes Pupillenintegral <span class="badge-new">v6</span></h3>
+
+<p>Ab v6.0 werden <strong>beide</strong> Werte berechnet und angezeigt:</p>
+
+<ul>
+  <li><strong>Maréchal-Näherung</strong> (präzise für S &gt; 0,6):
+    <div class="math-block"><span class="math">S<sub>Mar</sub> = exp(&minus;(2&pi; &middot; W<sub>rms</sub>)<sup>2</sup>)</span></div>
+  </li>
+  <li><strong>Exaktes Pupillenintegral</strong> (immer korrekt, auch bei S &lt; 0,5):
+    <div class="math-block"><span class="math">S<sub>exakt</sub> = |A<sub>re</sub><sup>2</sup> + A<sub>im</sub><sup>2</sup>|</span></div>
+    mit
+    <div class="math-block"><span class="math">A<sub>re</sub> = 2 &int;<sub>0</sub><sup>1</sup> cos(2&pi; W<sub>c</sub>(&rho;)) &middot; &rho; d&rho;, &emsp; A<sub>im</sub> = 2 &int;<sub>0</sub><sup>1</sup> sin(2&pi; W<sub>c</sub>(&rho;)) &middot; &rho; d&rho;</span></div>
+    wobei <span class="math">W<sub>c</sub>(&rho;) = W(&rho;) &minus; W̄</span> die pistonbereinigte Wellenfront ist (Mittelwert über Pupille abgezogen).
+  </li>
+</ul>
+
+<div class="callout-warn">
+  <div class="callout-title">Maréchal-Näherung vs. exakter Strehl</div>
+  Bei schwachen Spiegeln (z. B. D=130&nbsp;mm f/5) liefert die Maréchal-Näherung S&asymp;0,47, das exakte Pupillenintegral S&asymp;0,08. Der Unterschied ist erheblich und wächst mit zunehmender Aberration. Alle Kennzahlen und Diagramme in v6.1 basieren auf S<sub>exakt</sub>.
+</div>
+
+<div class="callout">
+  <div class="callout-title">Rayleigh-Kriterium</div>
+  Ein System gilt als beugungsbegrenzt bei <span class="math">S<sub>exakt</sub> &ge; 0.80</span>. Ein perfektes System hat <span class="math">S = 1.0</span>.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>2. Schärfe und geometrische Aberration</h2>
+
+<h3>2.1 Airy-Radius</h3>
+<div class="math-block"><span class="math">r<sub>Airy</sub> = 1.22 &middot; (&lambda;<sub>mm</sub> / D) &middot; 206265 &emsp; [arcsec]</span></div>
+
+<h3>2.2 Geometrischer Unschärfefleck (Blur)</h3>
+<div class="math-block"><span class="math">d<sub>blur</sub> = D<sup>3</sup> / (64 &middot; f<sup>2</sup>) &emsp; [mm]</span></div>
+<div class="math-block"><span class="math">d<sub>blur,as</sub> = (d<sub>blur</sub> / f) &middot; 206265 &emsp; [arcsec]</span></div>
+
+<div class="callout-warn">
+  <div class="callout-title">Wichtig: Geometrischer Blur &ne; visuelle Schärfe</div>
+  Der Blur beschreibt die <em>fotografische</em> Punktabbildung. Am Okular nimmt der Beobachter die PSF (Strehl) wahr, nicht den geometrischen Lichtkegel. Der Blur-Wert ist daher nicht für die visuelle Beurteilung geeignet.
+</div>
+
+<h3>2.3 Effektives Auflösungsvermögen</h3>
+<div class="math-block"><span class="math">&theta;<sub>ideal</sub> = 116.0 / D &emsp; [arcsec] &emsp; (Dawes-Grenze)</span></div>
+<div class="math-block"><span class="math">&theta;<sub>eff</sub> = &theta;<sub>ideal</sub> / &radic;S<sub>exakt</sub></span></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>3. Effektive Öffnungen (<span class="math">D<sub>eff</sub></span>)</h2>
+
+<table>
+  <thead>
+    <tr><th>Metrik</th><th>Formel</th><th>Beschreibung</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>D<sub>eff</sub> Kontrast</strong></td>
+      <td><span class="math">D &middot; S<sup>0.25</sup></span></td>
+      <td>Globales Kontrastäquivalent. Vierte Wurzel skaliert die integrale Energieverteilung der PSF.</td>
+    </tr>
+    <tr>
+      <td><strong>D<sub>eff</sub> Schärfe</strong></td>
+      <td><span class="math">D &middot; &radic;S</span></td>
+      <td>Visuell effektives Auflösungsvermögen, konsistent mit PSF-Wahrnehmung.</td>
+    </tr>
+    <tr>
+      <td><strong>D<sub>eff</sub> visuell</strong></td>
+      <td><span class="math">D &middot; Q<sub>vis</sub><sup>0.25</sup></span></td>
+      <td>Kombiniert MTF-Formverlust und absoluten Energieverlust (Strehl).</td>
+    </tr>
+    <tr>
+      <td><strong>V<sub>krit</sub></strong></td>
+      <td><span class="math">D &middot; 0.7 &middot; &radic;S</span></td>
+      <td>Kritische Vergrößerung (nach Suiter). Unterhalb: Auge limitiert. Oberhalb: Optik limitiert.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Ab v6.0 werden <strong>drei</strong> V<sub>krit</sub>-Werte unterschieden:</p>
+<ul>
+  <li><strong>V½ Näherung:</strong> <span class="math">D &middot; 0.7 &middot; &radic;S</span> (analytisch, nach Suiter)</li>
+  <li><strong>V½ exakt:</strong> Vergrößerung, bei der Q<sub>vis,exakt</sub>(V) = (1 + S) / 2 (numerisch per Bisektion)</li>
+  <li><strong>V<sub>krit</sub> MTF×CSF:</strong> Vergrößerung, ab der der Qualitätsverlust &gt;10% beträgt (numerisch)</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>4. MTF-Modell &amp; Visueller Qualitätsindex</h2>
+
+<h3>4.1 MTF des Paraboloids (analytisch, korrekte Normierung)</h3>
+<div class="math-block"><span class="math">MTF<sub>para</sub>(f) = (2/&pi;) &middot; [arccos(f) &minus; f &middot; &radic;(1 &minus; f<sup>2</sup>)]</span></div>
+<p><em>Diese Formel ergibt bei f = 0 bereits exakt 1.0; kein zusätzlicher Normierungsfaktor.</em></p>
+
+<h3>4.2 Relative MTF der Sphäre</h3>
+<p>Berechnung über 1D-Autokorrelationsintegral der gestörten Pupillenfunktion (n = 80 Stützstellen):</p>
+<div class="math-block"><span class="math">&Delta;W = 2&pi; &middot; W<sub>b</sub> &middot; 8 &middot; [(x<sub>2</sub><sup>4</sup> &minus; x<sub>2</sub><sup>2</sup>) &minus; (x<sub>1</sub><sup>4</sup> &minus; x<sub>1</sub><sup>2</sup>)]</span></div>
+<div class="math-block"><span class="math">MTF<sub>sph,rel</sub>(f) = &radic;[(&sum; cos(&Delta;W)&middot;h)<sup>2</sup> + (&sum; sin(&Delta;W)&middot;h)<sup>2</sup>] / &sum; h</span></div>
+
+<h3>4.3 Fokusebene</h3>
+<p>Umschaltbar im MTF-Tab zwischen <strong>Best Focus</strong> W(&rho;) = W<sub>b</sub>&middot;(&rho;<sup>4</sup>&minus;&rho;<sup>2</sup>) und <strong>Paraxialem Fokus</strong> W(&rho;) = W<sub>b</sub>&middot;&rho;<sup>4</sup>. Alle anderen Kennzahlen (Strehl, Q<sub>vis</sub>) bleiben stets bei Best Focus.</p>
+
+<h3>4.4 MTF mit Obstruktion (<code>mtf_para_obstr</code>)</h3>
+<p>Für den Blenden-Tab wird die MTF des abgeblendeten Spiegels mit Fangspiegelobstruktion berechnet. Der Fangspiegeldurchmesser ergibt sich aus der geometrischen Mindestgröße:</p>
+<div class="math-block"><span class="math">d<sub>fang</sub> = (D<sup>2</sup> + 100 &middot; D) / (2 &middot; f) + 10 &emsp; [mm]</span></div>
+<div class="math-block"><span class="math">&epsilon; = d<sub>fang</sub> / D<sub>blend</sub></span></div>
+<p>Das MTF-Integral berücksichtigt die kreisringförmige Apertur (innerer Radius &epsilon;, äußerer Radius 1) über analytische Kreissegmentflächen.</p>
+
+<h3>4.5 Visueller Qualitätsindex (<span class="math">Q<sub>vis</sub></span>)</h3>
+<div class="math-block"><span class="math">Q<sub>shape</sub> = 0.4 &middot; MTF<sub>rel</sub>(0.2) + 0.4 &middot; MTF<sub>rel</sub>(0.4) + 0.2 &middot; MTF<sub>rel</sub>(0.6)</span></div>
+<div class="math-block"><span class="math">Q<sub>vis</sub> = S<sub>exakt</sub> &middot; Q<sub>shape</sub></span></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>5. Wahrnehmungsmodell</h2>
+
+<h3>5.1 Contrast Sensitivity Function (CSF) &mdash; leuchtdichteabhängig <span class="badge-new">v6</span></h3>
+<p>Basismodell nach van Meeteren / Watson-Ahumada:</p>
+<div class="math-block"><span class="math">CSF<sub>0</sub>(f) = 2.6 &middot; (0.0192 + 0.114 f) &middot; exp(&minus;(0.114 f)<sup>1.1</sup>)</span></div>
+
+<p>Ab v6.0 wird die CSF leuchtdichteabhängig skaliert (relevant für den Blenden-Tab):</p>
+<div class="math-block"><span class="math">f<sub>sc</sub> = (L / L<sub>ref</sub>)<sup>0.1</sup>, &emsp; a<sub>sc</sub> = (L / L<sub>ref</sub>)<sup>0.5</sup>, &emsp; L<sub>ref</sub> = 100 \, cd/m&sup2;</span></div>
+<div class="math-block"><span class="math">CSF(f, L) = CSF<sub>0</sub>(f &middot; f<sub>sc</sub>) &middot; a<sub>sc</sub></span></div>
+<p>Bei schwachem Licht (kleinem L) verschiebt sich das CSF-Maximum zu niedrigen Frequenzen (das Auge bevorzugt grobe Strukturen) und die absolute Empfindlichkeit sinkt. Das beeinflusst, ob Abblenden bei schwachen Objekten sinnvoll ist.</p>
+
+<h3>5.2 Wahrgenommener Qualitätsindex Q<sub>vis</sub>(V) &mdash; exakt</h3>
+<div class="math-block"><span class="math">Q<sub>vis,exakt</sub>(V) = &int;<sub>0</sub><sup>1</sup> MTF<sub>sph,rel</sub>(f) &middot; MTF<sub>para</sub>(f) &middot; CSF(f &middot; f<sub>c</sub> &middot; 3600/V) \, df &nbsp; / &nbsp; &int;<sub>0</sub><sup>1</sup> MTF<sub>para</sub>(f) &middot; CSF(...) \, df</span></div>
+
+<p>Analytische Näherung (Übergangsschalter bei V<sub>krit</sub>):</p>
+<div class="math-block"><span class="math">w = 1 / [1 + (V<sub>krit</sub> / V)<sup>2</sup>], &emsp; Q̃(V) = S + (1 &minus; S) &middot; (1 &minus; w)</span></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>6. Beschreibung der grafischen Analysen (Diagramm-Tabs)</h2>
+
+<div class="diagram-box">
+  <div class="diagram-title">Tab 1: Strehl vs. f/D</div>
+  <p><strong>Fokus:</strong> Wie verändert sich der Strehl mit dem Öffnungsverhältnis?</p>
+  <ul>
+    <li><strong>Zwei Kurven:</strong> Maréchal-Näherung (durchgezogen) und exaktes Pupillenintegral (gestrichelt). Bei S &gt; 0,9 nahezu identisch, bei f/5 deutliche Abweichung.</li>
+    <li><strong>Referenzlinien:</strong> S = 0,95 (gepunktet, sehr gut) und S = 0,80 (gestrichelt, Rayleigh).</li>
+    <li><strong>Messpunkte:</strong> Aktueller Spiegel mit Annotation (Maréchal + exakt). Optionaler Schieberpunkt für simulierten Figurierungsfortschritt.</li>
+  </ul>
+</div>
+
+<div class="diagram-box">
+  <div class="diagram-title">Tab 2: Effektive Öffnung &amp; Auflösungsverlust vs. f/D</div>
+  <ul>
+    <li><strong>Blaue Kurve (linke Achse):</strong> <span class="math">D<sub>eff,k</sub> = D &middot; S<sup>0.25</sup></span>. Schattierter Bereich zeigt verlorenen Öffnungsanteil.</li>
+    <li><strong>Orangefarbene Kurve (rechte Achse):</strong> Geometrischer Auflösungsverlust [%] &mdash; relevant für Fotografie.</li>
+  </ul>
+</div>
+
+<div class="diagram-box">
+  <div class="diagram-title">Tab 3: Öffnungsverlust vs. Öffnung D</div>
+  <ul>
+    <li><strong>Durchgezogene Kurven:</strong> Kontrastverlust <span class="math">(1 &minus; S<sup>0.25</sup>)&middot;100%</span> für f/5 bis f/10.</li>
+    <li><strong>Gestrichelte Kurven:</strong> Visueller Verlust <span class="math">(1 &minus; Q<sub>vis</sub><sup>0.25</sup>)&middot;100%</span>.</li>
+    <li><strong>Referenzlinien:</strong> 20% Verlust (spürbar), 50% Verlust (erheblich), Rayleigh S = 0,80.</li>
+  </ul>
+</div>
+
+<div class="diagram-box">
+  <div class="diagram-title">Tab 4: Beugungsgrenze</div>
+  <ul>
+    <li>D-vs-f-Diagramm mit Grenzlinien S = 0,95 / 0,80 / 0,50 und Farbzonen (grün/gelb/rot).</li>
+    <li>Graue Hilfslinien für f/5 bis f/10. Messpunkt des aktuellen Spiegels mit Beschriftung.</li>
+  </ul>
+</div>
+
+<div class="diagram-box">
+  <div class="diagram-title">Tab 5: MTF (klassisch, kontinuierlich)</div>
+  <p>Kontinuierliche MTF-Kurven über normierter Ortsfrequenz &nu; (0 = DC, 1 = Beugungsgrenze).</p>
+  <ul>
+    <li><strong>Drei Kurven:</strong> Paraboloid (grün), Sphäre absolut × Strehl (orange), Sphäre relativ (blau gestrichelt).</li>
+    <li><strong>Obere x-Achse:</strong> Räumliche Frequenz in Lp/mm (fokal).</li>
+    <li><strong>Objektmarkierungen:</strong> Vertikallinien für Planetendetails (Jupiter, Mars, Saturn Cassini) oder Deep-Sky (M42, M13). Wählbar per Radio-Button.</li>
+    <li><strong>Fokusebene:</strong> Umschaltbar Best Focus / Paraxialer Fokus.</li>
+    <li><strong>Schieber-Vergleich:</strong> Optionale vierte Kurve für verbesserten Spiegel.</li>
+  </ul>
+</div>
+
+<div class="diagram-box">
+  <div class="diagram-title">Tab 6: Wahrnehmung Q<sub>vis</sub>(V)</div>
+  <p>Visueller Qualitätsindex über dem Vergrößerungsbereich 30× bis 400×.</p>
+  <ul>
+    <li><strong>Exakte Kurven</strong> (durchgezogen) für Sphäre und Paraboloid aus MTF×CSF-Integral.</li>
+    <li><strong>Näherungskurven Q̃</strong> (gestrichelt) zum Vergleich; maximale Abweichung wird angezeigt.</li>
+    <li><strong>Schattierter Verlustbereich</strong> zwischen Paraboloid und Sphäre.</li>
+    <li><strong>Asymptote</strong> bei V &rarr; &infin;: Q<sub>vis</sub> &rarr; S<sub>exakt</sub>.</li>
+    <li><strong>Eingeblendet:</strong> V½-Linie, sinnvoller Vergrößerungsbereich (V_min = D/7, V_max = min(D/0.5, 2&middot;V½)), Q = 0.90 / 0.70 Schwellen.</li>
+  </ul>
+</div>
+
+<div class="diagram-box">
+  <div class="diagram-title">Tab 7: Blende <span class="badge-new">neu v6</span></div>
+  <p>Analysiert, ob und wann Abblenden des Spiegels sinnvoll ist. Zwei Panels:</p>
+
+  <p><strong>Oberes Panel &mdash; Q<sub>vis</sub>-Kurven:</strong></p>
+  <ul>
+    <li><strong>Original</strong> (orange, dick): Volle Öffnung D mit Fangspiegelabschatten &epsilon; = d<sub>fang</sub>/D.</li>
+    <li><strong>3 Blendenstufen</strong> (gestrichelt): Automatisch zwischen D<sub>blend</sub> und D verteilt; zeigen den kontinuierlichen Übergang.</li>
+    <li><strong>Gewählte Blende</strong> (blau, dick): Aus Sidebar-Schieber (Voreinstellung D/2). Annotations-Box zeigt Gewinn/Verlust bei V½.</li>
+    <li><strong>Optimale Blende</strong> (grün, strichpunkt): Für jede Vergrößerung wird D<sub>blend</sub> mit maximalem Q<sub>vis</sub> bestimmt. Mittlerer optimaler Durchmesser im sinnvollen V-Bereich wird angezeigt.</li>
+    <li><strong>Rayleigh-Linie:</strong> Mindest-Blendendurchmesser für S &ge; 0,80.</li>
+    <li><strong>Graubereiche:</strong> Nicht sinnvoller Vergrößerungsbereich für Original und Blende.</li>
+  </ul>
+
+  <p><strong>Unteres Panel &mdash; Gain-Faktor:</strong></p>
+  <div class="math-block"><span class="math">Gain(V, L) = Q<sub>vis</sub>(D<sub>blend</sub>, V, L) / Q<sub>vis</sub>(D, V, L)</span></div>
+  <p>Berechnet mit leuchtdichteabhängiger CSF für fünf Objektklassen:</p>
+  <table>
+    <thead><tr><th>Objekt</th><th>Leuchtdichte L [cd/m²]</th><th>Linientyp</th></tr></thead>
+    <tbody>
+      <tr><td>Jupiter</td><td>~6000</td><td>durchgezogen</td></tr>
+      <tr><td>Mars / Saturn</td><td>~500</td><td>durchgezogen</td></tr>
+      <tr><td>Schwacher Planet</td><td>~50</td><td>gestrichelt</td></tr>
+      <tr><td>Heller Nebel</td><td>~5</td><td>gepunktet</td></tr>
+      <tr><td>Schwaches Deep-Sky</td><td>~0.5</td><td>gepunktet</td></tr>
+    </tbody>
+  </table>
+  <p>Gain &gt; 1: Abblenden verbessert Q<sub>vis</sub> für dieses Objekt bei dieser Vergrößerung. Gain &lt; 1: Abblenden verschlechtert.</p>
+
+  <div class="callout-green">
+    <div class="callout-title">Faustregel</div>
+    Bei S &lt; 0,80 kann Abblenden auf ~60–70% des Durchmessers bei hohen Vergrößerungen sinnvoll sein. Bei S &ge; 0,95 ist der Gewinn verschwindend gering. Bei schwachen Objekten (Deep-Sky) ist Abblenden fast nie lohnend, da die leuchtdichteabhängige CSF das Verlustbild umkehrt.
+  </div>
+</div>
+
+<div class="diagram-box">
+  <div class="diagram-title">Tab 8: Foucault-Auswertung <span class="badge-new">neu v6</span></div>
+  <p>Direktauswertung eines Foucault-Messerschneidetests. Keine externe Software nötig.</p>
+
+  <p><strong>Zoneneingabe:</strong></p>
+  <ul>
+    <li>Wählbare Zonenanzahl: 4, 6 oder 8 <strong>gleichflächige Zonen</strong> (FigureXP-Konvention). Zonenradien:
+      <div class="math-block"><span class="math">r<sub>i</sub> = R &middot; &radic;((2i &minus; 1) / (2n)), &emsp; i = 1 &hellip; n</span></div>
+    </li>
+    <li>Zonengrenzen für den Couder-Maske-Bau:
+      <div class="math-block"><span class="math">r<sub>grenz,i</sub> = R &middot; &radic;(i / n)</span></div>
+    </li>
+    <li>Parabelsollwert für jede Zone (FigureXP-Konvention, Zone 1 = Referenz = 0, auswärts positiv):
+      <div class="math-block"><span class="math">&delta;l<sub>Para,i</sub> = r<sub>i</sub><sup>2</sup> / (4f) &emsp; [mm], &emsp; &delta;l<sub>Para,rel,i</sub> = &delta;l<sub>Para,i</sub> &minus; &delta;l<sub>Para,1</sub></span></div>
+    </li>
+    <li>Reset-Buttons: <em>Alle auf Parabel-Sollwerte</em> / <em>Alle auf Null (Kugel)</em>.</li>
+  </ul>
+
+  <p><strong>Wellenfront-Berechnung:</strong></p>
+  <p>Umrechnung der gemessenen Längsfehler &Delta;F [mm] in Wellenfrontfehler [Einheiten &lambda;]:</p>
+  <div class="math-block"><span class="math">W<sub>i</sub> = &Delta;F<sub>i</sub> &middot; r<sub>i</sub><sup>2</sup> / (16 &middot; f<sup>2</sup> &middot; &lambda;)</span></div>
+  <p>Polynom-Fit der Wellenfront über Least-Squares:</p>
+  <div class="math-block"><span class="math">W(&rho;) = a<sub>4</sub> &middot; &rho;<sup>4</sup> + a<sub>2</sub> &middot; &rho;<sup>2</sup></span></div>
+  <p>Optimaler Fokus durch Minimierung von W<sub>RMS</sub> über einen freien Defokus-Term <span class="math">d &middot; &rho;<sup>2</sup></span> (Goldene-Schnitt-Suche, keine scipy-Abhängigkeit). Dann Pistonbereinigung (Mittelwert abziehen) und Berechnung von W<sub>RMS</sub>, W<sub>PtV</sub>, S<sub>Maréchal</sub> und S<sub>exakt</sub>.</p>
+
+  <p><strong>Materialabtrag:</strong></p>
+  <div class="math-block"><span class="math">Glas(r) = (W<sub>c</sub>(&rho;) &minus; W<sub>c,min</sub>) &middot; &lambda; / 2 &emsp; [nm]</span></div>
+  <p>Der Nullpunkt (0 nm Abtrag) liegt am am wenigsten bearbeiteten Punkt. Abtrag PtV = Maximum von Glas(&rho;). Abtrag-Volumen:</p>
+  <div class="math-block"><span class="math">V<sub>Glas</sub> = 2&pi; R<sup>2</sup> &int;<sub>0</sub><sup>1</sup> Glas<sub>mm</sub>(&rho;) &middot; &rho; \, d&rho; &emsp; [mm<sup>3</sup>]</span></div>
+
+  <p><strong>Linkes Diagramm-Panel:</strong></p>
+  <ul>
+    <li>Wellenfrontkurve W<sub>c</sub>(&rho;) (Polynom-Fit, pistonbereinigt, bester Fokus).</li>
+    <li>Messzonen-Punkte mit Annotation (nm Glas + &lambda;-Abweichung).</li>
+    <li>±&lambda;/8-Linien (Rayleigh-Toleranz), rechte y-Achse in nm Glas.</li>
+  </ul>
+
+  <p><strong>Rechtes Panel &mdash; Kennzahlentafel:</strong></p>
+  <ul>
+    <li>W<sub>RMS</sub>, W<sub>PtV</sub>, W<sub>b</sub> aus Fit, S<sub>Maréchal</sub>, S<sub>exakt</sub>, D<sub>eff</sub></li>
+    <li>Abtrag PtV [nm] und Volumen [mm³]</li>
+    <li>Farbige Beurteilung: grün (S &ge; 0,95), orange (0,80–0,95), rot (S &lt; 0,80)</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>7. Bedienelemente</h2>
+
+<table>
+  <thead>
+    <tr><th>Schieberegler</th><th>Bereich</th><th>Wirkung</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Öffnung D</strong></td>
+      <td>50 – 600 mm</td>
+      <td>Hauptspiegeldurchmesser. Beeinflusst alle Berechnungen.</td>
+    </tr>
+    <tr>
+      <td><strong>Brennweite f</strong></td>
+      <td>200 – 6000 mm</td>
+      <td>Bestimmt N = f/D und damit den Wellenfrontfehler.</td>
+    </tr>
+    <tr>
+      <td><strong>Wellenlänge &lambda;</strong></td>
+      <td>fix 550 nm</td>
+      <td>Fest kodiert ab v6.0. Photopisches Maximum des Auges.</td>
+    </tr>
+    <tr>
+      <td><strong>Strehl-Schieber</strong></td>
+      <td>0 – 100 %</td>
+      <td>Simuliert Figurierungsfortschritt: 0 % = reale Sphäre, 100 % = Paraboloid. Blendet Vergleichskurven in allen Diagrammen ein.</td>
+    </tr>
+    <tr>
+      <td><strong>Blende D</strong></td>
+      <td>50 mm – D</td>
+      <td>Abgeblendeter Durchmesser für Tab 7. Voreinstellung: D/2.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>8. Technische Hinweise</h2>
+
+<ul>
+  <li><strong>Keine scipy-Abhängigkeit:</strong> Die Fokus-Optimierung im Foucault-Tab verwendet eine eigene Goldene-Schnitt-Suche (<code>_minimize_scalar_bounded</code>).</li>
+  <li><strong>Abhängigkeiten Web-App:</strong> <code>streamlit</code>, <code>matplotlib</code>, <code>numpy</code>.</li>
+  <li><strong>Caching:</strong> <code>_strehl_exakt()</code> ist mit <code>@st.cache_data</code> gecacht (Streamlit) bzw. <code>@lru_cache</code> (Desktop).</li>
+  <li><strong>MTF-Normierung:</strong> <code>mtf_para(f)</code> gibt bei f = 0 exakt 1.0 zurück (keine zusätzliche Normierung durch 2/&pi; nötig, da die Formel schon normiert ist).</li>
+  <li><strong>Vektorisierung:</strong> <code>Q_vis_blende_batch()</code> berechnet den Gain für alle V- und L-Werte in einem einzigen numpy-3D-Broadcasting-Aufruf.</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>9. Literatur &amp; Quellen</h2>
+
+<ul>
+  <li>Sacek, V.: <em>telescope-optics.net</em> &mdash; MTF-Herleitung, Strehl, sphärische Aberration, Fokusebene</li>
+  <li>Suiter, H.R.: <em>Star Testing Astronomical Telescopes</em>, Willmann-Bell 1994 &mdash; V<sub>krit</sub>, visuelle Beurteilung</li>
+  <li>Barten, P.G.J.: <em>Contrast Sensitivity of the Human Eye</em>, SPIE Press 1999 &mdash; CSF-Modell</li>
+  <li>Born, M. &amp; Wolf, E.: <em>Principles of Optics</em>, Cambridge &mdash; Pupillenintegral, Strehl</li>
+  <li>Rowe, D.: <em>FigureXP</em> &mdash; Foucault-Konventionen, gleichflächige Zonen, &delta;l-Vorzeichen</li>
+</ul>
+
+<div class="footer-note">
+  Technische Gesamtdokumentation v6.1.0 &middot; Angepasst an <code>newton_spiegel_rechner.py</code> und <code>app.py</code> v6.1.0 &middot;
+  Neu gegenüber v4.4: exakter Strehl (Pupillenintegral), drei V<sub>krit</sub>-Varianten, leuchtdichteabhängige CSF,
+  Tab 7 (Blende mit Gain-Faktor), Tab 8 (Foucault: W=&Delta;F&middot;r&sup2;/(16f&sup2;&lambda;) Best-Fokus, Wellenfront-Fit, Materialabtrag, Strehl) &middot;
+  Alle mathematischen Modelle vollständig dokumentiert.
+</div>
+
+</body>
+</html>

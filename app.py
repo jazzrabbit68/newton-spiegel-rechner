@@ -1342,6 +1342,7 @@ def main():
         "Wahrnehmung",
         "Blende",
         "Foucault",
+        "ℹ️ Dokumentation",
     ])
 
     with tabs[0]:
@@ -1496,6 +1497,53 @@ def main():
             st.error(f"scipy fehlt: {e}")
         except Exception as e:
             st.error(f"Foucault-Berechnungsfehler: {e}")
+
+    with tabs[8]:
+        # Doku-HTML aus Datei lesen (liegt neben app.py) oder eingebettet anzeigen
+        import os, pathlib
+        _doc_candidates = [
+            pathlib.Path(__file__).parent / "documentation_v6_1.html",
+            pathlib.Path("documentation_v6_1.html"),
+        ]
+        _doc_html = None
+        for _p in _doc_candidates:
+            if _p.exists():
+                _doc_html = _p.read_text(encoding="utf-8")
+                break
+
+        if _doc_html is not None:
+            # <body>...</body> extrahieren, Banner-Margins auf 0 setzen
+            import re as _re
+            _body = _re.search(r"<body[^>]*>(.*)</body>", _doc_html, _re.DOTALL)
+            _style = _re.search(r"<style[^>]*>(.*?)</style>", _doc_html, _re.DOTALL)
+            _inner = _body.group(1).strip() if _body else _doc_html
+            _css   = _style.group(1) if _style else ""
+            # Banner-Margin für Web-Darstellung neutralisieren
+            _css = _css.replace("margin: -20mm -15mm 25px -15mm;", "margin: 0 0 25px 0;")
+            _css = _css.replace("padding: 30px 15mm 25px 15mm;", "padding: 20px 24px 16px 24px;")
+            st.markdown(
+                f"<style>{_css}</style><div style='max-width:860px'>{_inner}</div>",
+                unsafe_allow_html=True)
+        else:
+            st.info(
+                "Dokumentationsdatei **documentation_v6_1.html** nicht gefunden. "
+                "Bitte die Datei ins gleiche Verzeichnis wie app.py legen.",
+                icon="ℹ️")
+            st.markdown("""
+### Kurzreferenz Formeln
+
+| Größe | Formel |
+|---|---|
+| W_PtV paraxial | D⁴ / (1024·f³·λ) |
+| W_PtV best focus | W_p / 4 |
+| W_RMS | W_b / (1.5·√5) |
+| Strehl Maréchal | exp(−(2π·W_rms)²) |
+| Strehl exakt | Pupillenintegral |
+| D_eff Kontrast | D · S^0.25 |
+| V_krit | D · 0.7 · √S |
+| Foucault W_i | ΔF·r²/(8·f²·λ) |
+| Parabel-Soll δl | r²/(4f), rel. Zone 1 |
+""")
 
     # ── Footer ───────────────────────────────────────────────────────────────
     st.markdown("---")
