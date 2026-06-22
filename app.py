@@ -1225,12 +1225,12 @@ def main():
     # ── Sidebar: Teleskop-Parameter ──────────────────────────────────────────
     st.sidebar.header("Teleskop-Parameter")
 
-    D   = st.sidebar.slider("Öffnung D [mm]",       min_value=50,   max_value=600, value=200, step=5)
-    f   = st.sidebar.slider("Brennweite f [mm]",    min_value=200,  max_value=6000, value=1000, step=50)
-    lam = st.sidebar.slider("Wellenlänge λ [nm]",   min_value=400,  max_value=700, value=550, step=10)
+    D   = st.sidebar.slider("Öffnung D [mm]",    min_value=50,  max_value=600,  value=200, step=5)
+    f   = st.sidebar.slider("Brennweite f [mm]", min_value=200, max_value=6000, value=1000, step=50)
+    lam = 550.0  # fix, λ=550nm
 
     N = f / D
-    st.sidebar.markdown(f"**f/D = {N:.2f}**")
+    st.sidebar.markdown(f"**f/D = {N:.2f}  |  λ = 550 nm (fix)**")
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Strehl-Schieber (Verbesserung)")
@@ -1240,7 +1240,9 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Abblendung")
-    D_blend = st.sidebar.slider("Blende D [mm]", min_value=50, max_value=D, value=D, step=5)
+    D_blend_default = max(50, D // 2)
+    D_blend = st.sidebar.slider("Blende D [mm]", min_value=50, max_value=D,
+                                 value=min(D_blend_default, D), step=5)
 
     # ── Rechnung ─────────────────────────────────────────────────────────────
     r_real     = berechne(D, f, lam)
