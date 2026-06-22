@@ -16,11 +16,27 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-try:
-    from scipy.optimize import minimize_scalar
-    _SCIPY_OK = True
-except ImportError:
-    _SCIPY_OK = False
+# kein scipy nötig – eigene goldene-Schnitt-Minimierung
+_SCIPY_OK = True  # immer True
+
+def _minimize_scalar_bounded(f, bounds, tol=1e-8, maxiter=200):
+    """Goldene-Schnitt-Suche auf Intervall [a, b]."""
+    a, b = bounds
+    gr = (math.sqrt(5) + 1) / 2
+    c = b - (b - a) / gr
+    d = a + (b - a) / gr
+    for _ in range(maxiter):
+        if abs(b - a) < tol:
+            break
+        if f(c) < f(d):
+            b = d
+        else:
+            a = c
+        c = b - (b - a) / gr
+        d = a + (b - a) / gr
+    class _Res:
+        x = (a + b) / 2
+    return _Res()
 
 VERSION = "6.1.0 (2026-06-21)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
@@ -407,8 +423,6 @@ def foucault_wellenfront(r_zonen, df_zonen, f_mm, lam_nm):
 
 
 def foucault_kennzahlen(W_zonen, r_zonen, D_mm, lam_nm=None):
-    if not _SCIPY_OK:
-        raise ImportError("scipy nicht installiert — bitte 'pip install scipy' ausführen.")
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
     R    = D_mm / 2.0
     rho_z = r_zonen / R
@@ -426,7 +440,7 @@ def foucault_kennzahlen(W_zonen, r_zonen, D_mm, lam_nm=None):
         Wc = Wt - Wm
         return _trapz(Wc**2 * rho_f, rho_f) / 0.5
 
-    res    = minimize_scalar(wrms_sq, bounds=(-200, 200), method="bounded")
+    res    = _minimize_scalar_bounded(wrms_sq, bounds=(-200, 200))
     W_best = W_f + res.x * rho_f**2
     Wm     = _trapz(W_best * rho_f, rho_f) / 0.5
     W_c    = W_best - Wm
@@ -715,13 +729,14 @@ def plot_mtf(D, f, lam, S_slide=None, paraxial=False, objekte="planeten"):
         mp_v = float(np.interp(nu_det, nu_k2, mp_k2))
         ax.text(nu_det + 0.005, mp_v - 0.07, label, fontsize=7, color=col, rotation=90, va="top")
 
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
+
     ax2x = ax.twiny()
     ax2x.set_facecolor("none")
+    # Obere Achse in Lp/mm: nu * fc_fokal
     ax2x.set_xlim(0, fc_fokal)
     ax2x.set_xlabel("Räumliche Frequenz [Lp/mm] (fokal)", fontsize=9)
     ax2x.tick_params(axis="x", labelsize=8)
-
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
     ax.set_xlabel("Normierte Ortsfrequenz ν  (0=DC, 1=Beugungsgrenze)", fontsize=9)
     ax.set_ylabel("Kontrastübertragung (MTF)", fontsize=10)
     ax.set_title(
