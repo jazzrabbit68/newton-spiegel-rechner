@@ -231,11 +231,13 @@ def v_halb_exakt(D_mm, f_mm, lam_nm, V_min=10.0, V_max=800.0, n=50):
 
 
 def mtf_para(f: float) -> float:
+    """MTF einer kreisförmigen Apertur (Einheitskreis).
+    OTF(f) = (2/π)·(acos(f) − f·√(1−f²)),  normiert auf OTF(0)=1.
+    Die Formel ergibt bei f=0 bereits 1.0; kein weiterer Normierungsfaktor nötig.
+    """
     if f <= 0: return 1.0
     if f >= 1: return 0.0
-    M = (2.0 / math.pi) * (math.acos(f) - f * math.sqrt(max(0.0, 1.0 - f**2)))
-    norm = 2.0 / math.pi
-    return M / norm
+    return (2.0 / math.pi) * (math.acos(f) - f * math.sqrt(max(0.0, 1.0 - f**2)))
 
 
 def mtf_para_obstr(f: float, eps: float = 0.0) -> float:
@@ -1285,14 +1287,24 @@ def main():
                 cols[5].write(f"{col_txt} {abw:+.3f}")
 
         # Buttons: Parabel / Kugel
+        # WICHTIG: Buttons müssen VOR den number_input-Widgets gerendert werden,
+        # damit session_state-Schreibvorgänge nicht mit laufenden Widget-Keys kollidieren.
         bk1, bk2 = st.columns(2)
         if bk1.button("↺  Alle auf Parabel-Sollwerte"):
             for i in range(1, n_zonen):
-                st.session_state[f"{key_prefix}_z{i}"] = round(float(df_para[i]), 3)
+                k = f"{key_prefix}_z{i}"
+                v = round(float(df_para[i]), 3)
+                # Widget-Key löschen, dann neu setzen – vermeidet Streamlit-Konflikt
+                if k in st.session_state:
+                    del st.session_state[k]
+                st.session_state[k] = v
             st.rerun()
         if bk2.button("✕  Alle auf Null (Kugel)"):
             for i in range(1, n_zonen):
-                st.session_state[f"{key_prefix}_z{i}"] = 0.0
+                k = f"{key_prefix}_z{i}"
+                if k in st.session_state:
+                    del st.session_state[k]
+                st.session_state[k] = 0.0
             st.rerun()
 
         # Berechnen
