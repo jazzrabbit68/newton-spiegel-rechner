@@ -421,7 +421,7 @@ def foucault_wellenfront(r_zonen, df_zonen, f_mm, lam_nm):
     dl_para     = r_zonen**2 / (4.0 * f_mm)
     dl_para_rel = dl_para - dl_para[0]
     delta_l     = dl_para_rel - df_zonen
-    return delta_l * r_zonen**2 / (8.0 * f_mm**2 * lam_mm)
+    return delta_l * r_zonen**2 / (16.0 * f_mm**2 * lam_mm)
 
 
 def foucault_kennzahlen(W_zonen, r_zonen, D_mm, lam_nm=None):
