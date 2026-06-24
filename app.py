@@ -1,7 +1,7 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v6.2.0 (2026-06-21)
+Streamlit-Version v6.2.0 (2026-06-24)
 Entspricht newton_spiegel_rechner.py v6.1.0
 
 Abhängigkeiten: pip install streamlit matplotlib numpy scipy
@@ -38,7 +38,7 @@ def _golden_section(f, a: float, b: float, tol: float = 1e-8) -> float:
             fd = f(d)
     return (a + b) / 2.0
 
-VERSION = "6.2.0"
+VERSION = "6.2.0 (2026-06-24)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -323,6 +323,7 @@ def perceived_quality(D_mm, f_mm, lam_nm, V, n_pts=120):
     return float(Q_raw + (1.0 - Q_raw) * (1.0 - wv))
 
 
+@st.cache_data(max_entries=128, show_spinner=False)
 def perceived_quality_exakt_kurven(D_mm, f_mm, lam_nm, V_arr, n_pts=80):
     _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
     lam_mm  = lam_nm * 1e-6
@@ -339,6 +340,7 @@ def perceived_quality_exakt_kurven(D_mm, f_mm, lam_nm, V_arr, n_pts=80):
     return num / np.maximum(den, 1e-12)
 
 
+@st.cache_data(max_entries=128, show_spinner=False)
 def perceived_quality_exakt_kurven_von_Wb(D_mm, Wb, lam_nm, V_arr, n_pts=80):
     _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
     fc      = D_mm / (lam_nm * 1e-6 * 206265)
@@ -353,6 +355,7 @@ def perceived_quality_exakt_kurven_von_Wb(D_mm, Wb, lam_nm, V_arr, n_pts=80):
     return num / np.maximum(den, 1e-12)
 
 
+@st.cache_data(max_entries=128, show_spinner=False)
 def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
     ns = np.linspace(N_min, N_max, schritte)
     strehls, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
@@ -369,6 +372,7 @@ def d_fang_min(D_mm, f_mm):
     return (D_mm**2 + 100.0 * D_mm) / (2.0 * f_mm) + 10.0
 
 
+@st.cache_data(max_entries=128, show_spinner=False)
 def Q_vis_blende_batch(D_mm, f_mm, lam_nm, V_arr, L_arr, D_ref=200.0, n=60):
     _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
     _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
@@ -537,7 +541,6 @@ def _ax_fmt(ax):
     ax.set_facecolor(BG)
 
 
-@st.cache_data(max_entries=32, show_spinner=False)
 def plot_strehl(D, f, lam, S_slide=None):
     ns, sts, _, _, sts_exakt = kurven_N(D, lam)
     N_akt    = f / D
@@ -575,7 +578,6 @@ def plot_strehl(D, f, lam, S_slide=None):
     return fig
 
 
-@st.cache_data(max_entries=32, show_spinner=False)
 def plot_oeffnung(D, f, lam, S_slide=None):
     ns, _, deff_ks, aufl_verluste, _ = kurven_N(D, lam)
     N_akt   = f / D
@@ -623,7 +625,6 @@ def plot_oeffnung(D, f, lam, S_slide=None):
     return fig
 
 
-@st.cache_data(max_entries=32, show_spinner=False)
 def plot_deff_D(D_akt, N_akt, S_slide=None):
     D_arr    = np.linspace(50, 400, 300)
     N_list   = [5, 6, 7, 8, 10]
@@ -684,7 +685,6 @@ def plot_deff_D(D_akt, N_akt, S_slide=None):
     return fig
 
 
-@st.cache_data(max_entries=32, show_spinner=False)
 def plot_beugung(D_akt, f_akt):
     lam_mm = 550e-6
     f_arr  = np.linspace(200, 2000, 500)
@@ -730,7 +730,6 @@ def plot_beugung(D_akt, f_akt):
     return fig
 
 
-@st.cache_data(max_entries=32, show_spinner=False)
 def plot_mtf(D, f, lam, S_slide=None, paraxial=False, objekte="planeten"):
     lam_mm   = lam * 1e-6
     _, _, Wb, _, _ = _wellenfronten(D, f, lam)
@@ -806,7 +805,6 @@ def plot_mtf(D, f, lam, S_slide=None, paraxial=False, objekte="planeten"):
     return fig
 
 
-@st.cache_data(max_entries=32, show_spinner=False)
 def plot_wahrnehmung(D, f, lam, S_slide=None, S_real=None):
     _, _, Wb, _, S_mar = _wellenfronten(D, f, lam)
     S_exakt    = _strehl_exakt(Wb)
@@ -879,7 +877,6 @@ def plot_wahrnehmung(D, f, lam, S_slide=None, S_real=None):
     return fig
 
 
-@st.cache_data(max_entries=32, show_spinner=False)
 def plot_blende(D, f, lam, D_blend):
     """Blenden-Diagramm exakt wie newton_spiegel_rechner.py:
     Oberes Panel: Q_vis-Kurven für Original, Blendenstufen, gewählte Blende, optimale Blende.
@@ -1407,17 +1404,42 @@ def main():
         "ℹ️ Dokumentation",
     ])
 
+    # ── Lazy Tab-Rendering: Figure als PNG-Bytes im session_state ─────────────
+    # Figures werden nur neu gezeichnet wenn sich die relevanten Parameter
+    # geändert haben. Matplotlib-Figures sind nicht pickle-bar → PNG-Bytes.
+    import io as _io
+
+    def _fig_to_png(fig):
+        buf = _io.BytesIO()
+        fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+        return buf.getvalue()
+
+    def _show_cached(key, build_fn, param_hash):
+        """Zeigt gecachten Plot oder zeichnet neu wenn param_hash sich geändert hat."""
+        hash_key = key + "_hash"
+        if st.session_state.get(hash_key) != param_hash or key not in st.session_state:
+            with st.spinner("Berechne…"):
+                fig = build_fn()
+                st.session_state[key]      = _fig_to_png(fig)
+                st.session_state[hash_key] = param_hash
+        st.image(st.session_state[key], use_container_width=True)
+
+    _h = (D, f, lam, round(S_slide, 4))   # Basis-Hash ohne Blende/MTF-Optionen
+    _hb = _h + (D_blend,)                  # Hash mit Blende
+
     with tabs[0]:
-        st.pyplot(plot_strehl(D, f, lam, S_slide if S_pct > 0 else None))
+        _show_cached("fig_strehl",   lambda: plot_strehl(D, f, lam, S_slide if S_pct > 0 else None),   _h)
 
     with tabs[1]:
-        st.pyplot(plot_oeffnung(D, f, lam, S_slide if S_pct > 0 else None))
+        _show_cached("fig_oeffnung", lambda: plot_oeffnung(D, f, lam, S_slide if S_pct > 0 else None), _h)
 
     with tabs[2]:
-        st.pyplot(plot_deff_D(D, N, S_slide if S_pct > 0 else None))
+        _show_cached("fig_deff_D",   lambda: plot_deff_D(D, N, S_slide if S_pct > 0 else None),        _h)
 
     with tabs[3]:
-        st.pyplot(plot_beugung(D, f))
+        _show_cached("fig_beugung",  lambda: plot_beugung(D, f),                                        (D, f))
 
     with tabs[4]:
         c1, c2 = st.columns(2)
@@ -1430,16 +1452,16 @@ def main():
                                     horizontal=True)
         paraxial  = "Paraxial" in fokus_mode
         objekte_k = {"Planeten": "planeten", "Deep-Sky (M42)": "deepsky", "Alle": "alle"}[objekte_mode]
-        st.pyplot(plot_mtf(D, f, lam, S_slide if S_pct > 0 else None,
-                           paraxial=paraxial, objekte=objekte_k))
+        _show_cached("fig_mtf", lambda: plot_mtf(D, f, lam, S_slide if S_pct > 0 else None,
+                     paraxial=paraxial, objekte=objekte_k),
+                     _h + (paraxial, objekte_k))
 
     with tabs[5]:
-        st.pyplot(plot_wahrnehmung(D, f, lam,
-                                   S_slide if S_pct > 0 else None,
-                                   S_real))
+        _show_cached("fig_wahrnehmung", lambda: plot_wahrnehmung(D, f, lam,
+                     S_slide if S_pct > 0 else None, S_real), _h)
 
     with tabs[6]:
-        st.pyplot(plot_blende(D, f, lam, D_blend))
+        _show_cached("fig_blende", lambda: plot_blende(D, f, lam, D_blend), _hb)
 
     with tabs[7]:
         # Foucault-Tab
