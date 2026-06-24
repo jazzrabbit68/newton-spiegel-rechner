@@ -1,7 +1,7 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v6.1.0 (2026-06-21)
+Streamlit-Version v6.2.0 (2026-06-21)
 Entspricht newton_spiegel_rechner.py v6.1.0
 
 Abhängigkeiten: pip install streamlit matplotlib numpy scipy
@@ -38,7 +38,7 @@ def _golden_section(f, a: float, b: float, tol: float = 1e-8) -> float:
             fd = f(d)
     return (a + b) / 2.0
 
-VERSION = "6.1.0 (2026-06-21)"
+VERSION = "6.2.0"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -1167,8 +1167,10 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz):
 
     rho_fine = kz["rho_f"]
     W_fine   = kz["W_c"]
-    ax_wf.plot(rho_fine, W_fine, color=_ACC, lw=2.0,
-               label=f"Wellenfront (Polynom-Fit, a4={kz['a4']:.3f})")
+    _modus_lbl = (f"Wellenfront (Polynom-Fit, a4={kz['a4']:.3f})"
+                  if kz["a4"] is not None else
+                  "Wellenfront (Direkt-Interpolation)")
+    ax_wf.plot(rho_fine, W_fine, color=_ACC, lw=2.0, label=_modus_lbl)
 
     W_z      = kz["W_zonen"]
     W_c_zonen = kz["W_c_zonen"]   # flächengewichtet pistonbereinigt (bester Fokus)
@@ -1216,9 +1218,9 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz):
         ("W_PtV",               f"{kz['W_ptv']:.4f} λ"),
         ("Wb (aus Fit)",        f"{kz['Wb_fit']:.4f} λ"),
         ("Fit-Residuum RMS",
-         f"{kz['fit_residuum_rms']:.4f} λ" +
-         ("  ⚠ >0.010λ" if kz['fit_residuum_rms'] > 0.010 else "")
-         if kz['fit_residuum_rms'] > 0 else ("–", "")[0]),
+         (f"{kz['fit_residuum_rms']:.4f} λ" +
+          ("  ⚠ >0.010λ" if kz['fit_residuum_rms'] > 0.010 else ""))
+         if kz['fit_residuum_rms'] > 0 else "–"),
         ("", ""),
         ("Abtrag RMS (Glas)",   f"{kz['W_rms']*lam/2.0:.1f} nm"
                                 if kz.get("Glas_ptv_nm") is not None else "–"),
