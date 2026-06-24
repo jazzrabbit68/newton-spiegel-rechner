@@ -537,6 +537,7 @@ def _ax_fmt(ax):
     ax.set_facecolor(BG)
 
 
+@st.cache_data(max_entries=32, show_spinner=False)
 def plot_strehl(D, f, lam, S_slide=None):
     ns, sts, _, _, sts_exakt = kurven_N(D, lam)
     N_akt    = f / D
@@ -574,6 +575,7 @@ def plot_strehl(D, f, lam, S_slide=None):
     return fig
 
 
+@st.cache_data(max_entries=32, show_spinner=False)
 def plot_oeffnung(D, f, lam, S_slide=None):
     ns, _, deff_ks, aufl_verluste, _ = kurven_N(D, lam)
     N_akt   = f / D
@@ -621,6 +623,7 @@ def plot_oeffnung(D, f, lam, S_slide=None):
     return fig
 
 
+@st.cache_data(max_entries=32, show_spinner=False)
 def plot_deff_D(D_akt, N_akt, S_slide=None):
     D_arr    = np.linspace(50, 400, 300)
     N_list   = [5, 6, 7, 8, 10]
@@ -681,6 +684,7 @@ def plot_deff_D(D_akt, N_akt, S_slide=None):
     return fig
 
 
+@st.cache_data(max_entries=32, show_spinner=False)
 def plot_beugung(D_akt, f_akt):
     lam_mm = 550e-6
     f_arr  = np.linspace(200, 2000, 500)
@@ -726,6 +730,7 @@ def plot_beugung(D_akt, f_akt):
     return fig
 
 
+@st.cache_data(max_entries=32, show_spinner=False)
 def plot_mtf(D, f, lam, S_slide=None, paraxial=False, objekte="planeten"):
     lam_mm   = lam * 1e-6
     _, _, Wb, _, _ = _wellenfronten(D, f, lam)
@@ -801,6 +806,7 @@ def plot_mtf(D, f, lam, S_slide=None, paraxial=False, objekte="planeten"):
     return fig
 
 
+@st.cache_data(max_entries=32, show_spinner=False)
 def plot_wahrnehmung(D, f, lam, S_slide=None, S_real=None):
     _, _, Wb, _, S_mar = _wellenfronten(D, f, lam)
     S_exakt    = _strehl_exakt(Wb)
@@ -873,6 +879,7 @@ def plot_wahrnehmung(D, f, lam, S_slide=None, S_real=None):
     return fig
 
 
+@st.cache_data(max_entries=32, show_spinner=False)
 def plot_blende(D, f, lam, D_blend):
     """Blenden-Diagramm exakt wie newton_spiegel_rechner.py:
     Oberes Panel: Q_vis-Kurven für Original, Blendenstufen, gewählte Blende, optimale Blende.
@@ -1532,11 +1539,34 @@ def main():
                 st.session_state[k] = 0.0
             st.rerun()
 
-        # Berechnen
-        df_arr = np.array(df_vals)
-        try:
-            W_z = foucault_wellenfront(r_zon, df_arr, f, lam_fc)
-            kz  = foucault_kennzahlen(W_z, r_zon, D, lam_fc, use_direct=use_direct)
+        # Berechnen — expliziter Button verhindert Neurechnung bei jeder Eingabe
+        st.markdown("---")
+        col_btn, col_hint = st.columns([1, 4])
+        do_calc = col_btn.button("▶  Berechnen", type="primary", use_container_width=True)
+        col_hint.caption(
+            "Alle Zonenwerte eingeben, dann **Berechnen** klicken. "
+            "Die übrigen Diagramm-Tabs werden durch Zoneneingaben nicht neu berechnet.")
+
+        # Letztes Ergebnis im session_state zwischenspeichern
+        _fc_res_key = f"fc_result_{D}_{f}_{n_zonen}"
+        if do_calc:
+            df_arr = np.array(df_vals)
+            try:
+                W_z = foucault_wellenfront(r_zon, df_arr, f, lam_fc)
+                kz  = foucault_kennzahlen(W_z, r_zon, D, lam_fc, use_direct=use_direct)
+                st.session_state[_fc_res_key] = (df_arr, kz)
+            except Exception as _e:
+                st.error(f"Foucault-Berechnungsfehler: {_e}")
+                kz = None
+        elif _fc_res_key in st.session_state:
+            _stored_df, kz = st.session_state[_fc_res_key]
+            df_arr = _stored_df
+        else:
+            kz = None
+
+        if kz is not None:
+         try:
+            W_z = foucault_wellenfront(r_zon, df_arr, f, lam_fc)  # für plot_foucault
 
             rayleigh_ok  = kz["S_exakt"] >= 0.80
             s_color      = "green" if kz["S_exakt"] >= 0.95 else "orange" if rayleigh_ok else "red"
@@ -1568,10 +1598,8 @@ def main():
 
             st.pyplot(plot_foucault(D, f, lam_fc, r_zon, df_arr, kz))
 
-        except ImportError as e:
-            st.error(f"scipy fehlt: {e}")
-        except Exception as e:
-            st.error(f"Foucault-Berechnungsfehler: {e}")
+         except Exception as _ex:
+            st.error(f"Foucault-Berechnungsfehler: {_ex}")
 
     with tabs[8]:
         # Doku-HTML aus Datei lesen (liegt neben app.py) oder eingebettet anzeigen
