@@ -1,5 +1,5 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel V6.1
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel V6.2.0
 ============================================================================
 Berücksichtigt:
   - Wellenfrontfehler und Strehl-Quotient (Kontrast)
@@ -62,10 +62,36 @@ import numpy as np
 from functools import lru_cache
 
 try:
-    from scipy.optimize import minimize_scalar
+    from scipy.optimize import minimize_scalar as _minimize_scalar_scipy
     _SCIPY_OK = True
 except ImportError:
+    _minimize_scalar_scipy = None
     _SCIPY_OK = False
+
+
+def _golden_section(f, a: float, b: float, tol: float = 1e-8) -> float:
+    """Golden-Section-Suche für das Minimum von f auf [a, b].
+
+    Ersetzt scipy.optimize.minimize_scalar(method='bounded') ohne externe
+    Abhängigkeit — geeignet für Streamlit Cloud und scipy-lose Umgebungen.
+    Konvergiert in ≤200 Iterationen auf tol=1e-8 Genauigkeit.
+    """
+    phi = (math.sqrt(5) - 1) / 2   # ≈ 0.618
+    c = b - phi * (b - a)
+    d = a + phi * (b - a)
+    fc, fd = f(c), f(d)
+    for _ in range(200):
+        if abs(b - a) < tol:
+            break
+        if fc < fd:
+            b, d, fd = d, c, fc
+            c  = b - phi * (b - a)
+            fc = f(c)
+        else:
+            a, c, fc = c, d, fd
+            d  = a + phi * (b - a)
+            fd = f(d)
+    return (a + b) / 2.0
 
 
 # ── Kernrechnung ──────────────────────────────────────────────────────────────
@@ -494,7 +520,7 @@ def foucault_wellenfront(r_zonen: np.ndarray, df_zonen: np.ndarray,
     delta_l     = dl_para_rel - df_zonen                 # Abweichung: Soll−Ist
                                                          # >0 = unterkorrekt (Ist zu klein)
                                                          # <0 = überkorrekt  (Ist zu groß)
-    return delta_l * r_zonen**2 / (16.0 * f_mm**2 * lam_mm) #faktor  8.0 statt 16.0 für figureXP
+    return delta_l * r_zonen**2 / (16.0 * f_mm**2 * lam_mm)  #Faktor 8 für FigureXP
     
     """Wellenfrontfehler [in Einheiten von λ] aus Foucault-Messungen.
     KORRIGIERTE FORMUL: W(ρ) = (δl(ρ) - δl(0)) / (2·λ)
@@ -509,139 +535,182 @@ def foucault_wellenfront(r_zonen: np.ndarray, df_zonen: np.ndarray,
 
 
 def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
-                        D_mm: float, lam_nm: float | None = None) -> dict:
-    """PtV, RMS (kontinuierlich via Polynom-Fit), Strehl aus Zonenwellenfronten.
+                        D_mm: float, lam_nm: float | None = None,
+                        use_direct: bool = False) -> dict:
+    """PtV, RMS, Strehl aus Zonenwellenfronten — Polynom-Fit oder Direkt-Interpolation.
 
-    Statt diskrete Zonenwerte direkt zu mitteln, wird ein Polynom
-    W(ρ) = a4·ρ⁴ + a2·ρ² an die Zonenwerte gefittet und der Strehl
-    daraus via Pupillenintegral mit optimalem Defokus berechnet.
-    So werden Artefakte durch diskrete Stichprobenfehler minimiert.
+    V6.2.0: Zwei Modi wählbar über use_direct.
 
-    Materialabtrag (Glas): Wellenfrontfehler ist beim Spiegel das DOPPELTE
-    der tatsächlichen Oberflächenabweichung (Licht läuft doppelt über jede
-    Höhenabweichung). Außerdem kann beim Polieren nur Material entfernt,
-    nie zugefügt werden — daher wird die Glas-Abtragskarte relativ zum am
-    wenigsten bearbeiteten Punkt (= Minimum von W_c) referenziert, nicht
-    relativ zum Bestfokus-Mittelwert wie die Wellenfrontkarte. Wird nur
-    berechnet, wenn lam_nm übergeben wird (sonst None).
+    use_direct=False  (Standard, glatte Oberfläche / reine sphärische Aberration):
+        Polynom-Fit W(ρ) = a4·ρ⁴ + a2·ρ² durch die Zonenwerte.
+        Nur zwei Freiheitsgrade — bei echten Zonenfehlern (lokale Ringfehler)
+        werden die Extrema zwischen den Stützstellen weggemittelt:
+        W_rms und W_ptv werden unterschätzt, Strehl überschätzt.
+        Gut geeignet für: Kugelspiegel-Diagnose, wenige Zonen (n≤4),
+        rauschbehaftete Messungen (Fit dämpft Messfehler).
+
+    use_direct=True  (Zonenfehler-Modus):
+        Stückweise lineare Interpolation der Zonenwerte auf 2000 Punkte,
+        konstante Extrapolation an den Rändern (kein Sprung auf 0).
+        Defokus-Optimierung und Strehl auf dieser realistischen Wellenfront.
+        Kein Informationsverlust durch Glättung — empfohlen wenn
+        fit_residuum_rms > 0.010λ oder Zonenfehler bekannt sind.
+
+    Gemeinsam (beide Modi):
+        - Defokus-Optimierung: d·ρ² minimiert flächengewichteten W_rms.
+        - Strehl via Pupillenintegral (exakt, kein Wb/Maréchal-Umweg).
+        - Flächengewichtete W_c_zonen (Kreisringflächen, nicht arithm. Mittel).
+        - Materialabtrag (Glas) wenn lam_nm übergeben wird.
+        - Keine scipy-Abhängigkeit (_golden_section statt minimize_scalar).
+
+    Materialabtrag: Wellenfrontfehler = 2× Oberflächenabweichung (Licht
+    läuft doppelt). Referenziert auf Minimum von W_c (= am wenigsten
+    bearbeiteter Punkt), da beim Polieren nur Material entfernt werden kann.
+
+    Rückgabe-Dict — alle Schlüssel immer vorhanden (None wenn nicht berechnet):
+        W_zonen, W_c_zonen      — Rohwerte; flächengewichtet pistonbereinigt
+        W_rms, W_ptv, Wb_fit    — Wellenfront-Kennzahlen
+        a4, a2                  — Polynom-Koeffizienten (None bei use_direct)
+        fit_residuum_rms        — RMS Fit-Abweichung an Zonen (0.0 bei use_direct)
+        S_mar, S_exakt, Deff_k  — Strehl und Kennzahlen
+        Glas_f, Glas_zonen      — Materialabtrag [nm], kontinuierlich / je Zone
+        Glas_ptv_nm, Glas_volumen_mm3, W_min, lam_nm
+        rho_f, W_best, W_c      — Kurven-Arrays für Diagramm
     """
-    if not _SCIPY_OK:
-        raise ImportError(
-            "scipy nicht installiert — bitte 'pip install scipy' ausführen.")
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
 
-    R    = D_mm / 2.0
-    rho_z = r_zonen / R
+    R     = D_mm / 2.0
+    rho_z = r_zonen / R                         # normierte Zonenradien [0..1]
+    rho_f = np.linspace(0.0, 1.0, 2000)         # feines Gitter für Integrale
 
-    # Polynom-Fit W(ρ) = a4·ρ⁴ + a2·ρ² durch Zonenwerte + Achse (W=0 bei ρ=0)
-    rho_fit = np.concatenate([[0.0], rho_z])
-    W_fit   = np.concatenate([[0.0], W_zonen])
-    A = np.column_stack([rho_fit**4, rho_fit**2])
-    coeffs, _, _, _ = np.linalg.lstsq(A, W_fit, rcond=None)
-    a4, a2 = coeffs
+    # ── Flächengewichte der Zonen (Kreisringflächen, normiert) ───────────────
+    # Zone i belegt Ring von r_inner[i] bis r_outer[i].
+    # Korrekte Gewichtung für alle flächengemittelten Größen:
+    #   W_c_zonen-Mittelwert, Defokus-Optimierung im Direkt-Modus.
+    r_inner    = np.concatenate([[0.0], r_zonen[:-1]])
+    r_outer    = r_zonen.copy()
+    zone_areas = r_outer**2 - r_inner**2        # ∝ Kreisringfläche (unnormiert)
+    zone_areas = zone_areas / zone_areas.sum()  # normiert: Summe = 1
 
-    # Kontinuierliche Wellenfront
-    rho_f = np.linspace(0.0, 1.0, 2000)
-    W_f   = a4 * rho_f**4 + a2 * rho_f**2
+    # ════════════════════════════════════════════════════════════════════════════
+    if use_direct:
+        # ── DIREKTMODUS: Lineare Interpolation, kein Polynom-Fit ─────────────
+        # Konstante Extrapolation an den Rändern verhindert künstliche
+        # Sprünge auf 0 außerhalb der äußersten/innersten Zone.
+        W_f = np.interp(rho_f, rho_z, W_zonen,
+                        left=W_zonen[0], right=W_zonen[-1])
 
-    # Besten Fokus: Defokus d·ρ² minimiert flächengewichteten Wrms
-    def wrms_sq(d):
-        Wt = W_f + d * rho_f**2
-        Wm = _trapz(Wt * rho_f, rho_f) / 0.5
-        Wc = Wt - Wm
-        return _trapz(Wc**2 * rho_f, rho_f) / 0.5
+        def _wrms_sq(d):
+            Wt = W_f + d * rho_f**2
+            Wm = _trapz(Wt * rho_f, rho_f) / 0.5
+            Wc = Wt - Wm
+            return float(_trapz(Wc**2 * rho_f, rho_f) / 0.5)
 
-    res    = minimize_scalar(wrms_sq, bounds=(-200, 200), method="bounded")
-    W_best = W_f + res.x * rho_f**2
-    Wm     = _trapz(W_best * rho_f, rho_f) / 0.5
-    W_c    = W_best - Wm
+        d_opt  = _golden_section(_wrms_sq, -200.0, 200.0)
+        W_best = W_f + d_opt * rho_f**2
+        Wm     = float(_trapz(W_best * rho_f, rho_f) / 0.5)
+        W_c    = W_best - Wm
 
-    W_rms  = math.sqrt(_trapz(W_c**2 * rho_f, rho_f) / 0.5)
-    W_ptv  = float(W_c.max() - W_c.min())
+        # Zonenwerte im besten Fokus: Interpolation auf dem optimierten W_best
+        W_best_zonen = np.interp(rho_z, rho_f, W_best)
+        Wm_zonen     = float(np.dot(W_best_zonen, zone_areas))
+        W_c_zonen    = W_best_zonen - Wm_zonen
 
-    # Strehl direkt via Pupillenintegral (kein Wb-Umweg)
-    phase  = 2.0 * math.pi * W_c
-    A_re   = _trapz(np.cos(phase) * rho_f, rho_f) / 0.5
-    A_im   = _trapz(np.sin(phase) * rho_f, rho_f) / 0.5
+        a4, a2           = None, None
+        fit_residuum_rms = 0.0
+
+    else:
+        # ── POLYNOM-FIT: W(ρ) = a4·ρ⁴ + a2·ρ² ──────────────────────────────
+        # Achse (W=0 bei ρ=0) als zusätzlicher Stützpunkt erzwingt W(0)≈0.
+        rho_fit = np.concatenate([[0.0], rho_z])
+        W_fit_v = np.concatenate([[0.0], W_zonen])
+        A       = np.column_stack([rho_fit**4, rho_fit**2])
+        coeffs, _, _, _ = np.linalg.lstsq(A, W_fit_v, rcond=None)
+        a4, a2  = float(coeffs[0]), float(coeffs[1])
+
+        # Fit-Qualität: flächengewichteter RMS der Residuen an den Zonenpunkten.
+        # Hoher Wert (> 0.010λ) deutet auf Zonenfehler hin → use_direct empfohlen.
+        W_fit_at_zones   = a4 * rho_z**4 + a2 * rho_z**2
+        residuen         = W_zonen - W_fit_at_zones
+        fit_residuum_rms = float(np.sqrt(np.dot(residuen**2, zone_areas)))
+
+        W_f = a4 * rho_f**4 + a2 * rho_f**2
+
+        def _wrms_sq(d):
+            Wt = W_f + d * rho_f**2
+            Wm = _trapz(Wt * rho_f, rho_f) / 0.5
+            Wc = Wt - Wm
+            return float(_trapz(Wc**2 * rho_f, rho_f) / 0.5)
+
+        d_opt  = _golden_section(_wrms_sq, -200.0, 200.0)
+        W_best = W_f + d_opt * rho_f**2
+        Wm     = float(_trapz(W_best * rho_f, rho_f) / 0.5)
+        W_c    = W_best - Wm
+
+        # Zonenwerte im besten Fokus exakt aus Polynom (kein Interpolationsfehler)
+        W_best_zonen = a4 * rho_z**4 + (a2 + d_opt) * rho_z**2
+        Wm_zonen     = float(np.dot(W_best_zonen, zone_areas))
+        W_c_zonen    = W_best_zonen - Wm_zonen
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # ── Kennzahlen (gemeinsam, immer auf rho_f mit 2000 Punkten) ─────────────
+
+    phase   = 2.0 * math.pi * W_c
+    A_re    = float(_trapz(np.cos(phase) * rho_f, rho_f) / 0.5)
+    A_im    = float(_trapz(np.sin(phase) * rho_f, rho_f) / 0.5)
     S_exakt = A_re**2 + A_im**2
 
-    # Wb-Äquivalent: PtV am besten Fokus = a4/4
-    # Herleitung: W_bestfocus(ρ) = a4·(ρ⁴−ρ²), PtV bei ρ=1/√2: a4·(1/4−1/2)=−a4/4 → Wb=a4/4
-    # Konsistent mit _strehl_exakt: W = 4·Wb·(ρ⁴−ρ²) = a4·(ρ⁴−ρ²) ✓
-    Wb_fit  = abs(a4) / 4.0
+    W_ptv   = float(W_c.max() - W_c.min())
+    W_rms   = math.sqrt(float(_trapz(W_c**2 * rho_f, rho_f) / 0.5))
+
+    # Wb_fit: aus a4 (Poly-Modus, exakt) oder W_ptv/4 (Direkt-Modus, Näherung).
+    # Herleitung Poly: W_bestfocus(ρ) = a4·(ρ⁴−ρ²), PtV bei ρ=1/√2: −a4/4 → Wb=|a4|/4.
+    Wb_fit  = abs(a4) / 4.0 if a4 is not None else W_ptv / 4.0
     S_mar   = math.exp(-(2 * math.pi * W_rms)**2)
     Deff_k  = D_mm * S_exakt**0.25
 
-    # ── Materialabtrag (Glas) ───────────────────────────────────────────
-    # Gleiche piston-/defokuskorrigierte Kurve, an den Zonenradien ausgewertet,
-    # referenziert auf ihr Minimum (= Punkt mit geringstem nötigem Abtrag).
-    Glas_f = Glas_zonen = None
-    Glas_ptv_nm = W_min = None
+    # ── Materialabtrag (Glas) ─────────────────────────────────────────────────
+    # Wellenfrontfehler = 2× Oberflächenhöhe → Faktor /2 für Glasabtrag.
+    # Referenz: Minimum von W_c (= wenigst bearbeiteter Punkt; Polieren entfernt nur Glas).
+    Glas_f = Glas_zonen = Glas_ptv_nm = Glas_volumen_mm3 = W_min = None
     if lam_nm is not None:
-        W_min       = float(W_c.min())
-        Glas_f      = (W_c - W_min) * lam_nm / 2.0          # [nm], kontinuierlich
-        W_c_zonen_f = a4 * rho_z**4 + (a2 + res.x) * rho_z**2 - Wm
-        Glas_zonen  = (W_c_zonen_f - W_min) * lam_nm / 2.0   # [nm], je Zone
-        Glas_ptv_nm = float(Glas_f.max())                    # Min ist per Konstruktion 0
-
-    # NEU: Volumen aus Glas_f berechnen (Integration über Spiegeloberfläche)
-        Glas_mm = Glas_f * 1e-6  # [nm] -> [mm]
-        integrand = Glas_mm * rho_f  # Glas(ρ) * ρ für Flächenintegration
-        integral = _trapz(integrand, rho_f)
-        Glas_volumen_mm3 = 2 * math.pi * (R ** 2) * integral
+        lam_mm           = lam_nm * 1e-6
+        W_min            = float(W_c.min())
+        Glas_f           = (W_c - W_min) * lam_mm / 2.0              # [mm], kontinuierlich
+        Glas_zonen       = (W_c_zonen - W_c_zonen.min()) * lam_nm / 2.0  # [nm], je Zone
+        Glas_ptv_nm      = float(W_ptv * lam_nm / 2.0)               # [nm]
+        integrand        = Glas_f * rho_f
+        Glas_volumen_mm3 = float(2 * math.pi * R**2 * _trapz(integrand, rho_f))
 
     return dict(
-        W_zonen=W_zonen, W_c_zonen=W_zonen - float(np.mean(W_zonen)),
-        W_rms=W_rms, W_ptv=W_ptv,
-        Wb_fit=Wb_fit, a4=a4, a2=a2,
-        S_mar=S_mar, S_exakt=S_exakt, Deff_k=Deff_k,
-        Glas_f=Glas_f, Glas_zonen=Glas_zonen,
-        Glas_ptv_nm=Glas_ptv_nm, W_min=W_min, lam_nm=lam_nm,
-        Glas_volumen_mm3=Glas_volumen_mm3,  # NEU: Volumen im Rückgabedict
-        rho_f=rho_f, W_best=W_best, W_c=W_c
+        # Eingabewerte und pistonbereinigte Zonenwerte (flächengewichtet, bester Fokus)
+        W_zonen=W_zonen,
+        W_c_zonen=W_c_zonen,
+        # Wellenfront-Kennzahlen
+        W_rms=W_rms,
+        W_ptv=W_ptv,
+        Wb_fit=Wb_fit,
+        # Polynom-Koeffizienten (None im Direkt-Modus)
+        a4=a4,
+        a2=a2,
+        # Fit-Qualität: flächengew. RMS der Zonenwert-Residuen (0.0 im Direkt-Modus)
+        fit_residuum_rms=fit_residuum_rms,
+        # Strehl und Kennzahlen
+        S_mar=S_mar,
+        S_exakt=S_exakt,
+        Deff_k=Deff_k,
+        # Materialabtrag
+        Glas_f=Glas_f,
+        Glas_zonen=Glas_zonen,
+        Glas_ptv_nm=Glas_ptv_nm,
+        W_min=W_min,
+        lam_nm=lam_nm,
+        Glas_volumen_mm3=Glas_volumen_mm3,
+        # Kurven-Arrays für Diagramm
+        rho_f=rho_f,
+        W_best=W_best,
+        W_c=W_c,
     )
-    """
-    return dict(W_zonen=W_zonen, W_c_zonen=W_zonen - float(np.mean(W_zonen)),
-                W_rms=W_rms, W_ptv=W_ptv,
-                Wb_fit=Wb_fit, a4=a4, a2=a2,
-                S_mar=S_mar, S_exakt=S_exakt, Deff_k=Deff_k,
-                Glas_f=Glas_f, Glas_zonen=Glas_zonen,
-                Glas_ptv_nm=Glas_ptv_nm, W_min=W_min, lam_nm=lam_nm,
-                rho_f=rho_f, W_best=W_best, W_c=W_c)
-                """
-
-def glasvolumen_aus_foucault(r_zonen: np.ndarray, df_zonen: np.ndarray,
-                            D_mm: float, f_mm: float, lam_nm: float) -> float:
-    """Berechnet das abzutragende Glasvolumen [mm³] aus Foucault-Messungen.
-    Verwendet die korrigierte Wellenfront und integriert die Oberflächenabweichung.
-    Stimmt mit FigureXP überein (z. B. 200mm f/6 → ~2.44 mm³).
-    """
-    lam_mm = lam_nm * 1e-6
-    R = D_mm / 2.0  # Spiegelradius [mm]
-
-    # 1. Wellenfrontfehler (korrigiert)
-    W_zonen = foucault_wellenfront(r_zonen, df_zonen, f_mm, lam_nm)
-
-    # 2. Oberflächenabweichung: S(ρ) = W(ρ) * λ / 2 [mm]
-    S_zonen = W_zonen * lam_mm / 2.0
-
-    # 3. Polynom-Fit: S(ρ) = a4·ρ⁴ + a2·ρ² (sphärische Aberration)
-    rho_z = r_zonen / R
-    A = np.column_stack([rho_z**4, rho_z**2])
-    coeffs, _, _, _ = np.linalg.lstsq(A, S_zonen, rcond=None)
-    a4, a2 = coeffs
-
-    # 4. Kontinuierliche Oberflächenabweichung
-    rho_f = np.linspace(0, 1, 2000)
-    S_f = a4 * rho_f**4 + a2 * rho_f**2
-
-    # 5. Volumen: V = 2π ∫ S(ρ) * ρ * R² dρ
-    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    integrand = S_f * rho_f
-    integral = _trapz(integrand, rho_f)
-    V_mm3 = 2 * math.pi * (R ** 2) * integral
-
-    return V_mm3
 
 def mtf_sph_rel(f: float, Wb: float, n: int = 80,
                 paraxial: bool = False) -> float:
@@ -1378,6 +1447,29 @@ class App(tk.Tk):
                          font=("Helvetica", 9)).pack(side="left", padx=8)
                 self._foucault_lam = tk.DoubleVar(value=550.0)
 
+                # ── Auswertungs-Modus ──────────────────────────────────────
+                tk.Frame(ctrl, bg="#ccc", width=1, height=20).pack(
+                    side="left", padx=10, fill="y")
+                tk.Label(ctrl, text="Auswertung:", bg=BG, fg="#555",
+                         font=("Helvetica", 9)).pack(side="left")
+                self._foucault_use_direct = tk.BooleanVar(value=False)
+                tk.Radiobutton(ctrl,
+                               text="Polynom-Fit  (glatte Fläche)",
+                               variable=self._foucault_use_direct,
+                               value=False, bg=BG, activebackground=BG,
+                               selectcolor=BG2, fg="#1565c0",
+                               font=("Helvetica", 9),
+                               command=self._foucault_aktualisieren
+                               ).pack(side="left", padx=6)
+                tk.Radiobutton(ctrl,
+                               text="Direkt-Interpolation  (Zonenfehler)",
+                               variable=self._foucault_use_direct,
+                               value=True, bg=BG, activebackground=BG,
+                               selectcolor=BG2, fg="#6a1b9a",
+                               font=("Helvetica", 9),
+                               command=self._foucault_aktualisieren
+                               ).pack(side="left", padx=6)
+
                 # Rayleigh-Status-Label
                 self._foucault_status = tk.Label(ctrl, text="", bg=BG,
                                                   font=("Helvetica", 9, "bold"))
@@ -1804,21 +1896,21 @@ class App(tk.Tk):
         self._foucault_aktualisieren()
 
     def _foucault_aktualisieren(self):
-        """Neuberechnung und Diagramm-Update für Foucault-Tab."""
+        """Neuberechnung und Diagramm-Update fuer Foucault-Tab."""
         try:
-            D   = self.var_D.get()
-            f   = self.var_f.get()
-            lam = self._foucault_lam.get()
-            n   = self._foucault_n.get()
+            D          = self.var_D.get()
+            f          = self.var_f.get()
+            lam        = self._foucault_lam.get()
+            n          = self._foucault_n.get()
+            use_direct = self._foucault_use_direct.get()
 
             r_zon  = foucault_zonen(D, n)
             df_arr = np.array([v.get() for v in self._foucault_df_vars])
             df_para_abs = r_zon**2 / (2.0 * 2.0 * f)   # Rc=2f, + = FigureXP-Konvention
             df_para     = df_para_abs - df_para_abs[0]  # relativ zu Zone 1 (Referenz)
-            abw     = df_arr - df_para   # Abweichung vom Sollwert
+            abw         = df_arr - df_para               # Abweichung vom Sollwert
 
             # Abweichungs-Labels aktualisieren (Spalte 5 im Grid)
-            grid_slaves = self._foucault_eingabe_frm.grid_slaves()
             for i, dv in enumerate(abw):
                 for w in self._foucault_eingabe_frm.grid_slaves(row=i+1, column=5):
                     col = "#2e7d32" if abs(dv) < 0.01 else \
@@ -1826,19 +1918,26 @@ class App(tk.Tk):
                     w.config(text=f"{dv:+.3f}", fg=col)
 
             W_z = foucault_wellenfront(r_zon, df_arr, f, lam)
-            kz  = foucault_kennzahlen(W_z, r_zon, D, lam)
+            kz  = foucault_kennzahlen(W_z, r_zon, D, lam, use_direct=use_direct)
 
-            # Status-Label aktualisieren
+            # Status-Label: Kennzahlen + Modus + ggf. Fit-Residuum-Warnung
             rayleigh_ok = kz["S_exakt"] >= 0.80
             s_col = "#2e7d32" if kz["S_exakt"] >= 0.95 else \
                     "#e65100" if rayleigh_ok else "#c62828"
-            status = (f"S_exakt = {kz['S_exakt']:.4f}   "
+            modus_txt = "Direkt" if use_direct else "Polynom"
+            res_warn  = ""
+            if not use_direct and kz["fit_residuum_rms"] > 0.010:
+                res_warn = (f"  ⚠ Fit-Res.={kz['fit_residuum_rms']:.3f}λ"
+                            f" → Direkt-Modus empfohlen")
+            status = (f"[{modus_txt}]  "
+                      f"S_exakt = {kz['S_exakt']:.4f}   "
                       f"W_rms = {kz['W_rms']:.4f}λ   "
                       f"W_PtV = {kz['W_ptv']:.4f}λ   "
                       f"Abtrag_PtV = {kz['Glas_ptv_nm']:.1f}nm Glas   "
-                      f"Abtrag V ={kz['Glas_volumen_mm3']:.1f}mm³ Glas  "
+                      f"Abtrag V = {kz['Glas_volumen_mm3']:.1f}mm³ Glas   "
                       f"D_eff = {kz['Deff_k']:.1f}mm   "
-                      f"{'✓ Rayleigh OK' if rayleigh_ok else '✗ Rayleigh nicht erfüllt'}")
+                      f"{'✓ Rayleigh OK' if rayleigh_ok else '✗ Rayleigh nicht erfüllt'}"
+                      f"{res_warn}")
             self._foucault_status.config(text=status, fg=s_col)
 
             self._diagramm_foucault(D, f, lam, r_zon, df_arr, kz)
@@ -1847,6 +1946,7 @@ class App(tk.Tk):
             if hasattr(self, "_foucault_status"):
                 self._foucault_status.config(
                     text=f"Fehler: {e}", fg="#c62828")
+
 
     def _diagramm_foucault(self, D, f, lam, r_zon, df_arr, kz):
         """Foucault-Diagramm: Wellenfrontkurve + Kennzahlentafel."""
@@ -1859,40 +1959,43 @@ class App(tk.Tk):
         R     = D / 2.0
         rho_z = r_zon / R
 
-        # ── Wellenfrontkurve (aus Polynom-Fit, am besten Fokus) ───────────
+        # ── Wellenfrontkurve (Polynom-Fit oder Direkt-Interpolation) ────────
         rho_fine = kz["rho_f"]
         W_fine   = kz["W_c"]    # pistonbereinigt, bester Fokus
 
-        ax_wf.plot(rho_fine, W_fine, color=ACC, lw=2.0,
-                   label=f"Wellenfront (Polynom-Fit, a4={kz['a4']:.3f})")
+        if kz["a4"] is not None:
+            kurven_lbl = f"Wellenfront (Polynom-Fit, a4={kz['a4']:.3f})"
+            res_rms = kz.get("fit_residuum_rms", 0.0)
+            if res_rms > 0.010:
+                kurven_lbl += f"  \u26a0 Fit-Res.={res_rms:.3f}\u03bb \u2192 Zonenfehler-Modus empfohlen"
+        else:
+            kurven_lbl = "Wellenfront (Direkt-Interpolation, Zonenfehler-Modus)"
+        ax_wf.plot(rho_fine, W_fine, color=ACC, lw=2.0, label=kurven_lbl)
 
         # Zonenpunkte: y-Position auf rechter Achse (nm Glas)
         # Da matplotlib nur eine Daten-y-Achse kennt, rechnen wir die nm-Werte
         # über die Inverse der secondary_yaxis-Transformation in λ-Einheiten zurück.
         # zu_lam(g) = g * 2/lam + W_min  →  Punkt sitzt visuell auf der nm-Skala.
-        W_z    = kz["W_zonen"]
-        Glas_z = kz.get("Glas_zonen")
-        W_min  = kz.get("W_min")
+        W_z      = kz["W_zonen"]
+        W_c_z    = kz["W_c_zonen"]   # flächengewichtet pistonbereinigt (bester Fokus)
+        Glas_z   = kz.get("Glas_zonen")
+        W_min    = kz.get("W_min")
         if Glas_z is not None and W_min is not None:
             y_punkte = Glas_z * 2.0 / lam + W_min   # nm → λ (linke Achse, gleiche Position)
-            Wm_disc  = float(np.mean(W_z))
             ax_wf.scatter(rho_z, y_punkte, color=COR, s=50, zorder=5,
                           label=f"Messzonen (n={len(r_zon)})")
             for i, (rho, yp) in enumerate(zip(rho_z, y_punkte)):
-                wc  = W_z[i] - Wm_disc
-                txt = f"Z{i+1}: {Glas_z[i]:.0f} nm\n({wc:+.3f}λ)"
+                txt = f"Z{i+1}: {Glas_z[i]:.0f} nm\n({W_c_z[i]:+.3f}\u03bb)"
                 ax_wf.annotate(txt,
                                xy=(rho, yp), xytext=(0, 10),
                                textcoords="offset points",
                                fontsize=7, ha="center", color=COR)
         else:
             # Fallback ohne lam_nm: nur λ-Skala
-            Wm_disc  = float(np.mean(W_z))
-            W_c_disc = W_z - Wm_disc
-            ax_wf.scatter(rho_z, W_c_disc, color=COR, s=50, zorder=5,
+            ax_wf.scatter(rho_z, W_c_z, color=COR, s=50, zorder=5,
                           label=f"Messzonen (n={len(r_zon)})")
-            for i, (rho, wc) in enumerate(zip(rho_z, W_c_disc)):
-                ax_wf.annotate(f"Z{i+1}: {wc:+.3f}λ",
+            for i, (rho, wc) in enumerate(zip(rho_z, W_c_z)):
+                ax_wf.annotate(f"Z{i+1}: {wc:+.3f}\u03bb",
                                xy=(rho, wc), xytext=(0, 10),
                                textcoords="offset points",
                                fontsize=7, ha="center", color=COR)
@@ -1929,17 +2032,21 @@ class App(tk.Tk):
         zeilen = [
             ("Öffnung / f-Zahl",  f"D = {D:.0f} mm  f/{f/D:.1f}"),
             ("Wellenlänge",        f"λ = {lam:.0f} nm"),
+            ("Modus",              "Direkt-Interpolation" if kz["a4"] is None else "Polynom-Fit"),
             ("", ""),
             ("W_rms",              f"{kz['W_rms']:.4f} λ"),
             ("W_PtV",              f"{kz['W_ptv']:.4f} λ"),
-            ("Wb (aus Fit)",       f"{kz['Wb_fit']:.4f} λ"),
+            ("Wb (äquivalent)",    f"{kz['Wb_fit']:.4f} λ"),
+            ("Fit-Residuum RMS",   f"{kz['fit_residuum_rms']:.4f} λ"
+                                   + (" \u26a0" if kz["fit_residuum_rms"] > 0.010 else "")
+                                   if kz["a4"] is not None else "– (Direkt-Modus)"),
             ("", ""),
             ("Abtrag RMS (Glas)",  f"{kz['W_rms']*lam/2.0:.1f} nm"
                                    if kz.get("Glas_ptv_nm") is not None else "–"),
             ("Abtrag PtV (Glas)",  f"{kz['Glas_ptv_nm']:.1f} nm"
                                    if kz.get("Glas_ptv_nm") is not None else "–"),
-            ("Abtrag V (Glas)",  f"{kz['Glas_volumen_mm3']:.1f} mm³"
-                                   if kz.get("Glas_volumen_mm3") is not None else "–"),                      
+            ("Abtrag V (Glas)",    f"{kz['Glas_volumen_mm3']:.1f} mm³"
+                                   if kz.get("Glas_volumen_mm3") is not None else "–"),
             ("", ""),
             ("Strehl  Maréchal",   f"{kz['S_mar']:.4f}"),
             ("Strehl  exakt",      f"{kz['S_exakt']:.4f}"),
