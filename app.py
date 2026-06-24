@@ -16,27 +16,27 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-# kein scipy nötig – eigene goldene-Schnitt-Minimierung
-_SCIPY_OK = True  # immer True
+# kein scipy nötig – Goldene-Schnitt-Suche (identisch mit newton_spiegel_rechner.py)
+_SCIPY_OK = True
 
-def _minimize_scalar_bounded(f, bounds, tol=1e-8, maxiter=200):
-    """Goldene-Schnitt-Suche auf Intervall [a, b]."""
-    a, b = bounds
-    gr = (math.sqrt(5) + 1) / 2
-    c = b - (b - a) / gr
-    d = a + (b - a) / gr
-    for _ in range(maxiter):
+def _golden_section(f, a: float, b: float, tol: float = 1e-8) -> float:
+    """Goldene-Schnitt-Suche für Minimum von f auf [a, b]."""
+    phi = (math.sqrt(5) - 1) / 2
+    c = b - phi * (b - a)
+    d = a + phi * (b - a)
+    fc, fd = f(c), f(d)
+    for _ in range(200):
         if abs(b - a) < tol:
             break
-        if f(c) < f(d):
-            b = d
+        if fc < fd:
+            b, d, fd = d, c, fc
+            c  = b - phi * (b - a)
+            fc = f(c)
         else:
-            a = c
-        c = b - (b - a) / gr
-        d = a + (b - a) / gr
-    class _Res:
-        x = (a + b) / 2
-    return _Res()
+            a, c, fc = c, d, fd
+            d  = a + phi * (b - a)
+            fd = f(d)
+    return (a + b) / 2.0
 
 VERSION = "6.1.0 (2026-06-21)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
@@ -424,61 +424,108 @@ def foucault_wellenfront(r_zonen, df_zonen, f_mm, lam_nm):
     return delta_l * r_zonen**2 / (16.0 * f_mm**2 * lam_mm)
 
 
-def foucault_kennzahlen(W_zonen, r_zonen, D_mm, lam_nm=None):
+def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
+                        D_mm: float, lam_nm: float = None,
+                        use_direct: bool = False) -> dict:
+    """PtV, RMS, Strehl aus Zonenwellenfronten — Polynom-Fit oder Direkt-Interpolation.
+
+    use_direct=False (Standard): Polynom-Fit W(ρ)=a4·ρ⁴+a2·ρ²
+        Gut für glatte Flächen, dämpft Messrauschen.
+    use_direct=True (Zonenfehler): stückweise lineare Interpolation,
+        kein Informationsverlust durch Glättung.
+    """
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    R    = D_mm / 2.0
+    R     = D_mm / 2.0
     rho_z = r_zonen / R
-    rho_fit = np.concatenate([[0.0], rho_z])
-    W_fit   = np.concatenate([[0.0], W_zonen])
-    A = np.column_stack([rho_fit**4, rho_fit**2])
-    coeffs, _, _, _ = np.linalg.lstsq(A, W_fit, rcond=None)
-    a4, a2 = coeffs
     rho_f = np.linspace(0.0, 1.0, 2000)
-    W_f   = a4 * rho_f**4 + a2 * rho_f**2
 
-    def wrms_sq(d):
-        Wt = W_f + d * rho_f**2
-        Wm = _trapz(Wt * rho_f, rho_f) / 0.5
-        Wc = Wt - Wm
-        return _trapz(Wc**2 * rho_f, rho_f) / 0.5
+    # Flächengewichte (Kreisringflächen, normiert)
+    r_inner    = np.concatenate([[0.0], r_zonen[:-1]])
+    r_outer    = r_zonen.copy()
+    zone_areas = r_outer**2 - r_inner**2
+    zone_areas = zone_areas / zone_areas.sum()
 
-    res    = _minimize_scalar_bounded(wrms_sq, bounds=(-200, 200))
-    W_best = W_f + res.x * rho_f**2
-    Wm     = _trapz(W_best * rho_f, rho_f) / 0.5
-    W_c    = W_best - Wm
-    W_rms  = math.sqrt(_trapz(W_c**2 * rho_f, rho_f) / 0.5)
-    W_ptv  = float(W_c.max() - W_c.min())
-    phase  = 2.0 * math.pi * W_c
-    A_re   = _trapz(np.cos(phase) * rho_f, rho_f) / 0.5
-    A_im   = _trapz(np.sin(phase) * rho_f, rho_f) / 0.5
+    if use_direct:
+        # ── Direktmodus: lineare Interpolation ───────────────────────────────
+        W_f = np.interp(rho_f, rho_z, W_zonen,
+                        left=W_zonen[0], right=W_zonen[-1])
+
+        def _wrms_sq(d):
+            Wt = W_f + d * rho_f**2
+            Wm = _trapz(Wt * rho_f, rho_f) / 0.5
+            return float(_trapz((Wt - Wm)**2 * rho_f, rho_f) / 0.5)
+
+        d_opt  = _golden_section(_wrms_sq, -200.0, 200.0)
+        W_best = W_f + d_opt * rho_f**2
+        Wm     = float(_trapz(W_best * rho_f, rho_f) / 0.5)
+        W_c    = W_best - Wm
+
+        W_best_zonen = np.interp(rho_z, rho_f, W_best)
+        Wm_zonen     = float(np.dot(W_best_zonen, zone_areas))
+        W_c_zonen    = W_best_zonen - Wm_zonen
+        a4, a2           = None, None
+        fit_residuum_rms = 0.0
+
+    else:
+        # ── Polynom-Fit: W(ρ) = a4·ρ⁴ + a2·ρ² ──────────────────────────────
+        rho_fit = np.concatenate([[0.0], rho_z])
+        W_fit_v = np.concatenate([[0.0], W_zonen])
+        A       = np.column_stack([rho_fit**4, rho_fit**2])
+        coeffs, _, _, _ = np.linalg.lstsq(A, W_fit_v, rcond=None)
+        a4, a2  = float(coeffs[0]), float(coeffs[1])
+
+        W_fit_at_zones   = a4 * rho_z**4 + a2 * rho_z**2
+        residuen         = W_zonen - W_fit_at_zones
+        fit_residuum_rms = float(np.sqrt(np.dot(residuen**2, zone_areas)))
+
+        W_f = a4 * rho_f**4 + a2 * rho_f**2
+
+        def _wrms_sq(d):
+            Wt = W_f + d * rho_f**2
+            Wm = _trapz(Wt * rho_f, rho_f) / 0.5
+            return float(_trapz((Wt - Wm)**2 * rho_f, rho_f) / 0.5)
+
+        d_opt  = _golden_section(_wrms_sq, -200.0, 200.0)
+        W_best = W_f + d_opt * rho_f**2
+        Wm     = float(_trapz(W_best * rho_f, rho_f) / 0.5)
+        W_c    = W_best - Wm
+
+        W_best_zonen = a4 * rho_z**4 + (a2 + d_opt) * rho_z**2
+        Wm_zonen     = float(np.dot(W_best_zonen, zone_areas))
+        W_c_zonen    = W_best_zonen - Wm_zonen
+
+    # ── Kennzahlen ────────────────────────────────────────────────────────────
+    phase   = 2.0 * math.pi * W_c
+    A_re    = float(_trapz(np.cos(phase) * rho_f, rho_f) / 0.5)
+    A_im    = float(_trapz(np.sin(phase) * rho_f, rho_f) / 0.5)
     S_exakt = A_re**2 + A_im**2
-    Wb_fit  = abs(a4) / 4.0
+    W_ptv   = float(W_c.max() - W_c.min())
+    W_rms   = math.sqrt(float(_trapz(W_c**2 * rho_f, rho_f) / 0.5))
+    Wb_fit  = abs(a4) / 4.0 if a4 is not None else W_ptv / 4.0
     S_mar   = math.exp(-(2 * math.pi * W_rms)**2)
     Deff_k  = D_mm * S_exakt**0.25
 
-    Glas_f = Glas_zonen = None
-    Glas_ptv_nm = W_min = None
-    Glas_volumen_mm3 = None
+    # ── Materialabtrag ────────────────────────────────────────────────────────
+    Glas_f = Glas_zonen = Glas_ptv_nm = Glas_volumen_mm3 = W_min = None
     if lam_nm is not None:
-        W_min       = float(W_c.min())
-        Glas_f      = (W_c - W_min) * lam_nm / 2.0
-        W_c_zonen_f = a4 * rho_z**4 + (a2 + res.x) * rho_z**2 - Wm
-        Glas_zonen  = (W_c_zonen_f - W_min) * lam_nm / 2.0
-        Glas_ptv_nm = float(Glas_f.max())
-        Glas_mm     = Glas_f * 1e-6
-        integrand   = Glas_mm * rho_f
-        integral    = _trapz(integrand, rho_f)
-        Glas_volumen_mm3 = 2 * math.pi * (R ** 2) * integral
+        lam_mm           = lam_nm * 1e-6
+        W_min            = float(W_c.min())
+        Glas_f           = (W_c - W_min) * lam_mm / 2.0
+        Glas_zonen       = (W_c_zonen - W_c_zonen.min()) * lam_nm / 2.0
+        Glas_ptv_nm      = float(W_ptv * lam_nm / 2.0)
+        Glas_volumen_mm3 = float(2 * math.pi * R**2 * _trapz(Glas_f * rho_f, rho_f))
 
     return dict(
-        W_zonen=W_zonen, W_c_zonen=W_zonen - float(np.mean(W_zonen)),
-        W_rms=W_rms, W_ptv=W_ptv,
-        Wb_fit=Wb_fit, a4=a4, a2=a2,
+        W_zonen=W_zonen, W_c_zonen=W_c_zonen,
+        W_rms=W_rms, W_ptv=W_ptv, Wb_fit=Wb_fit,
+        a4=a4, a2=a2,
+        fit_residuum_rms=fit_residuum_rms,
         S_mar=S_mar, S_exakt=S_exakt, Deff_k=Deff_k,
         Glas_f=Glas_f, Glas_zonen=Glas_zonen,
         Glas_ptv_nm=Glas_ptv_nm, W_min=W_min, lam_nm=lam_nm,
         Glas_volumen_mm3=Glas_volumen_mm3,
-        rho_f=rho_f, W_best=W_best, W_c=W_c)
+        rho_f=rho_f, W_best=W_best, W_c=W_c,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1123,22 +1170,21 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz):
     ax_wf.plot(rho_fine, W_fine, color=_ACC, lw=2.0,
                label=f"Wellenfront (Polynom-Fit, a4={kz['a4']:.3f})")
 
-    W_z    = kz["W_zonen"]
-    Glas_z = kz.get("Glas_zonen")
-    W_min  = kz.get("W_min")
+    W_z      = kz["W_zonen"]
+    W_c_zonen = kz["W_c_zonen"]   # flächengewichtet pistonbereinigt (bester Fokus)
+    Glas_z   = kz.get("Glas_zonen")
+    W_min    = kz.get("W_min")
     if Glas_z is not None and W_min is not None:
         y_punkte = Glas_z * 2.0 / lam + W_min
         ax_wf.scatter(rho_z, y_punkte, color=_COR, s=50, zorder=5,
                       label=f"Messzonen (n={len(r_zon)})")
         for i, (rho, yp) in enumerate(zip(rho_z, y_punkte)):
-            wc  = W_z[i] - float(np.mean(W_z))
+            wc = W_c_zonen[i]   # flächengewichtet, pistonbereinigt
             ax_wf.annotate(f"Z{i+1}: {Glas_z[i]:.0f} nm\n({wc:+.3f}λ)",
                            xy=(rho, yp), xytext=(0, 10),
                            textcoords="offset points", fontsize=7, ha="center", color=_COR)
     else:
-        Wm_disc  = float(np.mean(W_z))
-        W_c_disc = W_z - Wm_disc
-        ax_wf.scatter(rho_z, W_c_disc, color=_COR, s=50, zorder=5)
+        ax_wf.scatter(rho_z, W_c_zonen, color=_COR, s=50, zorder=5)
 
     ax_wf.axhline(0, color="#999", lw=0.8)
     ax_wf.axhline(+0.125, color=_ACC, lw=0.7, ls=":", alpha=0.7, label="±λ/8 (Rayleigh)")
@@ -1169,6 +1215,10 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz):
         ("W_rms",               f"{kz['W_rms']:.4f} λ"),
         ("W_PtV",               f"{kz['W_ptv']:.4f} λ"),
         ("Wb (aus Fit)",        f"{kz['Wb_fit']:.4f} λ"),
+        ("Fit-Residuum RMS",
+         f"{kz['fit_residuum_rms']:.4f} λ" +
+         ("  ⚠ >0.010λ" if kz['fit_residuum_rms'] > 0.010 else "")
+         if kz['fit_residuum_rms'] > 0 else ("–", "")[0]),
         ("", ""),
         ("Abtrag RMS (Glas)",   f"{kz['W_rms']*lam/2.0:.1f} nm"
                                 if kz.get("Glas_ptv_nm") is not None else "–"),
@@ -1199,7 +1249,10 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz):
                      va="top",
                      fontfamily="monospace" if not is_verdict else "sans-serif")
         y -= 0.075
-    ax_info.set_title("Auswertung", fontsize=8, fontweight="bold")
+    modus_str = "Direkt-Interpolation" if kz.get("a4") is None else "Polynom-Fit"
+    res_rms   = kz.get("fit_residuum_rms", 0.0)
+    res_str   = f"{res_rms:.4f}λ" if res_rms > 0 else "–"
+    ax_info.set_title(f"Auswertung  [{modus_str}]", fontsize=8, fontweight="bold")
     fig.suptitle(
         f"Foucault-Auswertung  —  D={D:.0f}mm  f/{f/D:.1f}  "
         f"S={kz['S_exakt']:.4f}  W_rms={kz['W_rms']:.4f}λ",
@@ -1386,6 +1439,15 @@ def main():
         fc1, fc2 = st.columns([1, 3])
         with fc1:
             n_zonen = st.radio("Zonen:", [4, 6, 8], horizontal=True, index=0)
+            use_direct = st.radio(
+                "Auswertungs-Modus:",
+                ["Polynom-Fit  (glatte Fläche)", "Direkt-Interpolation  (Zonenfehler)"],
+                index=0, horizontal=False,
+                help="Polynom-Fit: W(ρ)=a4·ρ⁴+a2·ρ²  — dämpft Messrauschen, "
+                     "unterschätzt Zonenfehler.\n"
+                     "Direkt: stückweise lineare Interpolation — erfasst lokale "
+                     "Ringfehler vollständig. Empfohlen wenn Fit-Residuum > 0.010λ.")
+            use_direct = (use_direct == "Direkt-Interpolation  (Zonenfehler)")
             st.caption(f"λ = {lam_fc:.0f} nm (fix)")
 
         R       = D / 2.0
@@ -1472,11 +1534,19 @@ def main():
         df_arr = np.array(df_vals)
         try:
             W_z = foucault_wellenfront(r_zon, df_arr, f, lam_fc)
-            kz  = foucault_kennzahlen(W_z, r_zon, D, lam_fc)
+            kz  = foucault_kennzahlen(W_z, r_zon, D, lam_fc, use_direct=use_direct)
 
-            rayleigh_ok = kz["S_exakt"] >= 0.80
-            s_color = "green" if kz["S_exakt"] >= 0.95 else "orange" if rayleigh_ok else "red"
-            status_icon = "✓" if rayleigh_ok else "✗"
+            rayleigh_ok  = kz["S_exakt"] >= 0.80
+            s_color      = "green" if kz["S_exakt"] >= 0.95 else "orange" if rayleigh_ok else "red"
+            status_icon  = "✓" if rayleigh_ok else "✗"
+            modus_label  = "Direkt-Interpolation" if use_direct else "Polynom-Fit"
+            modus_color  = "#6a1b9a"              if use_direct else "#1565c0"
+            res_rms      = kz["fit_residuum_rms"]
+            res_warn     = res_rms > 0.010 and not use_direct
+            res_hint     = (f" &nbsp;⚠ Fit-Residuum={res_rms:.4f}λ &gt; 0.010λ "
+                            f"→ Direkt-Modus empfohlen"
+                            if res_warn else
+                            f" &nbsp;Fit-Residuum={res_rms:.4f}λ" if not use_direct else "")
             st.markdown(
                 f"<div style='background-color:{'#e8f5e9' if rayleigh_ok else '#ffebee'};"
                 f"padding:8px;border-radius:6px;margin:8px 0'>"
@@ -1488,7 +1558,10 @@ def main():
                 f"Abtrag V = {kz['Glas_volumen_mm3']:.1f} mm³ &nbsp;|&nbsp; "
                 f"D_eff = {kz['Deff_k']:.1f} mm &nbsp;|&nbsp; "
                 f"{'✓ Rayleigh OK' if rayleigh_ok else '✗ Rayleigh nicht erfüllt'}"
-                f"</b></div>",
+                f"</b>"
+                f"<span style='color:{modus_color};font-size:0.85em;font-weight:normal'>"
+                f" &nbsp;|&nbsp; Modus: {modus_label}{res_hint}</span>"
+                f"</div>",
                 unsafe_allow_html=True)
 
             st.pyplot(plot_foucault(D, f, lam_fc, r_zon, df_arr, kz))
