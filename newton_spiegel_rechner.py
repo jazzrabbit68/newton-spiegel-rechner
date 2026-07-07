@@ -1,5 +1,5 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel V6.2.0
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel V6.3.0
 ============================================================================
 Berücksichtigt:
   - Wellenfrontfehler und Strehl-Quotient (Kontrast)
@@ -8,7 +8,9 @@ Berücksichtigt:
 
 Formeln:
   Kontrast (Strehl):
-    W_PtV (paraxial)  = D⁴ / (1024·f³·λ)         [Sacek §4.7.1]
+    W_PtV (paraxial)  = D⁴ / (512·f³·λ)          [Sacek §4.7.1, korrigiert 07/2026:
+                                                      Reflexion verdoppelt Oberflaechen-
+                                                      in Wellenfrontfehler]
     W_PtV (best focus)= W_PtV_paraxial / 4         [Sacek §4.7.2]
     W_RMS             = W_PtV_bestfocus / (1.5·√5) [Sacek §4.7.2]
     Strehl (Näherung) = exp(-(2π·W_RMS)²)          [Maréchal 1947, zit. n. Sacek §4.8]
@@ -98,13 +100,18 @@ def _golden_section(f, a: float, b: float, tol: float = 1e-8) -> float:
 def _wellenfronten(D_mm: float, f_mm: float, lam_nm: float):
     """Gemeinsame Basis: Wp, Wb, Wrms, Strehl (Maréchal).
 
-    Wp  = D⁴/(1024·f³·λ)  — PtV-Wellenfrontfehler am paraxialen Fokus [Sacek §4.7.1]
+    Wp  = D⁴/(512·f³·λ)   — PtV-Wellenfrontfehler am paraxialen Fokus [Sacek §4.7.1]
+                             (KORRIGIERT 07/2026: D^4/(1024 f^3) ist die reine
+                             Oberflaechen-Sagittadifferenz Kugel-Parabel; die
+                             Wellenfront ist bei Reflexion doppelt so gross,
+                             s. Sacek's aberration-coefficient-Herleitung /
+                             Zahlenbeispiel in lower_order_spherical.htm)
     Wb  = Wp/4             — PtV am besten Fokus [Sacek §4.7.2]
     Wrms= Wb/(1.5·√5)      — RMS für reine sphärische Aberration [Sacek §4.7.2]
     S   = exp(-(2π·Wrms)²) — Maréchal-Näherung [Maréchal 1947, zit. n. Sacek §4.8], gültig für S > ~0.6
     """
     lam_mm = lam_nm * 1e-6
-    Wp   = D_mm**4 / (1024.0 * f_mm**3 * lam_mm)
+    Wp   = D_mm**4 / (512.0 * f_mm**3 * lam_mm)   # 07/2026: 1024->512, s. Docstring oben
     Wb   = Wp / 4.0
     Wrms = Wb / (1.5 * math.sqrt(5))
     S    = math.exp(-(2 * math.pi * Wrms) ** 2)
@@ -394,16 +401,21 @@ def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
     """Strehl und eff. Öffnungen als Funktion von f/D.
 
     Rückgabe: ns, strehls_marechal, deff_ks, aufl_verluste, strehls_exakt
+
+    strehls_marechal: Marechal-Naeherung  S = exp(-(2*pi*Wrms)^2)
+    strehls_exakt:    exaktes Pupillenintegral (Born & Wolf)
+    Beide am besten Fokus (Faktor 16 in Wellenfrontformel).
     """
     ns = np.linspace(N_min, N_max, schritte)
-    strehls, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
+    strehls_mar, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
     for n in ns:
         r = berechne(D_mm, D_mm * n, lam_nm)
-        strehls.append(r["strehl"])
+        strehls_mar.append(r["strehl_marechal"])   # echte Marechal-Naeherung
         deff_ks.append(r["Deff_k"])
         aufl_verluste.append(r["aufl_verlust_pct"])
-        strehls_exakt.append(_strehl_exakt(r["Wb"]))
-    return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste), np.array(strehls_exakt)
+        strehls_exakt.append(r["strehl"])           # exaktes Pupillenintegral
+    return (ns, np.array(strehls_mar), np.array(deff_ks),
+            np.array(aufl_verluste), np.array(strehls_exakt))
 
 
 def mtf_para(f: float) -> float:
@@ -519,11 +531,13 @@ def foucault_wellenfront(r_zonen: np.ndarray, df_zonen: np.ndarray,
     delta_l     = dl_para_rel - df_zonen                 # Abweichung: Soll−Ist
                                                          # >0 = unterkorrekt (Ist zu klein)
                                                          # <0 = überkorrekt  (Ist zu groß)
-    # Herleitung (Sacek): W(r) = Delta_l(r) * r^2 / (16*f^2*lambda)
+    # Herleitung (Sacek): W(r) = Delta_l(r) * r^2 / (8*f^2*lambda)
     # ausgewertet am besten Fokus (Defokus-Optimierung in foucault_kennzahlen).
-    # Kontrolle: Kugel 200/f5 -> S=0.1493 (analytisch exakt am besten Fokus).
-    # FigureXP rechnet am paraxialen Fokus -> gibt ~0.12 fuer Kugel 200/f5.
-    return delta_l * r_zonen**2 / (16.0 * f_mm**2 * lam_mm)
+    # KORRIGIERT 07/2026: vorher 16 statt 8 im Nenner -> Wellenfrontfehler um
+    # Faktor 2 zu klein (gleicher Root-Cause wie in _wellenfronten()).
+    # Kontrolle: Kugel 200/f5 -> S=0.1232 (exakt, bester Fokus) -- deckt sich
+    # mit FigureXP (~0.12) und mit direkter Kugel/Parabel-Geometrierechnung.
+    return delta_l * r_zonen**2 / (8.0 * f_mm**2 * lam_mm)
     
     """Wellenfrontfehler [in Einheiten von λ] aus Foucault-Messungen.
     KORRIGIERTE FORMUL: W(ρ) = (δl(ρ) - δl(0)) / (2·λ)
@@ -536,6 +550,47 @@ def foucault_wellenfront(r_zonen: np.ndarray, df_zonen: np.ndarray,
     return delta_l / (2.0 * lam_mm)  # W = δl / (2λ) [dimensionslos, in Einheiten von λ]
     """
 
+
+
+def _polyfit_bic(rho_z: np.ndarray, W_z: np.ndarray) -> tuple:
+    """Waehlt optimalen Polynomgrad via BIC (Bayes Information Criterion).
+
+    Verwendet nur gerade Potenzen rho^2, rho^4, ... (Rotationssymmetrie).
+    Achsenpunkt (0,0) wird als Stuetzpunkt erzwungen.
+    Maximaler Grad = n//2 -- verhindert Ueberfit bei wenigen Zonen.
+
+    Rueckgabe: (grad, coeffs, potenzen)
+      grad:     gewaehlter Polynomgrad
+      coeffs:   Koeffizienten [c2, c4, ..., c_{2*grad}]
+      potenzen: [2, 4, ..., 2*grad]
+
+    Beispiele:
+      4 Zonen -> max_grad=2 -> testet rho^2 und rho^2+rho^4
+      8 Zonen -> max_grad=4 -> BIC waehlt typisch Grad 2 (rho^2..rho^8)
+    """
+    rho_fit = np.concatenate([[0.0], rho_z])
+    W_fit   = np.concatenate([[0.0], W_z])
+    n_pts   = len(W_fit)
+    max_grad = max(1, len(W_z) // 2)
+
+    best_bic    = np.inf
+    best_grad   = 1
+    best_coeffs = None
+    best_pot    = None
+
+    for grad in range(1, max_grad + 1):
+        pot  = [2 * k for k in range(1, grad + 1)]
+        A    = np.column_stack([rho_fit**p for p in pot])
+        c, _, _, _ = np.linalg.lstsq(A, W_fit, rcond=None)
+        rss  = float(np.sum((A @ c - W_fit)**2))
+        bic  = n_pts * math.log(max(rss / n_pts, 1e-30)) + grad * math.log(n_pts)
+        if bic < best_bic:
+            best_bic    = bic
+            best_grad   = grad
+            best_coeffs = c
+            best_pot    = pot
+
+    return best_grad, best_coeffs, best_pot
 
 def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
                         D_mm: float, lam_nm: float | None = None,
@@ -579,25 +634,26 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
     zone_areas = r_outer**2 - r_inner**2
     zone_areas = zone_areas / zone_areas.sum()
 
-    # Polynom-Fit W(rho) = a4*rho^4 + a2*rho^2 (Basis fuer beide Modi)
-    rho_fit = np.concatenate([[0.0], rho_z])
-    W_fit_v = np.concatenate([[0.0], W_zonen])
-    A       = np.column_stack([rho_fit**4, rho_fit**2])
-    coeffs, _, _, _ = np.linalg.lstsq(A, W_fit_v, rcond=None)
-    a4, a2  = float(coeffs[0]), float(coeffs[1])
+    # Polynomgrad automatisch per BIC waehlen (gerade Potenzen, max n//2)
+    # 4 Zonen -> max Grad 2 -> testet rho^2 und rho^2+rho^4
+    # 8 Zonen -> max Grad 4 -> BIC waehlt optimalen Grad
+    poly_grad, poly_coeffs, poly_pot = _polyfit_bic(rho_z, W_zonen)
+
+    # a4 fuer Wb-Berechnung (0 wenn rho^4 nicht im Modell)
+    a4 = float(poly_coeffs[poly_pot.index(4)]) if 4 in poly_pot else 0.0
+    a2 = float(poly_coeffs[poly_pot.index(2)]) if 2 in poly_pot else 0.0
 
     # Residuen = Zonenfehler (Abweichung vom glatten Polynom)
-    W_poly_at_zones  = a4 * rho_z**4 + a2 * rho_z**2
+    W_poly_at_zones  = sum(float(c) * rho_z**p
+                           for c, p in zip(poly_coeffs, poly_pot))
     residuen         = W_zonen - W_poly_at_zones
     fit_residuum_rms = float(np.sqrt(np.dot(residuen**2, zone_areas)))
 
     # Wellenfront auf feinem Gitter
-    W_f = a4 * rho_f**4 + a2 * rho_f**2
+    W_f = sum(float(c) * rho_f**p for c, p in zip(poly_coeffs, poly_pot))
 
     if use_direct:
-        # Hybrid: Polynom + stückweise konstante Residuen je Ringzone
-        # Jede Zone [rho_inner[i], rho_z[i]] bekommt den Residuum-Wert
-        # ihrer Zonenmitte aufgesattelt.
+        # Hybrid: Polynom (BIC-Grad) + stückweise konstante Residuen je Ringzone
         rho_inner_z = np.concatenate([[0.0], rho_z[:-1]])
         for ri, ro, res in zip(rho_inner_z, rho_z, residuen):
             mask = (rho_f >= ri) & (rho_f <= ro)
@@ -616,7 +672,7 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
     W_c    = W_best - Wm
 
     # Zonenwerte im besten Fokus
-    W_best_zonen = (a4 * rho_z**4 + (a2 + d_opt) * rho_z**2
+    W_best_zonen = (W_poly_at_zones + d_opt * rho_z**2
                     + (residuen if use_direct else 0.0))
     Wm_zonen     = float(np.dot(W_best_zonen, zone_areas))
     W_c_zonen    = W_best_zonen - Wm_zonen
@@ -629,7 +685,7 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
 
     W_ptv   = float(W_c.max() - W_c.min())
     W_rms   = math.sqrt(float(_trapz(W_c**2 * rho_f, rho_f) / 0.5))
-    Wb_fit  = abs(a4) / 4.0
+    Wb_fit  = abs(a4) / 4.0 if a4 != 0.0 else W_ptv / 4.0
     S_mar   = math.exp(-(2 * math.pi * W_rms)**2)
     Deff_k  = D_mm * S_exakt**0.25
 
@@ -647,6 +703,7 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
     return dict(
         W_zonen=W_zonen,
         W_c_zonen=W_c_zonen,
+        poly_grad=poly_grad,
         W_rms=W_rms,
         W_ptv=W_ptv,
         Wb_fit=Wb_fit,
@@ -685,11 +742,12 @@ def mtf_sph_rel(f: float, Wb: float, n: int = 80,
       → PtV_bestfocus = Wp/4 = Wb  →  Wp = 4·Wb
       Saceks Konvention: W(ρ) = a·8·(ρ⁴−ρ²) mit a = Wb/2
       → identisch: Wp = 8·a = 8·Wb/2 = 4·Wb
-      Hier verwendet: Wp = Wb*8 mit Wb = Wp_paraxial/4 → Wp = 8·(Wp_paraxial/4) = 2·Wp_paraxial
-      ACHTUNG: Wb im Code = W_PtV_bestfocus = Wp_paraxial/4, also Wp_integral = 4·Wb (nicht 8·Wb).
-      Der Faktor 8 im Code ist korrekt nur wenn Wb hier = Wp_paraxial/8 gemeint wäre — wurde
-      gegen Sacek und telescope-optics.net validiert und liefert übereinstimmende MTF-Kurven.
-      Faktor 8 ist notwenig um die 1D-Integral-Rechnunh zu kompensieren
+      KORRIGIERT 07/2026: Wp = Wb*4 (nicht *8). Die alte *8 kompensierte
+      zufaellig den fehlenden Reflexionsfaktor 2 in _wellenfronten() -- die
+      MTF-Kurven selbst waren dadurch bereits korrekt (Regressionstest nach
+      dem Gesamt-Fix: MTF-Werte vor/nach Fix identisch bis auf Rundung).
+      Jetzt, wo Wb von _wellenfronten() korrekt (verdoppelt) ist, muss der
+      hiesige Faktor entsprechend halbiert werden, damit Wp_intern gleich bleibt.
 
     f  = normierte Ortsfrequenz (0..1)
     Wb = W_PtV_bestfocus  (= Wp_paraxial/4)
@@ -698,7 +756,7 @@ def mtf_sph_rel(f: float, Wb: float, n: int = 80,
     if f >= 1: return 0.0
     lim = math.sqrt(max(0.0, 1.0 - (f/2)**2))
     re = im = norm = 0.0
-    Wp = Wb * 8  # Wp_integral = 2*4·Wb  (Wb = PtV best focus = Wp_paraxial/4) => Faktor 8 wegen 1D-Integral
+    Wp = Wb * 4  # Wp_integral = 4·Wb  (Wb = PtV best focus = Wp_paraxial/4) [07/2026: war *8]
     for i in range(n):
         x  = -lim + (2*i + 1) / (2*n) * 2*lim
         x1 = x - f/2
@@ -738,8 +796,15 @@ def mtf_kurven(D_mm: float, f_mm: float, lam_nm: float = 550.0,
     """MTF-Kurven für Paraboloid und sphärischen Spiegel.
 
     Rückgabe: (freqs_as, fc, mp, msa, msr, strehl)
+
+    KORRIGIERT 07/2026: strehl ist jetzt der EXAKTE Strehl (Pupillenintegral),
+    nicht mehr die Maréchal-Näherung. Vorher nutzte _wellenfronten()'s S
+    (=Maréchal) direkt für Titel/Legenden -- das fiel erst nach dem
+    Wellenfront-Fix auf, weil Maréchal und exakt fuer schnelle Kugeln jetzt
+    weit auseinanderliegen (0.0008 vs. 0.123 statt vorher 0.17 vs. 0.15).
     """
-    _, _, Wb, _, S = _wellenfronten(D_mm, f_mm, lam_nm)
+    _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
+    S = _strehl_exakt(Wb)
     fc = D_mm / (lam_nm * 1e-6 * 206265)
     freqs_as, mp, msa, msr = _mtf_arrays(Wb, S, fc, n_pts)
     return freqs_as, fc, mp, msa, msr, S
@@ -752,6 +817,7 @@ def mtf_kurven_von_S(D_mm: float, S: float, lam_nm: float = 550.0,
     fc = D_mm / (lam_nm * 1e-6 * 206265)
     freqs_as, mp, msa, msr = _mtf_arrays(Wb, S, fc, n_pts)
     return freqs_as, fc, mp, msa, msr, S
+
 
 
 def mtf_eye(f_cpd: float) -> float:
@@ -942,16 +1008,21 @@ def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
     """Strehl und eff. Öffnungen als Funktion von f/D.
 
     Rückgabe: ns, strehls_marechal, deff_ks, aufl_verluste, strehls_exakt
+
+    strehls_marechal: Marechal-Naeherung  S = exp(-(2*pi*Wrms)^2)
+    strehls_exakt:    exaktes Pupillenintegral (Born & Wolf)
+    Beide am besten Fokus (Faktor 16 in Wellenfrontformel).
     """
     ns = np.linspace(N_min, N_max, schritte)
-    strehls, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
+    strehls_mar, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
     for n in ns:
         r = berechne(D_mm, D_mm * n, lam_nm)
-        strehls.append(r["strehl"])
+        strehls_mar.append(r["strehl_marechal"])   # echte Marechal-Naeherung
         deff_ks.append(r["Deff_k"])
         aufl_verluste.append(r["aufl_verlust_pct"])
-        strehls_exakt.append(_strehl_exakt(r["Wb"]))
-    return ns, np.array(strehls), np.array(deff_ks), np.array(aufl_verluste), np.array(strehls_exakt)
+        strehls_exakt.append(r["strehl"])           # exaktes Pupillenintegral
+    return (ns, np.array(strehls_mar), np.array(deff_ks),
+            np.array(aufl_verluste), np.array(strehls_exakt))
 
 
 def kurven_vergr(D_mm, f_mm, lam_nm, eye_res_as=60.0,
@@ -973,7 +1044,7 @@ def kurven_blende(D_mm: float, f_mm: float, lam_nm: float,
     """Q̃(V) für Original-Spiegel und abgeblendet auf D_blende — Näherungsformel.
 
     Abblenden: gleiche Brennweite f, kleinere Öffnung D_blende
-      → Wp_blende = D_blende^4 / (1024·f^3·λ)  kleiner
+      → Wp_blende = D_blende^4 / (512·f^3·λ)  kleiner  [07/2026: 1024->512]
       → Strehl_blende höher
       → Beugungsgrenze schlechter (fc ∝ D_blende)
 
@@ -1017,7 +1088,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "6.1.0 (2026-06-21)"
+VERSION  = "6.3.0 (2026-07-07)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -1138,6 +1209,7 @@ class App(tk.Tk):
         super().__init__()
         self.title(T("win_title"))
         self.resizable(True, True)
+        self._maximiere_fenster()
         self.configure(bg=BG)
         self._update_job      = None
         self._compute_cancel  = False
@@ -1147,6 +1219,19 @@ class App(tk.Tk):
         # Tab-Wechsel: bei Bedarf das neue Tab nachzeichnen
         self._nb.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self._aktualisieren()
+
+    def _maximiere_fenster(self):
+        """Startet das Fenster maximiert (Bildschirmgröße) statt in Default-Breite.
+
+        '-zoomed' funktioniert unter Linux/X11 (Ubuntu) und Windows; falls das
+        Attribut nicht unterstützt wird (z.B. manche macOS/Wayland-Setups),
+        wird ersatzweise die Geometrie manuell auf die Bildschirmgröße gesetzt.
+        """
+        try:
+            self.attributes("-zoomed", True)
+        except tk.TclError:
+            sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+            self.geometry(f"{sw}x{sh}+0+0")
 
     def _sprache_wechseln(self, lang):
         global _LANG
@@ -1876,14 +1961,23 @@ class App(tk.Tk):
                     w.config(text=f"{dv:+.3f}", fg=col)
 
             W_z = foucault_wellenfront(r_zon, df_arr, f, lam)
-            kz  = foucault_kennzahlen(W_z, r_zon, D, lam, use_direct=use_direct)
+
+            # Hybrid-Modus braucht mindestens 6 Zonen um zuverlaessig
+            # zu sein: bei n=4 hat das BIC-Polynom zu viel Spielraum
+            # und schluckt Zonenfehler (n Punkte, nur 2 Koeffizienten
+            # -> bei n=4 fast Ueberfit, Residuen zu klein).
+            ud_effektiv = use_direct and (n >= 6)
+            kz  = foucault_kennzahlen(W_z, r_zon, D, lam,
+                                      use_direct=ud_effektiv)
 
             rayleigh_ok = kz["S_exakt"] >= 0.80
             s_col = "#2e7d32" if kz["S_exakt"] >= 0.95 else                     "#e65100" if rayleigh_ok else "#c62828"
             modus = "Hybrid" if use_direct else "Polynom"
             warn  = ""
-            if not use_direct and kz["fit_residuum_rms"] > 0.010:
-                warn = f"  WARN Fit-Res={kz['fit_residuum_rms']:.3f}lambda -> Hybrid empfohlen"
+            if use_direct and n < 6:
+                warn = "  INFO: Hybrid-Modus benoetigt n>=6 Zonen -- Polynom-Modus verwendet"
+            elif not use_direct and kz["fit_residuum_rms"] > 0.010:
+                warn = f"  WARN Fit-Res={kz['fit_residuum_rms']:.3f}lambda -> Hybrid mit n>=6 empfohlen"
 
             # Warnung wenn Zonen noch nahe Kugelfehler (weniger als 20% korrigiert)
             dl_soll_arr = (r_zon**2 - r_zon[0]**2) / (4.0 * f)
@@ -1907,6 +2001,8 @@ class App(tk.Tk):
                 f"{warn}"
             )
             self._foucault_status.config(text=status, fg=s_col)
+            self._foucault_letzte_kz = kz          # 07/2026: fuer MTF-Tab Vergleichskurve
+            self._foucault_letzte_D  = D
             self._diagramm_foucault(D, f, lam, r_zon, df_arr, kz, use_direct=use_direct)
         except Exception as e:
             if hasattr(self, "_foucault_status"):
@@ -1928,12 +2024,15 @@ class App(tk.Tk):
         rho_fine = kz["rho_f"]
         W_fine   = kz["W_c"]    # pistonbereinigt, bester Fokus
 
-        if kz.get("fit_residuum_rms", 0.0) > 0.010 and not use_direct:
-            lbl = f"Wellenfront (Polynom, a4={kz['a4']:.3f}) WARN res={kz['fit_residuum_rms']:.3f}"
-        elif use_direct:
-            lbl = f"Wellenfront (Hybrid, a4={kz['a4']:.3f}, res={kz['fit_residuum_rms']:.3f})"
+        _grad = kz.get("poly_grad", 1)
+        _res  = kz.get("fit_residuum_rms", 0.0)
+        _a4   = kz.get("a4", 0.0)
+        if use_direct:
+            lbl = f"Wellenfront (Hybrid Grad {_grad}, res={_res:.3f}lambda)"
+        elif _res > 0.010:
+            lbl = f"Wellenfront (Polynom Grad {_grad}, a4={_a4:.3f}) WARN res={_res:.3f}"
         else:
-            lbl = f"Wellenfront (Polynom, a4={kz['a4']:.3f})"
+            lbl = f"Wellenfront (Polynom Grad {_grad}, a4={_a4:.3f})"
         ax_wf.plot(rho_fine, W_fine, color=ACC, lw=2.0, label=lbl)
 
         # Zonenpunkte: y-Position auf rechter Achse (nm Glas)
@@ -2057,16 +2156,26 @@ class App(tk.Tk):
         ax.fill_between(ns, S_sph if S_sph else S_akt, 1.0,
                         color=ACC, alpha=0.10, label="Bereich Paraboloid→Sphäre")
         ax.axhline(1.00, color=GRN,       lw=1.5, ls="-",  label="Paraboloid (S=1.0)")
-        ax.plot(ns, sts,       color=ACC,       lw=2.0, ls="-",  label="Strehl Maréchal (Näherung)")
-        ax.plot(ns, sts_exakt, color="#534AB7", lw=1.8, ls="--", label="Strehl exakt (Pupillenintegral)")
+        # Maréchal: gestrichelt, deutlich dicker, andere Farbe
+        ax.plot(ns, sts,       color="#c07000", lw=2.2, ls="--",
+                label="Strehl Maréchal (Näherung, gueltig S>0.5)")
+        # Exakt: durchgezogen, Hauptkurve
+        ax.plot(ns, sts_exakt, color="#534AB7", lw=2.0, ls="-",
+                label="Strehl exakt (Pupillenintegral)")
         ax.axhline(0.80, color="#BA7517", lw=1.2, ls="--", label="Rayleigh S=0.80")
         ax.axhline(0.95, color="#888",    lw=1.0, ls=":",  label="S=0.95")
         ax.axvline(N_akt, color="#ccc", lw=0.8, ls=":")
-        ax.scatter([N_akt], [S_akt_mar], color=ACC,       s=60, zorder=5)
-        ax.scatter([N_akt], [S_akt],    color="#534AB7", s=40, zorder=5, marker="D")
-        ax.annotate(f"f/{N_akt:.1f}  S={S_akt_mar:.3f} (Maréchal) / "
-                    f"S={S_akt:.3f} (exakt)",
-                    xy=(N_akt, S_akt_mar), xytext=(8, 10),
+        # Hinweistext: Marechal ungueltig unter f/8
+        ax.axvline(8.0, color="#c07000", lw=0.7, ls=":", alpha=0.5)
+        ax.text(8.1, 0.05, "Marechal\n< f/8 ungenau", fontsize=7,
+                color="#c07000", alpha=0.8, va="bottom")
+        ax.scatter([N_akt], [S_akt_mar], color="#c07000", s=60, zorder=5,
+                   marker="s")
+        ax.scatter([N_akt], [S_akt],    color="#534AB7", s=50, zorder=5,
+                   marker="D")
+        ax.annotate(f"f/{N_akt:.1f}  S={S_akt:.3f} (exakt) / "
+                    f"S={S_akt_mar:.3f} (Maréchal)",
+                    xy=(N_akt, S_akt), xytext=(8, 10),
                     textcoords="offset points", fontsize=9, color="#333",
                     arrowprops=dict(arrowstyle="-", color="#aaa"))
         if S_sph and S_sph > S_akt_mar:
@@ -2197,6 +2306,11 @@ class App(tk.Tk):
         ax.legend(handles=proxy, fontsize=9, loc="upper left")
         ax.set_title("Öffnungsverlust vs. Öffnung — "
                      "durchgezogen: D×S^0.25  |  gestrichelt: D×Q_vis^0.25", fontsize=9)
+        ax.text(0.5, -0.13,
+                "Gilt für V→∞ (reine Kontrast-/MTF-Form, ohne Augenauflösung/CSF) — "
+                "bei kleiner Vergrößerung besser: Tab „Q_vis vs. Vergrößerung“",
+                transform=ax.transAxes, ha="center", va="top",
+                fontsize=7.5, color="#777", style="italic")
         self._ax_fmt(ax); fig.tight_layout(); canvas.draw_idle()
 
     def _diagramm_beugung(self, D_akt, f_akt):
@@ -2208,7 +2322,7 @@ class App(tk.Tk):
 
         def D_grenz(S):
             Wb = _Wb_von_S(S)
-            return (Wb * 4.0 * 1024 * lam_mm) ** 0.25 * f_arr ** 0.75
+            return (Wb * 4.0 * 512 * lam_mm) ** 0.25 * f_arr ** 0.75  # 07/2026: 1024->512
 
         D_95 = D_grenz(0.95)
         D_80 = D_grenz(0.80)
@@ -2276,7 +2390,7 @@ class App(tk.Tk):
         fokus_label = "Paraxialer Fokus  (ρ⁴)" if paraxial else "Best Focus  (ρ⁴−ρ²)"
         N_KURVE     = 300
         lam_mm      = lam * 1e-6
-        Wb_k        = D**4 / (1024.0 * f**3 * lam_mm) / 4.0
+        Wb_k        = D**4 / (512.0 * f**3 * lam_mm) / 4.0  # 07/2026: 1024->512
         fc_fokal    = 1.0 / (lam_mm * (f / D))
 
         nu_k2  = np.linspace(0, 1, N_KURVE)
@@ -2291,12 +2405,31 @@ class App(tk.Tk):
         ax.plot(nu_k2, msr_k2, color=ACC, lw=1.5, ls="--",
                 label="Sphäre relativ  (normiert gg. Paraboloid)")
 
-        if S_slide is not None and S_slide > strehl + 0.01:
-            Wb_s    = _Wb_von_S(S_slide)
-            msr_s_k = np.array([mtf_sph_rel(nu, Wb_s, paraxial=paraxial)
+        # Vergleichskurve: bevorzugt die tatsaechlich am Foucault-Tab
+        # gemessene Wellenfront (aussagekraeftiger als ein Prozent-Schieber
+        # auf einen frei gewaehlten Ziel-Strehl). Faellt zurueck auf den
+        # alten S_slide-Mechanismus, falls noch keine Foucault-Messung fuer
+        # diese Oeffnung D vorliegt.  [07/2026]
+        kz_fc = getattr(self, '_foucault_letzte_kz', None)
+        D_fc  = getattr(self, '_foucault_letzte_D', None)
+        if kz_fc is not None and D_fc == D:
+            Wb_cmp    = kz_fc['Wb_fit']
+            S_cmp     = kz_fc['S_exakt']
+            cmp_label = f"Foucault gemessen  (S={S_cmp:.3f})"
+            cmp_ok    = S_cmp > strehl + 0.01
+        elif S_slide is not None and S_slide > strehl + 0.01:
+            Wb_cmp    = _Wb_von_S(S_slide)
+            cmp_label = f"Schieber absolut  (S={S_slide:.2f})"
+            cmp_ok    = True
+        else:
+            Wb_cmp = None
+            cmp_ok = False
+
+        if cmp_ok and Wb_cmp is not None:
+            msr_s_k = np.array([mtf_sph_rel(nu, Wb_cmp, paraxial=paraxial)
                                  for nu in nu_k2])
             ax.plot(nu_k2, mp_k2 * msr_s_k, color="#1a7abf", lw=1.8, ls="-.",
-                    label=f"Schieber absolut  (S={S_slide:.2f})")
+                    label=cmp_label)
 
         for label, d_as, col, *_ in all_details:
             nu_det = (1.0 / (2.0 * d_as)) / fc
