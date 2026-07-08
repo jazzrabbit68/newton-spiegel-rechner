@@ -1,8 +1,8 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v6.2.0 (2026-06-24)
-Entspricht newton_spiegel_rechner.py v6.1.0
+Streamlit-Version v6.3.0 (2026-07-08)
+Entspricht newton_spiegel_rechner.py v6.3.0
 
 Abhängigkeiten: pip install streamlit matplotlib numpy scipy
 """
@@ -38,7 +38,7 @@ def _golden_section(f, a: float, b: float, tol: float = 1e-8) -> float:
             fd = f(d)
     return (a + b) / 2.0
 
-VERSION = "6.2.0 (2026-06-24)"
+VERSION = "6.3.0 (2026-07-08)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -51,7 +51,7 @@ GRN = "#0F6E56"
 
 def _wellenfronten(D_mm: float, f_mm: float, lam_nm: float):
     lam_mm = lam_nm * 1e-6
-    Wp   = D_mm**4 / (1024.0 * f_mm**3 * lam_mm)
+    Wp   = D_mm**4 / (512.0 * f_mm**3 * lam_mm)   # 07/2026: 1024->512, s. Docstring newton_spiegel_rechner.py
     Wb   = Wp / 4.0
     Wrms = Wb / (1.5 * math.sqrt(5))
     S    = math.exp(-(2 * math.pi * Wrms) ** 2)
@@ -680,7 +680,13 @@ def plot_deff_D(D_akt, N_akt, S_slide=None):
         Line2D([0],[0], color="#555", lw=1.2, ls="--", label="D × Q_vis^0.25  (visuell)"),
     ]
     ax.legend(handles=proxy, fontsize=9, loc="upper left")
-    ax.set_title("Öffnungsverlust vs. Öffnung", fontsize=9)
+    ax.set_title("Öffnungsverlust vs. Öffnung — "
+                 "durchgezogen: D×S^0.25  |  gestrichelt: D×Q_vis^0.25", fontsize=9)
+    ax.text(0.5, -0.13,
+            "Gilt für V→∞ (reine Kontrast-/MTF-Form, ohne Augenauflösung/CSF) — "
+            "bei kleiner Vergrößerung besser: Tab „Q_vis vs. Vergrößerung“",
+            transform=ax.transAxes, ha="center", va="top",
+            fontsize=7.5, color="#777", style="italic")
     _ax_fmt(ax); fig.tight_layout()
     return fig
 
@@ -691,7 +697,7 @@ def plot_beugung(D_akt, f_akt):
 
     def D_grenz(S):
         Wb = _Wb_von_S(S)
-        return (Wb * 4.0 * 1024 * lam_mm) ** 0.25 * f_arr ** 0.75
+        return (Wb * 4.0 * 512 * lam_mm) ** 0.25 * f_arr ** 0.75  # 07/2026: 1024->512
 
     D_95 = D_grenz(0.95)
     D_80 = D_grenz(0.80)
@@ -1659,7 +1665,7 @@ def main():
 
 | Größe | Formel |
 |---|---|
-| W_PtV paraxial | D⁴ / (1024·f³·λ) |
+| W_PtV paraxial | D⁴ / (512·f³·λ) |
 | W_PtV best focus | W_p / 4 |
 | W_RMS | W_b / (1.5·√5) |
 | Strehl Maréchal | exp(−(2π·W_rms)²) |
