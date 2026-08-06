@@ -268,7 +268,10 @@ def mtf_sph_rel(f: float, Wb: float, n: int = 80, paraxial: bool = False) -> flo
     if f >= 1: return 0.0
     lim = math.sqrt(max(0.0, 1.0 - (f/2)**2))
     re = im = norm = 0.0
-    Wp = Wb * 8
+    Wp = Wb * 4   # Fix 08/2026: war Wb*8 ("Mogelfaktor" aus alter 1024->512-Kompensation,
+                  # s. Chat-Historie). Korrekt: Wb=Wp/4 (siehe _wellenfronten/_strehl_exakt),
+                  # also Wp = Wb*4, nicht Wb*8. Alter Faktor führte zu doppelter Phasen-
+                  # abweichung in mtf_sph_rel -> Q_vis fiel bei hohem Strehl viel zu stark ab.
     for i in range(n):
         x  = -lim + (2*i + 1) / (2*n) * 2*lim
         x1 = x - f/2
