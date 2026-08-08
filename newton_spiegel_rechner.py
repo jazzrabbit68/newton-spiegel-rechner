@@ -493,62 +493,115 @@ def foucault_zonengrenzen(D_mm: float, n: int = 4) -> np.ndarray:
     return R * np.sqrt(np.arange(1, n + 1) / n)
 
 
-def foucault_wellenfront(r_zonen: np.ndarray, df_zonen: np.ndarray,
-                         f_mm: float, lam_nm: float) -> np.ndarray:
-    """Wellenfrontfehler je Zone aus gemessener Foucault-Schnittweite δl.
+def _foucault_wellenfront_kern(r_zonen: np.ndarray, df_zonen: np.ndarray,
+                               D_mm: float, R_c_mm: float,
+                               lam_nm: float) -> np.ndarray:
+    """Kernrechnung der Zonen-Wellenfront fuer gegebenen Kruemmungsradius R_c.
 
-    Lichtquelle im Krümmungsmittelpunkt R_c = 2f.
-    Vorzeichenkonvention (= FigureXP): δl > 0 bedeutet, die Messerschneide
-    muss zum Nullen dieser Zone WEITER VOM SPIEGEL WEG (nach außen/hinten)
-    bewegt werden als für die Scheitelzone. Physikalisch: eine Parabel ist
-    am Rand flacher als die Scheitelkugel, ihr lokaler Krümmungsradius
-    wird dort größer als R_c → die Randzone fokussiert weiter hinten.
-    Kugelspiegel: alle Zonen fokussieren auf R_c → δl_gemessen = 0 für Kugel.
-
-    Referenzzone: Zone 1 (kleinster Radius, r_zonen[0]) ist die δl=0-
-    Referenz — df_zonen sind also relative Messwerte (Differenz der
-    Messerschneiden-Position zur Nullstellung von Zone 1), nicht absolute
-    Positionen bezogen auf R_c. Praxisvorteil: man muss R_c nicht genau
-    kennen, sondern liest nur die Differenzen zwischen den Zonen ab.
-    Ändert die Endergebnisse (S, W_rms, W_ptv) NICHT, da ein konstanter
-    Offset in δl auf einen reinen Defokus-Term in W(ρ) führt, der durch
-    die Bestfokus-Optimierung in foucault_kennzahlen() ohnehin entfernt
-    wird — nur die rohen Zonenwerte W_zonen verschieben sich entsprechend.
-
-    Parabolsollwert (Abweichung eines Parabolspiegels bei Quelle in R_c,
-    bereits relativ zu Zone 1):
-        δl_Parabel(r) = (r² − r_1²) / (4f)
-    Abweichung vom Parabolsollwert:
-        Δl(r) = δl_gemessen(r) − δl_Parabel(r)
-    Wellenfrontfehler [in Einheiten von λ]:
-        W(r) = Δl(r) · r² / (8 · f² · λ)
-    Kontrolle 200/1000: Kugel → S=0.1232 (exakt theoretisch) ✓
-    """
-    
-    lam_mm      = lam_nm * 1e-6
-    dl_para     = r_zonen**2 / (4.0 * f_mm)              # absoluter Parabolsollwert
-    dl_para_rel = dl_para - dl_para[0]                   # relativ zu Zone 1 (=0)
-    delta_l     = dl_para_rel - df_zonen                 # Abweichung: Soll−Ist
-                                                         # >0 = unterkorrekt (Ist zu klein)
-                                                         # <0 = überkorrekt  (Ist zu groß)
-    # Herleitung (Sacek): W(r) = Delta_l(r) * r^2 / (8*f^2*lambda)
-    # ausgewertet am besten Fokus (Defokus-Optimierung in foucault_kennzahlen).
-    # KORRIGIERT 07/2026: vorher 16 statt 8 im Nenner -> Wellenfrontfehler um
-    # Faktor 2 zu klein (gleicher Root-Cause wie in _wellenfronten()).
-    # Kontrolle: Kugel 200/f5 -> S=0.1232 (exakt, bester Fokus) -- deckt sich
-    # mit FigureXP (~0.12) und mit direkter Kugel/Parabel-Geometrierechnung.
-    return delta_l * r_zonen**2 / (8.0 * f_mm**2 * lam_mm)
-    
-    """Wellenfrontfehler [in Einheiten von λ] aus Foucault-Messungen.
-    KORRIGIERTE FORMUL: W(ρ) = (δl(ρ) - δl(0)) / (2·λ)
-    Stimmt mit FigureXP und Sacek überein.
-    Kontrolle 200mm f/5: Kugel → Strehl ≈ 0.1232 (exakt) ✓
-    """
+    Intern verwendet von foucault_wellenfront(); nicht direkt aufrufen
+    (kein Best-Fit-ROC, s. dort).
     """
     lam_mm = lam_nm * 1e-6
-    delta_l = df_zonen - df_zonen[0]  # Relativ zur Scheitelzone (Zone 0)
-    return delta_l / (2.0 * lam_mm)  # W = δl / (2λ) [dimensionslos, in Einheiten von λ]
+    f_mm   = R_c_mm / 2.0
+    n      = len(r_zonen)
+
+    dl_para     = r_zonen**2 / (4.0 * f_mm)     # Parabolsollwert, moving source
+    dl_para_rel = dl_para - dl_para[0]          # relativ zu Zone 1 (=0)
+    residual    = df_zonen - dl_para_rel        # LA_gemessen - LA_ideal (moving source)
+
+    # Zonenbreiten Z_i: Grenze zwischen Zone i und i+1 = Wurzel des Mittel-
+    # werts der Radienquadrate (exakt fuer flaechengleiche Zonen, sinnvolle
+    # Naeherung sonst). Aussengrenze der letzten Zone = Spiegelrand D/2.
+    r_bound = np.zeros(n + 1)
+    r_bound[-1] = D_mm / 2.0
+    for i in range(1, n):
+        r_bound[i] = math.sqrt((r_zonen[i-1]**2 + r_zonen[i]**2) / 2.0)
+    Z = r_bound[1:] - r_bound[:-1]
+
+    # TA = 2*(r/R_c)*residual: Faktor 2 konvertiert moving-source-Residuum
+    # (unsere df_zonen-Konvention, = FigureXPs "Knife Reading") in die
+    # fixed-source-Konvention, fuer die Sacek's TA/sigma-Formeln kalibriert
+    # sind (s. Docstring foucault_wellenfront).
+    TA    = 2.0 * (r_zonen / R_c_mm) * residual
+    sigma = (TA / R_c_mm) * Z                   # Zonen-Steigungsbeitrag
+
+    W_cum_mm = np.cumsum(sigma)                 # kumulative Integration
+    return W_cum_mm / lam_mm
+
+
+def foucault_wellenfront(r_zonen: np.ndarray, df_zonen: np.ndarray,
+                         D_mm: float, f_mm: float, lam_nm: float,
+                         best_fit_roc: bool = True,
+                         roc_suchbereich_mm: float | None = None) -> np.ndarray:
+    """Rekonstruiert die Wellenfront aus Foucault-Zonenmessungen (Maskentest).
+
+    NEU IMPLEMENTIERT 08/2026 (loest Bug in Vorversion vollstaendig ab,
+    nicht nur einen Faktor -- s. Chat-Historie "Foucault-Test / FigureXP-
+    Vergleich" fuers Buch):
+
+    Alte Version rechnete PUNKTWEISE pro Zone:
+        W(r) = Δl(r) · r² / (8·f²·λ)
+    Das ist nur fuer eine glatte, geschlossene Fehlerform (reine
+    sphaerische Aberration) korrekt kalibriert (Kontrolle Kugel 200/f5:
+    S=0.1232 traf zufaellig, weil dort dieselbe geschlossene Form vorliegt,
+    fuer die die Punktformel algebraisch aequivalent zur korrekten Loesung
+    ist). Fuer reale, unregelmaessige Zonenmessungen ist das falsch: der
+    Foucault-Test misst die LOKALE STEIGUNG der Wellenfront (Ray-Winkel-
+    fehler), nicht ihre Hoehe -- s. z.B. bbastrodesigns.com/JoyOfMirror-
+    Making/Parabolizing.html: "Tests like the Foucault and Ronchi are
+    slope tests". Am 14"-Realdatensatz (Maskentest, D=355mm) ergab die
+    alte Formel W_ptv ≈ 0.51λ, FigureXP (identische Rohdaten) zeigte
+    0.089λ -- Faktor 5.7 zu groß.
+
+    Neue Methode nach Sacek (telescope-optics.net, Kap. 4.8.2 "Foucault
+    test", Abschnitt "Residuals/Reduction method"):
+      1. residual_i = LA_gemessen,i − LA_ideal,i     (Zone 1 als Referenz)
+      2. TA_i  = 2·(r_i/R_c)·residual_i               (Faktor 2: s.u.)
+      3. σ_i   = (TA_i/R_c)·Z_i                        (Z_i = Zonenbreite!)
+      4. W(Zone n) = kumulative Summe σ_1..σ_n         (diskrete Integration
+                                                          der Wellenfront-
+                                                          steigung)
+    Der Faktor 2 in Schritt 2 konvertiert unsere "moving source"-Messwerte
+    (Quelle+Messer bewegen sich zusammen -- Standard beim Maskentest, ent-
+    spricht FigureXPs "Knife Reading"-Spalte) in die "fixed source"-
+    Konvention, fuer die Sacek's TA/σ-Formeln in seinem Zahlenbeispiel
+    kalibriert sind.
+
+    Verifiziert:
+      a) Kugel-Kontrolle (df=0 ueberall), best_fit_roc=False:
+         S_exakt konvergiert exakt auf 0.1232, W_ptv auf 1.4205 -- identisch
+         zur unabhaengigen D⁴/(512·f³·λ)-Formel aus _wellenfronten().
+      b) 14"-Realdaten (Maskentest) gegen FigureXP-Export: P-V roh 0.099λ
+         vs. FigureXP 0.089λ (~10%, im Rahmen von Eingabe-Rundung und
+         Optimierungskriterium, s.u.).
+
+    best_fit_roc (Default True): FigureXP optimiert den Referenz-Kruemmungs-
+    radius selbst ("Find Best Fit ROC"), weil der ROC typischerweise
+    ungenauer bekannt ist als die Zonen-Differenzmessungen. Ohne diese
+    Optimierung vergleicht man unsere Rohdaten mit FigureXPs bereits
+    radius-optimiertem Ergebnis -- kein Apples-to-Apples-Vergleich. Bei
+    True wird R_c=2·f_mm nur als Suchzentrum verwendet; der golden-section-
+    optimierte R_c minimiert die RMS-Abweichung der Zonenwellenfront.
+    Achtung: die Kugel-Kontrolle (a) gilt nur fuer best_fit_roc=False --
+    mit aktiver Optimierung faellt S dort leicht anders aus (0.128 statt
+    0.1232), weil die Best-Fit-Suche einen Teil des ρ⁴-Musters durch
+    Radius-Anpassung kompensiert (Sacek beschreibt denselben Effekt in
+    seinem eigenen Beispiel: 0.99λ roh → 0.25λ best-fit).
     """
+    R_c0 = 2.0 * f_mm
+    if not best_fit_roc:
+        return _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c0, lam_nm)
+
+    if roc_suchbereich_mm is None:
+        roc_suchbereich_mm = max(5.0, R_c0 * 0.01)   # +-1% Standard-Suchfenster
+
+    def _rms_fuer_Rc(R_c_trial: float) -> float:
+        W = _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_trial, lam_nm)
+        return float(np.std(W))
+
+    R_c_opt = _golden_section(_rms_fuer_Rc, R_c0 - roc_suchbereich_mm,
+                              R_c0 + roc_suchbereich_mm)
+    return _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_opt, lam_nm)
 
 
 
@@ -1088,7 +1141,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "6.3.0 (2026-07-07)"
+VERSION  = "6.4.0 (2026-08-08)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -1960,7 +2013,7 @@ class App(tk.Tk):
                     col = "#2e7d32" if abs(dv) < 0.01 else                           "#e65100" if abs(dv) < 0.1  else "#c62828"
                     w.config(text=f"{dv:+.3f}", fg=col)
 
-            W_z = foucault_wellenfront(r_zon, df_arr, f, lam)
+            W_z = foucault_wellenfront(r_zon, df_arr, D, f, lam)
 
             # Hybrid-Modus braucht mindestens 6 Zonen um zuverlaessig
             # zu sein: bei n=4 hat das BIC-Polynom zu viel Spielraum

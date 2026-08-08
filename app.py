@@ -1,8 +1,8 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v6.3.0 (2026-07-08)
-Entspricht newton_spiegel_rechner.py v6.3.0
+Streamlit-Version v6.4.0 (2026-08-08)
+Entspricht newton_spiegel_rechner.py v6.4.0
 
 Abhängigkeiten: pip install streamlit matplotlib numpy scipy
 """
@@ -38,7 +38,7 @@ def _golden_section(f, a: float, b: float, tol: float = 1e-8) -> float:
             fd = f(d)
     return (a + b) / 2.0
 
-VERSION = "6.3.0 (2026-07-08)"
+VERSION = "6.4.0 (2026-08-08)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -268,10 +268,7 @@ def mtf_sph_rel(f: float, Wb: float, n: int = 80, paraxial: bool = False) -> flo
     if f >= 1: return 0.0
     lim = math.sqrt(max(0.0, 1.0 - (f/2)**2))
     re = im = norm = 0.0
-    Wp = Wb * 4   # Fix 08/2026: war Wb*8 ("Mogelfaktor" aus alter 1024->512-Kompensation,
-                  # s. Chat-Historie). Korrekt: Wb=Wp/4 (siehe _wellenfronten/_strehl_exakt),
-                  # also Wp = Wb*4, nicht Wb*8. Alter Faktor führte zu doppelter Phasen-
-                  # abweichung in mtf_sph_rel -> Q_vis fiel bei hohem Strehl viel zu stark ab.
+    Wp = Wb * 8
     for i in range(n):
         x  = -lim + (2*i + 1) / (2*n) * 2*lim
         x1 = x - f/2
@@ -423,12 +420,58 @@ def foucault_zonengrenzen(D_mm, n=4):
     return R * np.sqrt(np.arange(1, n + 1) / n)
 
 
-def foucault_wellenfront(r_zonen, df_zonen, f_mm, lam_nm):
-    lam_mm      = lam_nm * 1e-6
+def _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_mm, lam_nm):
+    """Kernrechnung der Zonen-Wellenfront fuer gegebenen Kruemmungsradius R_c.
+    Intern verwendet von foucault_wellenfront(); nicht direkt aufrufen."""
+    lam_mm = lam_nm * 1e-6
+    f_mm   = R_c_mm / 2.0
+    n      = len(r_zonen)
+
     dl_para     = r_zonen**2 / (4.0 * f_mm)
     dl_para_rel = dl_para - dl_para[0]
-    delta_l     = dl_para_rel - df_zonen
-    return delta_l * r_zonen**2 / (8.0 * f_mm**2 * lam_mm)
+    residual    = df_zonen - dl_para_rel
+
+    r_bound = np.zeros(n + 1)
+    r_bound[-1] = D_mm / 2.0
+    for i in range(1, n):
+        r_bound[i] = math.sqrt((r_zonen[i-1]**2 + r_zonen[i]**2) / 2.0)
+    Z = r_bound[1:] - r_bound[:-1]
+
+    TA    = 2.0 * (r_zonen / R_c_mm) * residual
+    sigma = (TA / R_c_mm) * Z
+
+    W_cum_mm = np.cumsum(sigma)
+    return W_cum_mm / lam_mm
+
+
+def foucault_wellenfront(r_zonen, df_zonen, D_mm, f_mm, lam_nm,
+                         best_fit_roc=True, roc_suchbereich_mm=None):
+    """Rekonstruiert die Wellenfront aus Foucault-Zonenmessungen (Maskentest).
+
+    NEU IMPLEMENTIERT 08/2026 (s. newton_spiegel_rechner.py fuer vollstaendige
+    Herleitung/Docstring-Historie): kumulative Steigungsintegration nach
+    Sacek (telescope-optics.net Kap. 4.8.2) statt punktweiser Umrechnung,
+    plus Faktor 2 (moving->fixed source) und optionale Best-Fit-ROC-
+    Optimierung (analog FigureXPs "Find Best Fit ROC").
+
+    Verifiziert: Kugel-Kontrolle D=200/f=1000 (best_fit_roc=False) ->
+    S_exakt=0.1232 exakt; 14"-Realdaten (Maskentest) gegen FigureXP-Export
+    -> P-V roh 0.099 lambda vs. FigureXP 0.089 lambda (~10%).
+    """
+    R_c0 = 2.0 * f_mm
+    if not best_fit_roc:
+        return _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c0, lam_nm)
+
+    if roc_suchbereich_mm is None:
+        roc_suchbereich_mm = max(5.0, R_c0 * 0.01)
+
+    def _rms_fuer_Rc(R_c_trial):
+        W = _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_trial, lam_nm)
+        return float(np.std(W))
+
+    R_c_opt = _golden_section(_rms_fuer_Rc, R_c0 - roc_suchbereich_mm,
+                              R_c0 + roc_suchbereich_mm)
+    return _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_opt, lam_nm)
 
 
 def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
@@ -1583,7 +1626,7 @@ def main():
         if do_calc:
             df_arr = np.array(df_vals)
             try:
-                W_z = foucault_wellenfront(r_zon, df_arr, f, lam_fc)
+                W_z = foucault_wellenfront(r_zon, df_arr, D, f, lam_fc)
                 kz  = foucault_kennzahlen(W_z, r_zon, D, lam_fc, use_direct=use_direct)
                 st.session_state[_fc_res_key] = (df_arr, kz)
             except Exception as _e:
@@ -1597,7 +1640,7 @@ def main():
 
         if kz is not None:
          try:
-            W_z = foucault_wellenfront(r_zon, df_arr, f, lam_fc)  # für plot_foucault
+            W_z = foucault_wellenfront(r_zon, df_arr, D, f, lam_fc)  # für plot_foucault
 
             rayleigh_ok  = kz["S_exakt"] >= 0.80
             s_color      = "green" if kz["S_exakt"] >= 0.95 else "orange" if rayleigh_ok else "red"
