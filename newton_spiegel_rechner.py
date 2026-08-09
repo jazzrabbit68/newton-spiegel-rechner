@@ -605,26 +605,46 @@ def foucault_wellenfront(r_zonen: np.ndarray, df_zonen: np.ndarray,
 
 
 
-def _polyfit_bic(rho_z: np.ndarray, W_z: np.ndarray) -> tuple:
-    """Waehlt optimalen Polynomgrad via BIC (Bayes Information Criterion).
+def _polyfit_bic(rho_z: np.ndarray, W_z: np.ndarray,
+                 grad_modus: str = "bic") -> tuple:
+    """Waehlt Polynomgrad fuer den Zonenfehler-Fit.
 
     Verwendet nur gerade Potenzen rho^2, rho^4, ... (Rotationssymmetrie).
     Achsenpunkt (0,0) wird als Stuetzpunkt erzwungen.
     Maximaler Grad = n//2 -- verhindert Ueberfit bei wenigen Zonen.
 
-    Rueckgabe: (grad, coeffs, potenzen)
-      grad:     gewaehlter Polynomgrad
-      coeffs:   Koeffizienten [c2, c4, ..., c_{2*grad}]
-      potenzen: [2, 4, ..., 2*grad]
+    grad_modus:
+      "bic"  (Standard) -- Grad automatisch per BIC (Bayes Information
+             Criterion) gewaehlt. Kann bei "rauschartigen" (nicht-glatten)
+             Zonenabweichungen einen sehr niedrigen Grad waehlen (im
+             Extremfall Grad 1 = reiner Defokus), der bei anschliessender
+             Bestfokus-Korrektur komplett verschwindet -- s. "fest" unten
+             und die Zuverlaessigkeits-Pruefung in foucault_kennzahlen().
+      "fest" -- Grad IMMER auf das Maximum n//2 gesetzt (an Zonenzahl
+             gekoppelt, z.B. 4 Zonen->Grad 2, 8 Zonen->Grad 4), unabhaengig
+             vom BIC-Ergebnis. Empfohlen, wenn BIC einen verdaechtig
+             niedrigen Grad waehlt (s. fit_residuum_rms-Warnung).
+             WICHTIG: loest die Grad-1-Degenerierung NICHT automatisch --
+             wenn die Zonenabweichungen genuin nicht polynomartig sind
+             (echte lokale Textur statt glatter Formfehler), bleibt das
+             Fit-Residuum auch bei Grad n//2 groß (s. Chat-Historie:
+             14"-Beispiel, Residuum sinkt nur von 0.0342 auf 0.0339λ trotz
+             Grad 1->4). In diesem Fall ist Hybrid-Modus (use_direct=True)
+             die richtige Wahl, nicht ein hoeherer Polynomgrad.
 
-    Beispiele:
-      4 Zonen -> max_grad=2 -> testet rho^2 und rho^2+rho^4
-      8 Zonen -> max_grad=4 -> BIC waehlt typisch Grad 2 (rho^2..rho^8)
+    Rueckgabe: (grad, coeffs, potenzen)
     """
     rho_fit = np.concatenate([[0.0], rho_z])
     W_fit   = np.concatenate([[0.0], W_z])
     n_pts   = len(W_fit)
     max_grad = max(1, len(W_z) // 2)
+
+    if grad_modus == "fest":
+        grad = max_grad
+        pot  = [2 * k for k in range(1, grad + 1)]
+        A    = np.column_stack([rho_fit**p for p in pot])
+        c, _, _, _ = np.linalg.lstsq(A, W_fit, rcond=None)
+        return grad, c, pot
 
     best_bic    = np.inf
     best_grad   = 1
@@ -645,18 +665,24 @@ def _polyfit_bic(rho_z: np.ndarray, W_z: np.ndarray) -> tuple:
 
     return best_grad, best_coeffs, best_pot
 
+# Schwelle, ab der ein Polynom-Fit als nicht mehr vertrauenswuerdig gilt
+# (Zonenfehler werden weggemittelt statt erfasst -- s. foucault_kennzahlen).
+FIT_RESIDUUM_SCHWELLE = 0.010  # lambda
+
 def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
                         D_mm: float, lam_nm: float | None = None,
-                        use_direct: bool = False) -> dict:
+                        use_direct: bool = False,
+                        grad_modus: str = "bic") -> dict:
     """PtV, RMS, Strehl aus Zonenwellenfronten.
 
     Zwei Modi (use_direct):
 
     False -- Polynom-Fit (Standard, glatte Flaeche):
-        Passt W(rho) = a4*rho^4 + a2*rho^2 an die Zonenwerte an.
-        Korrekt fuer reine sphaerische Aberration.
-        Zonenfehler (lokale Ringfehler) werden weggemittelt:
-        Strehl wird dann zu optimistisch.
+        Passt W(rho) = a4*rho^4 + a2*rho^2 (oder hoehere Grade, s.
+        grad_modus) an die Zonenwerte an. Korrekt fuer reine sphaerische
+        Aberration. Zonenfehler (lokale Ringfehler), die sich nicht durch
+        ein Polynom beschreiben lassen, werden weggemittelt: Strehl wird
+        dann zu optimistisch -- im Extremfall exakt 1.0 (s. unten).
 
     True -- Hybrid-Modus (Zonenfehler):
         Gleiche Polynom-Grundform, aber Abweichungen der Messwerte
@@ -665,12 +691,27 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
         Erkennt echte Zonenfehler ohne die Grundform zu verfaelschen.
         Bei glattem Spiegel (Residuen=0): identisch mit Polynom-Modus.
 
-    Beide Modi: Defokus-Optimierung (bester Fokus), Strehl via
-    Pupillenintegral, keine scipy-Abhaengigkeit.
+    grad_modus: "bic" (Standard, s. _polyfit_bic) oder "fest" (Grad immer
+        n//2, an Zonenzahl gekoppelt -- s. _polyfit_bic Docstring).
+
+    SICHERHEITSNETZ (08/2026): Im Polynom-Modus (use_direct=False) kann der
+    Fit (v.a. bei grad_modus="bic" mit sehr niedrigem gewaehltem Grad)
+    durch die anschliessende Bestfokus-Korrektur degenerieren: waehlt BIC
+    z.B. Grad 1 (= reiner Defokus-Term), hebt die Fokuskorrektur die
+    gesamte Kurve exakt auf, und S_exakt kommt exakt 1.0 heraus --
+    unabhaengig davon, wie groß die tatsaechliche Zonenstreuung
+    (fit_residuum_rms) ist. Deshalb wird im Polynom-Modus geprueft, ob
+    fit_residuum_rms > FIT_RESIDUUM_SCHWELLE ist; falls ja, wird
+    kennzahlen_zuverlaessig=False zurueckgegeben. Die UI MUSS S_exakt/
+    W_ptv/W_rms in diesem Fall sichtbar als unzuverlaessig kennzeichnen
+    (s. Chat: "Strehl=1 sollte nie rauskommen koennen"). Im Hybrid-Modus
+    (use_direct=True) ist kennzahlen_zuverlaessig immer True, da die
+    Zonenresiduen dort bereits Teil der Wellenfront sind -- ein hohes
+    fit_residuum_rms ist dort erwuenschte Information, kein Fehler.
 
     Rueckgabe-Dict -- alle Schluessel immer vorhanden:
         W_zonen, W_c_zonen, W_rms, W_ptv, Wb_fit
-        a4, a2, fit_residuum_rms
+        a4, a2, fit_residuum_rms, kennzahlen_zuverlaessig
         S_mar, S_exakt, Deff_k
         Glas_f, Glas_zonen, Glas_ptv_nm, Glas_volumen_mm3, W_min, lam_nm
         rho_f, W_best, W_c
@@ -687,10 +728,8 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
     zone_areas = r_outer**2 - r_inner**2
     zone_areas = zone_areas / zone_areas.sum()
 
-    # Polynomgrad automatisch per BIC waehlen (gerade Potenzen, max n//2)
-    # 4 Zonen -> max Grad 2 -> testet rho^2 und rho^2+rho^4
-    # 8 Zonen -> max Grad 4 -> BIC waehlt optimalen Grad
-    poly_grad, poly_coeffs, poly_pot = _polyfit_bic(rho_z, W_zonen)
+    # Polynomgrad waehlen (BIC oder fest an Zonenzahl gekoppelt, s. grad_modus)
+    poly_grad, poly_coeffs, poly_pot = _polyfit_bic(rho_z, W_zonen, grad_modus)
 
     # a4 fuer Wb-Berechnung (0 wenn rho^4 nicht im Modell)
     a4 = float(poly_coeffs[poly_pot.index(4)]) if 4 in poly_pot else 0.0
@@ -753,6 +792,14 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
         Glas_volumen_mm3 = float(
             2 * math.pi * R**2 * _trapz(Glas_f * rho_f, rho_f))
 
+    # Zuverlaessigkeits-Sicherheitsnetz: NUR im Polynom-Modus relevant --
+    # dort werden Zonenabweichungen vom Fit weggemittelt, koennen also
+    # S_exakt/W_ptv/W_rms optimistisch verfaelschen (bis hin zur Grad-1-
+    # Bestfokus-Degenerierung, S_exakt exakt 1.0). Im Hybrid-Modus sind die
+    # Residuen bereits Teil der Wellenfront (W_f oben) -- ein hohes
+    # fit_residuum_rms ist dort kein Zuverlaessigkeitsproblem.
+    kennzahlen_zuverlaessig = use_direct or (fit_residuum_rms <= FIT_RESIDUUM_SCHWELLE)
+
     return dict(
         W_zonen=W_zonen,
         W_c_zonen=W_c_zonen,
@@ -763,6 +810,7 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
         a4=a4,
         a2=a2,
         fit_residuum_rms=fit_residuum_rms,
+        kennzahlen_zuverlaessig=kennzahlen_zuverlaessig,
         S_mar=S_mar,
         S_exakt=S_exakt,
         Deff_k=Deff_k,
@@ -1565,6 +1613,35 @@ class App(tk.Tk):
                                command=self._foucault_aktualisieren
                                ).pack(side="left", padx=6)
 
+                self._foucault_werkstatt = tk.BooleanVar(value=False)
+                tk.Checkbutton(ctrl2,
+                               text="🔧 Werkstatt-Ansicht (wie FigureXP)",
+                               variable=self._foucault_werkstatt,
+                               bg=BG, activebackground=BG, selectcolor=BG2,
+                               fg="#E65100", font=("Helvetica", 9),
+                               command=self._foucault_aktualisieren
+                               ).pack(side="left", padx=6)
+
+                tk.Label(ctrl2, text="  Grad:", bg=BG, fg="#555",
+                         font=("Helvetica", 9)).pack(side="left", padx=(8, 0))
+                self._foucault_grad_modus = tk.StringVar(value="bic")
+                tk.Radiobutton(ctrl2,
+                               text="BIC (auto)",
+                               variable=self._foucault_grad_modus,
+                               value="bic", bg=BG, activebackground=BG,
+                               selectcolor=BG2, fg="#555",
+                               font=("Helvetica", 9),
+                               command=self._foucault_aktualisieren
+                               ).pack(side="left", padx=4)
+                tk.Radiobutton(ctrl2,
+                               text="Fest (n//2)",
+                               variable=self._foucault_grad_modus,
+                               value="fest", bg=BG, activebackground=BG,
+                               selectcolor=BG2, fg="#555",
+                               font=("Helvetica", 9),
+                               command=self._foucault_aktualisieren
+                               ).pack(side="left", padx=4)
+
                 self._foucault_status = tk.Label(ctrl2, text="", bg=BG,
                                                   font=("Helvetica", 9, "bold"))
                 self._foucault_status.pack(side="left", padx=12)
@@ -2001,6 +2078,12 @@ class App(tk.Tk):
             if not hasattr(self, "_foucault_use_direct"):
                 self._foucault_use_direct = tk.BooleanVar(value=False)
             use_direct = self._foucault_use_direct.get()
+            if not hasattr(self, "_foucault_werkstatt"):
+                self._foucault_werkstatt = tk.BooleanVar(value=False)
+            werkstatt_ansicht = self._foucault_werkstatt.get()
+            if not hasattr(self, "_foucault_grad_modus"):
+                self._foucault_grad_modus = tk.StringVar(value="bic")
+            grad_modus = self._foucault_grad_modus.get()
 
             r_zon  = foucault_zonen(D, n)
             df_arr = np.array([v.get() for v in self._foucault_df_vars])
@@ -2021,16 +2104,21 @@ class App(tk.Tk):
             # -> bei n=4 fast Ueberfit, Residuen zu klein).
             ud_effektiv = use_direct and (n >= 6)
             kz  = foucault_kennzahlen(W_z, r_zon, D, lam,
-                                      use_direct=ud_effektiv)
+                                      use_direct=ud_effektiv,
+                                      grad_modus=grad_modus)
 
-            rayleigh_ok = kz["S_exakt"] >= 0.80
-            s_col = "#2e7d32" if kz["S_exakt"] >= 0.95 else                     "#e65100" if rayleigh_ok else "#c62828"
+            rayleigh_ok  = kz["S_exakt"] >= 0.80
+            zuverlaessig = kz.get("kennzahlen_zuverlaessig", True)
+            s_col = ("#c62828" if not zuverlaessig else
+                     "#2e7d32" if kz["S_exakt"] >= 0.95 else
+                     "#e65100" if rayleigh_ok else "#c62828")
             modus = "Hybrid" if use_direct else "Polynom"
             warn  = ""
             if use_direct and n < 6:
                 warn = "  INFO: Hybrid-Modus benoetigt n>=6 Zonen -- Polynom-Modus verwendet"
-            elif not use_direct and kz["fit_residuum_rms"] > 0.010:
-                warn = f"  WARN Fit-Res={kz['fit_residuum_rms']:.3f}lambda -> Hybrid mit n>=6 empfohlen"
+            elif not zuverlaessig:
+                warn = (f"  ⚠ UNZUVERLAESSIG: Fit-Res={kz['fit_residuum_rms']:.3f}lambda"
+                        f" > 0.010 -- Hybrid-Modus (n>=6) verwenden!")
 
             # Warnung wenn Zonen noch nahe Kugelfehler (weniger als 20% korrigiert)
             dl_soll_arr = (r_zon**2 - r_zon[0]**2) / (4.0 * f)
@@ -2056,13 +2144,16 @@ class App(tk.Tk):
             self._foucault_status.config(text=status, fg=s_col)
             self._foucault_letzte_kz = kz          # 07/2026: fuer MTF-Tab Vergleichskurve
             self._foucault_letzte_D  = D
-            self._diagramm_foucault(D, f, lam, r_zon, df_arr, kz, use_direct=use_direct)
+            self._diagramm_foucault(D, f, lam, r_zon, df_arr, kz,
+                                    use_direct=use_direct,
+                                    werkstatt_ansicht=werkstatt_ansicht)
         except Exception as e:
             if hasattr(self, "_foucault_status"):
                 self._foucault_status.config(
                     text=f"Fehler: {e}", fg="#c62828")
 
-    def _diagramm_foucault(self, D, f, lam, r_zon, df_arr, kz, use_direct=False):
+    def _diagramm_foucault(self, D, f, lam, r_zon, df_arr, kz, use_direct=False,
+                           werkstatt_ansicht=False):
         """Foucault-Diagramm: Wellenfrontkurve + Kennzahlentafel."""
         fig, ax_wf, ax_info, canvas = self._tab_foucault
         ax_wf.cla(); ax_info.cla()
@@ -2077,6 +2168,14 @@ class App(tk.Tk):
         rho_fine = kz["rho_f"]
         W_fine   = kz["W_c"]    # pistonbereinigt, bester Fokus
 
+        # Werkstatt-Ansicht: Referenz an den Taelern der Oberflaeche
+        # "anlegen" (kein Unterschuss moeglich, direkt ablesbar wo/wieviel
+        # Glas noch runter muss - entspricht FigureXPs Darstellung). Reine
+        # Anzeigeverschiebung um eine Konstante -> Kennzahlen in kz
+        # (S_exakt/W_rms/W_ptv) bleiben unveraendert (RMS-Bestfit).
+        W_shift = -float(np.min(W_fine)) if werkstatt_ansicht else 0.0
+        W_fine_disp = W_fine + W_shift
+
         _grad = kz.get("poly_grad", 1)
         _res  = kz.get("fit_residuum_rms", 0.0)
         _a4   = kz.get("a4", 0.0)
@@ -2086,7 +2185,7 @@ class App(tk.Tk):
             lbl = f"Wellenfront (Polynom Grad {_grad}, a4={_a4:.3f}) WARN res={_res:.3f}"
         else:
             lbl = f"Wellenfront (Polynom Grad {_grad}, a4={_a4:.3f})"
-        ax_wf.plot(rho_fine, W_fine, color=ACC, lw=2.0, label=lbl)
+        ax_wf.plot(rho_fine, W_fine_disp, color=ACC, lw=2.0, label=lbl)
 
         # Zonenpunkte: y-Position auf rechter Achse (nm Glas)
         # Da matplotlib nur eine Daten-y-Achse kennt, rechnen wir die nm-Werte
@@ -2096,12 +2195,12 @@ class App(tk.Tk):
         Glas_z = kz.get("Glas_zonen")
         W_min  = kz.get("W_min")
         if Glas_z is not None and W_min is not None:
-            y_punkte = Glas_z * 2.0 / lam + W_min   # nm → λ (linke Achse, gleiche Position)
+            y_punkte = Glas_z * 2.0 / lam + W_min + W_shift   # nm → λ (linke Achse, gleiche Position)
             Wm_disc  = float(np.mean(W_z))
             ax_wf.scatter(rho_z, y_punkte, color=COR, s=50, zorder=5,
                           label=f"Messzonen (n={len(r_zon)})")
             for i, (rho, yp) in enumerate(zip(rho_z, y_punkte)):
-                wc  = W_z[i] - Wm_disc
+                wc  = W_z[i] - Wm_disc   # unverschoben, fuer λ-Angabe im Label
                 txt = f"Z{i+1}: {Glas_z[i]:.0f} nm\n({wc:+.3f}λ)"
                 ax_wf.annotate(txt,
                                xy=(rho, yp), xytext=(0, 10),
@@ -2110,7 +2209,7 @@ class App(tk.Tk):
         else:
             # Fallback ohne lam_nm: nur λ-Skala
             Wm_disc  = float(np.mean(W_z))
-            W_c_disc = W_z - Wm_disc
+            W_c_disc = W_z - Wm_disc + W_shift
             ax_wf.scatter(rho_z, W_c_disc, color=COR, s=50, zorder=5,
                           label=f"Messzonen (n={len(r_zon)})")
             for i, (rho, wc) in enumerate(zip(rho_z, W_c_disc)):
@@ -2120,23 +2219,30 @@ class App(tk.Tk):
                                fontsize=7, ha="center", color=COR)
 
         ax_wf.axhline(0,      color="#999",    lw=0.8)
-        ax_wf.axhline(+0.125, color="#1565c0", lw=0.7, ls=":", alpha=0.7,
-                      label="±λ/8 (Rayleigh)")
-        ax_wf.axhline(-0.125, color="#1565c0", lw=0.7, ls=":", alpha=0.7)
+        if not werkstatt_ansicht:
+            ax_wf.axhline(+0.125, color="#1565c0", lw=0.7, ls=":", alpha=0.7,
+                          label="±λ/8 (Rayleigh)")
+            ax_wf.axhline(-0.125, color="#1565c0", lw=0.7, ls=":", alpha=0.7)
+        else:
+            ax_wf.axhline(+0.25, color="#1565c0", lw=0.7, ls=":", alpha=0.7,
+                          label="λ/4 (Rayleigh, PtV)")
         ax_wf.set_xlim(-0.02, 1.05)
         ax_wf.set_xlabel("Normierter Zonenradius ρ = r/R", fontsize=8)
         ax_wf.set_ylabel("Wellenfrontfehler W(ρ)  [Einheiten von λ]", fontsize=8)
-        ax_wf.set_title("Gemessene Wellenfront (bester Fokus, pistonbereinigt)",
+        ax_wf.set_title("Werkstatt-Ansicht (Referenz an Oberflächen-Tälern)"
+                        if werkstatt_ansicht else
+                        "Gemessene Wellenfront (bester Fokus, pistonbereinigt)",
                         fontsize=8, fontweight="bold")
-        ax_wf.legend(fontsize=7, loc="lower center")
+        ax_wf.legend(fontsize=7,
+                     loc="upper center" if werkstatt_ansicht else "lower center")
         ax_wf.grid(True, alpha=0.25)
 
         # ── Zweite y-Achse: Materialabtrag [nm Glas], referenziert auf den
         #    am wenigsten bearbeiteten Punkt (Minimum der Wellenfrontkurve) ──
         W_min = kz.get("W_min")
         if W_min is not None:
-            zu_glas = lambda w: (np.asarray(w) - W_min) * lam / 2.0
-            zu_lam  = lambda g: np.asarray(g) * 2.0 / lam + W_min
+            zu_glas = lambda w: (np.asarray(w) - W_shift - W_min) * lam / 2.0
+            zu_lam  = lambda g: np.asarray(g) * 2.0 / lam + W_min + W_shift
             ax_glas = ax_wf.secondary_yaxis("right", functions=(zu_glas, zu_lam))
             ax_glas.set_ylabel("Materialabtrag [nm Glas]  (0 = am wenigsten bearbeiteter Punkt)",
                                fontsize=8, color="#6a1b9a")
@@ -2144,17 +2250,31 @@ class App(tk.Tk):
 
         # ── Kennzahlentafel ───────────────────────────────────────────────
         ax_info.axis("off")
-        rayleigh_ok = kz["S_exakt"] >= 0.80
-        s_col = GRN if kz["S_exakt"] >= 0.95 else \
-                "#e65100" if rayleigh_ok else "#c62828"
+        zuverlaessig = kz.get("kennzahlen_zuverlaessig", True)
+        rayleigh_ok  = kz["S_exakt"] >= 0.80
+        if not zuverlaessig:
+            s_col = "#c62828"   # unzuverlaessig -> immer rot, unabh. vom Zahlenwert
+        else:
+            s_col = GRN if kz["S_exakt"] >= 0.95 else \
+                    "#e65100" if rayleigh_ok else "#c62828"
+
+        _s_exakt_str = f"{kz['S_exakt']:.4f}"
+        _wptv_str    = f"{kz['W_ptv']:.4f} λ"
+        _wrms_str    = f"{kz['W_rms']:.4f} λ"
+        if not zuverlaessig:
+            _s_exakt_str += "  ⚠ unzuverlässig"
+            _wptv_str    += "  ⚠"
+            _wrms_str    += "  ⚠"
 
         zeilen = [
             ("Öffnung / f-Zahl",  f"D = {D:.0f} mm  f/{f/D:.1f}"),
             ("Wellenlänge",        f"λ = {lam:.0f} nm"),
             ("", ""),
-            ("W_rms",              f"{kz['W_rms']:.4f} λ"),
-            ("W_PtV",              f"{kz['W_ptv']:.4f} λ"),
+            ("W_rms",              _wrms_str),
+            ("W_PtV",              _wptv_str),
             ("Wb (aus Fit)",       f"{kz['Wb_fit']:.4f} λ"),
+            ("Fit-Residuum RMS",   f"{kz['fit_residuum_rms']:.4f} λ"
+                                   + ("  ⚠ > 0.010 (Grenze)" if not zuverlaessig else "")),
             ("", ""),
             ("Abtrag RMS (Glas)",  f"{kz['W_rms']*lam/2.0:.1f} nm"
                                    if kz.get("Glas_ptv_nm") is not None else "–"),
@@ -2164,19 +2284,20 @@ class App(tk.Tk):
                                    if kz.get("Glas_volumen_mm3") is not None else "–"),                      
             ("", ""),
             ("Strehl  Maréchal",   f"{kz['S_mar']:.4f}"),
-            ("Strehl  exakt",      f"{kz['S_exakt']:.4f}"),
+            ("Strehl  exakt",      _s_exakt_str),
             ("D_eff  (Kontrast)",  f"{kz['Deff_k']:.1f} mm"),
             ("", ""),
             ("Beurteilung",
-             "✓ Rayleigh erfüllt (S ≥ 0.80)" if rayleigh_ok
-             else "✗ Rayleigh nicht erfüllt"),
+             "⚠ Zonenfehler nicht erfasst — Hybrid-Modus nutzen!" if not zuverlaessig
+             else ("✓ Rayleigh erfüllt (S ≥ 0.80)" if rayleigh_ok
+                   else "✗ Rayleigh nicht erfüllt")),
         ]
 
         y = 0.97
         for lbl, val in zeilen:
             if not lbl and not val:
                 y -= 0.04; continue
-            is_strehl  = lbl.startswith("Strehl")
+            is_strehl  = lbl.startswith("Strehl") or lbl in ("W_rms", "W_PtV")
             is_verdict = lbl == "Beurteilung"
             ax_info.text(0.03, y, lbl + ":", transform=ax_info.transAxes,
                          fontsize=8, color="#555", va="top")
@@ -2189,10 +2310,11 @@ class App(tk.Tk):
             y -= 0.075
 
         ax_info.set_title("Auswertung", fontsize=8, fontweight="bold")
+        _titel_zuv = "  ⚠ UNZUVERLÄSSIG" if not zuverlaessig else ""
         fig.suptitle(
             f"Foucault-Auswertung  —  D={D:.0f}mm  f/{f/D:.1f}  "
-            f"S={kz['S_exakt']:.4f}  W_rms={kz['W_rms']:.4f}λ",
-            fontsize=8, fontweight="bold")
+            f"S={kz['S_exakt']:.4f}  W_rms={kz['W_rms']:.4f}λ{_titel_zuv}",
+            fontsize=8, fontweight="bold", color=(s_col if not zuverlaessig else "black"))
         fig.tight_layout()
         canvas.draw()
 

@@ -474,6 +474,10 @@ def foucault_wellenfront(r_zonen, df_zonen, D_mm, f_mm, lam_nm,
     return _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_opt, lam_nm)
 
 
+# Schwelle, ab der ein Polynom-Fit als nicht mehr vertrauenswuerdig gilt
+# (Zonenfehler werden weggemittelt statt erfasst) -- s. foucault_kennzahlen.
+FIT_RESIDUUM_SCHWELLE = 0.010  # lambda
+
 def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
                         D_mm: float, lam_nm: float = None,
                         use_direct: bool = False) -> dict:
@@ -483,6 +487,19 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
         Gut für glatte Flächen, dämpft Messrauschen.
     use_direct=True (Zonenfehler): stückweise lineare Interpolation,
         kein Informationsverlust durch Glättung.
+
+    SICHERHEITSNETZ (08/2026): Im Polynom-Modus kann der Fit durch die
+    anschließende Bestfokus-Korrektur degenerieren -- die gefittete Kurve
+    (a4·ρ⁴+a2·ρ²) plus optimaler Defokus-Offset kann sich bei wenigen
+    Zonen fast exakt selbst aufheben, auch wenn a4/a2 einzeln ungleich
+    Null sind. Ergebnis: S_exakt kommt (fast) exakt 1.0 heraus, obwohl die
+    tatsächliche Zonenstreuung (fit_residuum_rms) groß ist -- verifiziert
+    am 14"-Realdatensatz: S_exakt=1.0000 trotz fit_residuum_rms=0.037λ.
+    Deshalb wird geprüft, ob fit_residuum_rms > FIT_RESIDUUM_SCHWELLE ist;
+    falls ja, wird kennzahlen_zuverlaessig=False zurückgegeben. Die UI MUSS
+    S_exakt/W_ptv/W_rms in diesem Fall sichtbar als unzuverlässig
+    kennzeichnen. Im Direkt-Interpolationsmodus (use_direct=True) ist
+    kennzahlen_zuverlaessig immer True, da dort keine Glättung erfolgt.
     """
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
     R     = D_mm / 2.0
@@ -565,11 +582,17 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
         Glas_ptv_nm      = float(W_ptv * lam_nm / 2.0)
         Glas_volumen_mm3 = float(2 * math.pi * R**2 * _trapz(Glas_f * rho_f, rho_f))
 
+    # Zuverlaessigkeits-Sicherheitsnetz: nur im Polynom-Modus relevant
+    # (im Direkt-Interpolationsmodus ist fit_residuum_rms ohnehin 0.0,
+    # da keine Glaettung erfolgt) -- s. Docstring oben.
+    kennzahlen_zuverlaessig = use_direct or (fit_residuum_rms <= FIT_RESIDUUM_SCHWELLE)
+
     return dict(
         W_zonen=W_zonen, W_c_zonen=W_c_zonen,
         W_rms=W_rms, W_ptv=W_ptv, Wb_fit=Wb_fit,
         a4=a4, a2=a2,
         fit_residuum_rms=fit_residuum_rms,
+        kennzahlen_zuverlaessig=kennzahlen_zuverlaessig,
         S_mar=S_mar, S_exakt=S_exakt, Deff_k=Deff_k,
         Glas_f=Glas_f, Glas_zonen=Glas_zonen,
         Glas_ptv_nm=Glas_ptv_nm, W_min=W_min, lam_nm=lam_nm,
@@ -1211,7 +1234,7 @@ def plot_blende(D, f, lam, D_blend):
     return fig
 
 
-def plot_foucault(D, f, lam, r_zon, df_arr, kz):
+def plot_foucault(D, f, lam, r_zon, df_arr, kz, werkstatt_ansicht=False):
     R     = D / 2.0
     rho_z = r_zon / R
     _COR = "#E65100"; _ACC = "#1565c0"; _GRN = "#2e7d32"
@@ -1223,40 +1246,60 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz):
 
     rho_fine = kz["rho_f"]
     W_fine   = kz["W_c"]
-    _modus_lbl = (f"Wellenfront (Polynom-Fit, a4={kz['a4']:.3f})"
-                  if kz["a4"] is not None else
-                  "Wellenfront (Direkt-Interpolation)")
-    ax_wf.plot(rho_fine, W_fine, color=_ACC, lw=2.0, label=_modus_lbl)
-
     W_z      = kz["W_zonen"]
     W_c_zonen = kz["W_c_zonen"]   # flächengewichtet pistonbereinigt (bester Fokus)
     Glas_z   = kz.get("Glas_zonen")
     W_min    = kz.get("W_min")
+
+    # Werkstatt-Ansicht: Referenz an den Taelern der Oberflaeche "anlegen"
+    # (kein Unterschuss moeglich, direkt ablesbar wo/wieviel Glas noch runter
+    # muss - entspricht FigureXPs Darstellung). Reine Anzeigeverschiebung,
+    # W_shift ist eine Konstante -> S_exakt/W_rms/W_ptv in kz unveraendert.
+    if werkstatt_ansicht:
+        W_shift = -np.min(W_fine)
+        _modus_titel = "Werkstatt-Ansicht (Referenz an Oberflächen-Tälern)"
+    else:
+        W_shift = 0.0
+        _modus_titel = "Gemessene Wellenfront (bester Fokus, pistonbereinigt)"
+
+    W_fine_disp    = W_fine + W_shift
+    W_c_zonen_disp = W_c_zonen + W_shift
+
+    _modus_lbl = (f"Wellenfront (Polynom-Fit, a4={kz['a4']:.3f})"
+                  if kz["a4"] is not None else
+                  "Wellenfront (Direkt-Interpolation)")
+    ax_wf.plot(rho_fine, W_fine_disp, color=_ACC, lw=2.0, label=_modus_lbl)
+
     if Glas_z is not None and W_min is not None:
-        y_punkte = Glas_z * 2.0 / lam + W_min
+        y_punkte = W_c_zonen_disp
         ax_wf.scatter(rho_z, y_punkte, color=_COR, s=50, zorder=5,
                       label=f"Messzonen (n={len(r_zon)})")
         for i, (rho, yp) in enumerate(zip(rho_z, y_punkte)):
-            wc = W_c_zonen[i]   # flächengewichtet, pistonbereinigt
+            wc = W_c_zonen[i]   # flächengewichtet, pistonbereinigt (unverschoben, für λ-Angabe)
             ax_wf.annotate(f"Z{i+1}: {Glas_z[i]:.0f} nm\n({wc:+.3f}λ)",
                            xy=(rho, yp), xytext=(0, 10),
                            textcoords="offset points", fontsize=7, ha="center", color=_COR)
     else:
-        ax_wf.scatter(rho_z, W_c_zonen, color=_COR, s=50, zorder=5)
+        ax_wf.scatter(rho_z, W_c_zonen_disp, color=_COR, s=50, zorder=5)
 
     ax_wf.axhline(0, color="#999", lw=0.8)
-    ax_wf.axhline(+0.125, color=_ACC, lw=0.7, ls=":", alpha=0.7, label="±λ/8 (Rayleigh)")
-    ax_wf.axhline(-0.125, color=_ACC, lw=0.7, ls=":", alpha=0.7)
+    if not werkstatt_ansicht:
+        ax_wf.axhline(+0.125, color=_ACC, lw=0.7, ls=":", alpha=0.7, label="±λ/8 (Rayleigh)")
+        ax_wf.axhline(-0.125, color=_ACC, lw=0.7, ls=":", alpha=0.7)
+    else:
+        ax_wf.axhline(+0.25, color=_ACC, lw=0.7, ls=":", alpha=0.7, label="λ/4 (Rayleigh, PtV)")
     ax_wf.set_xlim(-0.02, 1.05)
     ax_wf.set_xlabel("Normierter Zonenradius ρ = r/R", fontsize=8)
     ax_wf.set_ylabel("Wellenfrontfehler W(ρ)  [Einheiten von λ]", fontsize=8)
-    ax_wf.set_title("Gemessene Wellenfront (bester Fokus, pistonbereinigt)", fontsize=8, fontweight="bold")
-    ax_wf.legend(fontsize=7, loc="lower center")
+    ax_wf.set_title(_modus_titel, fontsize=8, fontweight="bold")
+    ax_wf.legend(fontsize=7, loc="lower center" if not werkstatt_ansicht else "upper center")
     ax_wf.grid(True, alpha=0.25)
 
     if W_min is not None:
-        zu_glas = lambda w: (np.asarray(w) - W_min) * lam / 2.0
-        zu_lam  = lambda g: np.asarray(g) * 2.0 / lam + W_min
+        # Sekundaerachse bezieht sich immer auf die tatsaechliche (unverschobene)
+        # W_min-Referenz, damit "Materialabtrag" in beiden Ansichten gleich bleibt.
+        zu_glas = lambda w: (np.asarray(w) - W_shift - W_min) * lam / 2.0
+        zu_lam  = lambda g: np.asarray(g) * 2.0 / lam + W_min + W_shift
         ax_glas = ax_wf.secondary_yaxis("right", functions=(zu_glas, zu_lam))
         ax_glas.set_ylabel("Materialabtrag [nm Glas]  (0 = am wenigsten bearbeiteter Punkt)",
                            fontsize=8, color="#6a1b9a")
@@ -1264,18 +1307,31 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz):
 
     # Kennzahlentafel
     ax_info.axis("off")
-    rayleigh_ok = kz["S_exakt"] >= 0.80
-    s_col = _GRN if kz["S_exakt"] >= 0.95 else "#e65100" if rayleigh_ok else "#c62828"
+    zuverlaessig = kz.get("kennzahlen_zuverlaessig", True)
+    rayleigh_ok  = kz["S_exakt"] >= 0.80
+    if not zuverlaessig:
+        s_col = "#c62828"   # unzuverlaessig -> immer rot, unabh. vom Zahlenwert
+    else:
+        s_col = _GRN if kz["S_exakt"] >= 0.95 else "#e65100" if rayleigh_ok else "#c62828"
+
+    _s_exakt_str = f"{kz['S_exakt']:.4f}"
+    _wptv_str    = f"{kz['W_ptv']:.4f} λ"
+    _wrms_str    = f"{kz['W_rms']:.4f} λ"
+    if not zuverlaessig:
+        _s_exakt_str += "  ⚠ unzuverlässig"
+        _wptv_str    += "  ⚠"
+        _wrms_str    += "  ⚠"
+
     zeilen = [
         ("Öffnung / f-Zahl",   f"D = {D:.0f} mm  f/{f/D:.1f}"),
         ("Wellenlänge",         f"λ = {lam:.0f} nm"),
         ("", ""),
-        ("W_rms",               f"{kz['W_rms']:.4f} λ"),
-        ("W_PtV",               f"{kz['W_ptv']:.4f} λ"),
+        ("W_rms",               _wrms_str),
+        ("W_PtV",               _wptv_str),
         ("Wb (aus Fit)",        f"{kz['Wb_fit']:.4f} λ"),
         ("Fit-Residuum RMS",
          (f"{kz['fit_residuum_rms']:.4f} λ" +
-          ("  ⚠ >0.010λ" if kz['fit_residuum_rms'] > 0.010 else ""))
+          ("  ⚠ > 0.010 (Grenze)" if not zuverlaessig else ""))
          if kz['fit_residuum_rms'] > 0 else "–"),
         ("", ""),
         ("Abtrag RMS (Glas)",   f"{kz['W_rms']*lam/2.0:.1f} nm"
@@ -1286,17 +1342,19 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz):
                                 if kz.get("Glas_volumen_mm3") is not None else "–"),
         ("", ""),
         ("Strehl  Maréchal",    f"{kz['S_mar']:.4f}"),
-        ("Strehl  exakt",       f"{kz['S_exakt']:.4f}"),
+        ("Strehl  exakt",       _s_exakt_str),
         ("D_eff  (Kontrast)",   f"{kz['Deff_k']:.1f} mm"),
         ("", ""),
-        ("Beurteilung", "✓ Rayleigh erfüllt (S ≥ 0.80)" if rayleigh_ok
-                        else "✗ Rayleigh nicht erfüllt"),
+        ("Beurteilung",
+         "⚠ Zonenfehler nicht erfasst — Direkt-Interpolation nutzen!" if not zuverlaessig
+         else ("✓ Rayleigh erfüllt (S ≥ 0.80)" if rayleigh_ok
+               else "✗ Rayleigh nicht erfüllt")),
     ]
     y = 0.97
     for lbl, val in zeilen:
         if not lbl and not val:
             y -= 0.04; continue
-        is_strehl  = lbl.startswith("Strehl")
+        is_strehl  = lbl.startswith("Strehl") or lbl in ("W_rms", "W_PtV")
         is_verdict = lbl == "Beurteilung"
         ax_info.text(0.03, y, lbl + ":", transform=ax_info.transAxes,
                      fontsize=8, color="#555", va="top")
@@ -1308,13 +1366,12 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz):
                      fontfamily="monospace" if not is_verdict else "sans-serif")
         y -= 0.075
     modus_str = "Direkt-Interpolation" if kz.get("a4") is None else "Polynom-Fit"
-    res_rms   = kz.get("fit_residuum_rms", 0.0)
-    res_str   = f"{res_rms:.4f}λ" if res_rms > 0 else "–"
+    _titel_zuv = "  ⚠ UNZUVERLÄSSIG" if not zuverlaessig else ""
     ax_info.set_title(f"Auswertung  [{modus_str}]", fontsize=8, fontweight="bold")
     fig.suptitle(
         f"Foucault-Auswertung  —  D={D:.0f}mm  f/{f/D:.1f}  "
-        f"S={kz['S_exakt']:.4f}  W_rms={kz['W_rms']:.4f}λ",
-        fontsize=8, fontweight="bold")
+        f"S={kz['S_exakt']:.4f}  W_rms={kz['W_rms']:.4f}λ{_titel_zuv}",
+        fontsize=8, fontweight="bold", color=(s_col if not zuverlaessig else "black"))
     fig.tight_layout()
     return fig
 
@@ -1670,7 +1727,16 @@ def main():
                 f"</div>",
                 unsafe_allow_html=True)
 
-            st.pyplot(plot_foucault(D, f, lam_fc, r_zon, df_arr, kz))
+            werkstatt_ansicht = st.toggle(
+                "🔧 Werkstatt-Ansicht (Referenz an Oberflächen-Tälern, wie FigureXP)",
+                value=False, key="fc_werkstatt_ansicht",
+                help="Verschiebt nur die Anzeige: die Referenzlinie wird an die am "
+                     "wenigsten bearbeiteten Punkte gelegt (kein Unterschuss), statt "
+                     "die RMS-minimierende Best-Fit-Parabel zu zeigen. S_exakt/W_rms/"
+                     "W_PtV bleiben unverändert (RMS-Bestfit) – nur zum Ablesen, wo "
+                     "und wieviel Glas beim Polieren noch runter muss.")
+            st.pyplot(plot_foucault(D, f, lam_fc, r_zon, df_arr, kz,
+                                    werkstatt_ansicht=werkstatt_ansicht))
 
          except Exception as _ex:
             st.error(f"Foucault-Berechnungsfehler: {_ex}")
