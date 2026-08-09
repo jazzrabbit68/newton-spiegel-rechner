@@ -1393,9 +1393,12 @@ def _seiten_icon():
     Asset-Datei noetig, die separat zu GitHub hochgeladen werden muesste.
 
     08/2026: ersetzt 🔭 (zeigt auf den meisten Systemen einen Refraktor,
-    nicht unseren Spiegel-Newton) und 🪞 (sah als Mini-Icon nach Kosmetik-
-    spiegel aus). Ein Foucault-Schattenbild mit Zonenringen ist inhaltlich
-    passend zum Tool und eindeutig kein falsches Instrument.
+    nicht unseren Spiegel-Newton), 🪞 (sah als Mini-Icon nach Kosmetik-
+    spiegel aus) und eine erste Foucault-Version mit reinem Helligkeits-
+    verlauf (sah wie eine Mondphase aus). Jetzt: gerichtete Schattenkante
+    (Messerschneide von links) UEBERLAGERT mit welligem Zonenmuster
+    (Berg-und-Tal-Textur) -- echte Foucaultgramme sind nie ein glatter
+    Verlauf, das welllige Muster ist der visuelle Unterschied zur Mondphase.
     """
     if not _PIL_OK:
         return "🪐"  # Fallback falls Pillow ausnahmsweise fehlt
@@ -1404,27 +1407,32 @@ def _seiten_icon():
     cx, cy, r = size // 2, size // 2, int(size * 0.44)
 
     xx, yy = np.meshgrid(np.arange(size), np.arange(size))
-    t = (xx - (cx - r)) / (2 * r)
-    t = np.clip(t, 0, 1)
-    val = 25 + (t ** 1.5) * (235 - 25)
-    rgb = np.stack([val, val, val], axis=-1).astype(np.uint8)
+    xr = (xx - cx) / r
+    yr = (yy - cy) / r
+    rad = np.sqrt(xr**2 + yr**2)
+
+    # Gerichteter Schattenverlauf (Messerschneide von links, S-Kurve)...
+    edge = 1 / (1 + np.exp(-xr * 4.0))
+    # ...ueberlagert mit welligem Zonenmuster (macht den Unterschied zur
+    # reinen Mondphase -- echte Foucaultgramme sind nie glatt)
+    texture = 0.16 * np.sin(rad * 7.0 * np.pi + 1.0) + 0.10 * np.cos(xr * 8.0 + yr * 3.0)
+    pattern = np.clip(edge + texture, 0, 1)
+
+    val = (20 + pattern * (238 - 20)).astype(np.uint8)
+    rgb = np.stack([val, val, val], axis=-1)
     disc = Image.fromarray(rgb, mode="RGB").convert("RGBA")
-    disc_blur = disc.filter(ImageFilter.GaussianBlur(3))
+    disc = disc.filter(ImageFilter.GaussianBlur(1.8))
 
     mask = Image.new("L", (size, size), 0)
     ImageDraw.Draw(mask).ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
-    disc_blur.putalpha(mask)
+    disc.putalpha(mask)
 
-    draw = ImageDraw.Draw(disc_blur)
-    for frac in (0.35, 0.6, 0.82):
-        rr = int(r * frac)
-        draw.ellipse([cx - rr, cy - rr, cx + rr, cy + rr],
-                     outline=(0, 0, 0, 60), width=2)
+    draw = ImageDraw.Draw(disc)
     draw.ellipse([cx - r, cy - r, cx + r, cy + r],
-                 outline=(255, 255, 255, 200), width=5)
+                 outline=(255, 255, 255, 210), width=5)
 
     final = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    final.paste(disc_blur, (0, 0), disc_blur)
+    final.paste(disc, (0, 0), disc)
     return final
 
 
@@ -1435,7 +1443,7 @@ def main():
         layout="wide",
     )
 
-    st.title(f"🌗 Newton-Spiegel: Kontrast- und Schärfeverlust  v{VERSION}")
+    st.title(f"Newton-Spiegel: Kontrast- und Schärfeverlust  v{VERSION}")
     st.caption("Sphärischer Hauptspiegel — Wellenfrontfehler, Strehl, MTF, CSF-Wahrnehmung, Foucault")
 
     # ── Sidebar: Teleskop-Parameter ──────────────────────────────────────────
