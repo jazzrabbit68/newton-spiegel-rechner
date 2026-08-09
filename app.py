@@ -15,12 +15,6 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
-try:
-    from PIL import Image, ImageDraw, ImageFilter
-    _PIL_OK = True
-except ImportError:
-    _PIL_OK = False  # Pillow ist Streamlit-Kernabhaengigkeit, sollte immer da sein;
-                      # Fallback-Emoji falls doch nicht (s. _seiten_icon())
 
 # kein scipy nötig – Goldene-Schnitt-Suche (identisch mit newton_spiegel_rechner.py)
 _SCIPY_OK = True
@@ -1386,64 +1380,14 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz, werkstatt_ansicht=False):
 # Streamlit-App
 # ══════════════════════════════════════════════════════════════════════════════
 
-@lru_cache(maxsize=1)
-def _seiten_icon():
-    """Erzeugt ein stilisiertes Foucault-Schattenbild als Seiten-Icon
-    (Browser-Tab-Favicon), zur Laufzeit per PIL gerendert -- keine externe
-    Asset-Datei noetig, die separat zu GitHub hochgeladen werden muesste.
-
-    08/2026: ersetzt 🔭 (zeigt auf den meisten Systemen einen Refraktor,
-    nicht unseren Spiegel-Newton), 🪞 (sah als Mini-Icon nach Kosmetik-
-    spiegel aus) und eine erste Foucault-Version mit reinem Helligkeits-
-    verlauf (sah wie eine Mondphase aus). Jetzt: gerichtete Schattenkante
-    (Messerschneide von links) UEBERLAGERT mit welligem Zonenmuster
-    (Berg-und-Tal-Textur) -- echte Foucaultgramme sind nie ein glatter
-    Verlauf, das welllige Muster ist der visuelle Unterschied zur Mondphase.
-    """
-    if not _PIL_OK:
-        return "🪐"  # Fallback falls Pillow ausnahmsweise fehlt
-
-    size = 256
-    cx, cy, r = size // 2, size // 2, int(size * 0.44)
-
-    xx, yy = np.meshgrid(np.arange(size), np.arange(size))
-    xr = (xx - cx) / r
-    yr = (yy - cy) / r
-    rad = np.sqrt(xr**2 + yr**2)
-
-    # Gerichteter Schattenverlauf (Messerschneide von links, S-Kurve)...
-    edge = 1 / (1 + np.exp(-xr * 4.0))
-    # ...ueberlagert mit welligem Zonenmuster (macht den Unterschied zur
-    # reinen Mondphase -- echte Foucaultgramme sind nie glatt)
-    texture = 0.16 * np.sin(rad * 7.0 * np.pi + 1.0) + 0.10 * np.cos(xr * 8.0 + yr * 3.0)
-    pattern = np.clip(edge + texture, 0, 1)
-
-    val = (20 + pattern * (238 - 20)).astype(np.uint8)
-    rgb = np.stack([val, val, val], axis=-1)
-    disc = Image.fromarray(rgb, mode="RGB").convert("RGBA")
-    disc = disc.filter(ImageFilter.GaussianBlur(1.8))
-
-    mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
-    disc.putalpha(mask)
-
-    draw = ImageDraw.Draw(disc)
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r],
-                 outline=(255, 255, 255, 210), width=5)
-
-    final = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    final.paste(disc, (0, 0), disc)
-    return final
-
-
 def main():
     st.set_page_config(
         page_title=f"Newton-Spiegel  v{VERSION}",
-        page_icon=_seiten_icon(),   # Foucault-Schattenbild statt Emoji, s. _seiten_icon()
+        page_icon="🔭",
         layout="wide",
     )
 
-    st.title(f"Newton-Spiegel: Kontrast- und Schärfeverlust  v{VERSION}")
+    st.title(f"🔭 Newton-Spiegel: Kontrast- und Schärfeverlust  v{VERSION}")
     st.caption("Sphärischer Hauptspiegel — Wellenfrontfehler, Strehl, MTF, CSF-Wahrnehmung, Foucault")
 
     # ── Sidebar: Teleskop-Parameter ──────────────────────────────────────────
