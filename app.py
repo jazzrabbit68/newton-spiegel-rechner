@@ -15,6 +15,12 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
+try:
+    from PIL import Image, ImageDraw, ImageFilter
+    _PIL_OK = True
+except ImportError:
+    _PIL_OK = False  # Pillow ist Streamlit-Kernabhaengigkeit, sollte immer da sein;
+                      # Fallback-Emoji falls doch nicht (s. _seiten_icon())
 
 # kein scipy nötig – Goldene-Schnitt-Suche (identisch mit newton_spiegel_rechner.py)
 _SCIPY_OK = True
@@ -1380,14 +1386,56 @@ def plot_foucault(D, f, lam, r_zon, df_arr, kz, werkstatt_ansicht=False):
 # Streamlit-App
 # ══════════════════════════════════════════════════════════════════════════════
 
+@lru_cache(maxsize=1)
+def _seiten_icon():
+    """Erzeugt ein stilisiertes Foucault-Schattenbild als Seiten-Icon
+    (Browser-Tab-Favicon), zur Laufzeit per PIL gerendert -- keine externe
+    Asset-Datei noetig, die separat zu GitHub hochgeladen werden muesste.
+
+    08/2026: ersetzt 🔭 (zeigt auf den meisten Systemen einen Refraktor,
+    nicht unseren Spiegel-Newton) und 🪞 (sah als Mini-Icon nach Kosmetik-
+    spiegel aus). Ein Foucault-Schattenbild mit Zonenringen ist inhaltlich
+    passend zum Tool und eindeutig kein falsches Instrument.
+    """
+    if not _PIL_OK:
+        return "🪐"  # Fallback falls Pillow ausnahmsweise fehlt
+
+    size = 256
+    cx, cy, r = size // 2, size // 2, int(size * 0.44)
+
+    xx, yy = np.meshgrid(np.arange(size), np.arange(size))
+    t = (xx - (cx - r)) / (2 * r)
+    t = np.clip(t, 0, 1)
+    val = 25 + (t ** 1.5) * (235 - 25)
+    rgb = np.stack([val, val, val], axis=-1).astype(np.uint8)
+    disc = Image.fromarray(rgb, mode="RGB").convert("RGBA")
+    disc_blur = disc.filter(ImageFilter.GaussianBlur(3))
+
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
+    disc_blur.putalpha(mask)
+
+    draw = ImageDraw.Draw(disc_blur)
+    for frac in (0.35, 0.6, 0.82):
+        rr = int(r * frac)
+        draw.ellipse([cx - rr, cy - rr, cx + rr, cy + rr],
+                     outline=(0, 0, 0, 60), width=2)
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r],
+                 outline=(255, 255, 255, 200), width=5)
+
+    final = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    final.paste(disc_blur, (0, 0), disc_blur)
+    return final
+
+
 def main():
     st.set_page_config(
         page_title=f"Newton-Spiegel  v{VERSION}",
-        page_icon="🔭",
+        page_icon=_seiten_icon(),   # Foucault-Schattenbild statt Emoji, s. _seiten_icon()
         layout="wide",
     )
 
-    st.title(f"🔭 Newton-Spiegel: Kontrast- und Schärfeverlust  v{VERSION}")
+    st.title(f"🌗 Newton-Spiegel: Kontrast- und Schärfeverlust  v{VERSION}")
     st.caption("Sphärischer Hauptspiegel — Wellenfrontfehler, Strehl, MTF, CSF-Wahrnehmung, Foucault")
 
     # ── Sidebar: Teleskop-Parameter ──────────────────────────────────────────
