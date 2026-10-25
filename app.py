@@ -1,8 +1,17 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v6.9.1 (2026-10-24)
-Entspricht newton_spiegel_rechner.py v6.9.1
+Streamlit-Version v6.11.0 (2026-10-25)
+Entspricht newton_spiegel_rechner.py v6.11.0
+
+Änderungshistorie (jüngste zuerst):
+  v6.11.0 (2026-10-25)  Wahrnehmung: Fangspiegel-Ø-Feld + Zusatzkurve "Schieber + Fangspiegel";
+                        Vergrößerungs- und Fangspiegelfeld nur ganzzahlig
+  v6.10.1 (2026-10-25)  Fehler behoben: mtf_para_obstr (Obstruktions-MTF, Kreuzterm fehlte)
+  v6.10.0 (2026-10-25)  Wahrnehmung: Ablese-Cursor (V) mit exakten Q_vis-Werten
+  v6.9.1  (2026-10-24)  Foucault: Abtrag-Vorzeichen korrigiert, Werkstatt-Ansicht wie FigureXP;
+                        Web-Version auf Desktop-Stand gebracht (inkl. Max. Vergrößerung,
+                        Vmax vs. Ø/Seeing)
 
 Der Rechenkern (alles zwischen "Kernrechnung" und "Plot-Funktionen") ist 1:1
 aus newton_spiegel_rechner.py übernommen (ohne tkinter/Sprachumschaltung);
@@ -20,7 +29,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "6.9.1 (2026-10-24)"
+VERSION = "6.11.0 (2026-10-25)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -28,7 +37,7 @@ COR = "#D85A30"
 GRN = "#0F6E56"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Kernrechnung (identisch mit newton_spiegel_rechner.py v6.9.1)
+# Kernrechnung (identisch mit newton_spiegel_rechner.py v6.11.0)
 # ══════════════════════════════════════════════════════════════════════════════
 
 
@@ -658,10 +667,22 @@ def mtf_para(f: float) -> float:
 def mtf_para_obstr(f: float, eps: float) -> float:
     """MTF eines Kreisteleskops mit zentraler Obstruktion ε = d_fang/D.
 
-    Nach Barakat (1962) / Sacek §4.2:
-      MTF(f,ε) = [M(f) − ε²·M(f/ε)] / (1−ε²)   für f ≤ ε
-      MTF(f,ε) =  M(f)               / (1−ε²)   für f > ε
-    mit M(x) = (2/π)·(arccos(x) − x·√(1−x²))
+    KORRIGIERT 10/2026 (v6.10.1): Die frühere Formel
+        [M(f) − ε²·M(f/ε)] / (1−ε²)   für f ≤ ε
+    ließ den Kreuzterm zwischen Außenkreis und Fangspiegelscheibe weg und
+    zeigte dadurch bei ε>0 fälschlich MTF-Werte ÜBER dem unobstruierten
+    Teleskop (Verbesserung statt Verlust bei mittleren Ortsfrequenzen).
+    Gegenprobe: numerische Autokorrelation der Ringpupille (FFT) — z.B.
+    ε=0.25, f=0.2: alt 0.790, richtig 0.671 (unobstruiert 0.747).
+
+    Autokorrelation der Ringpupille = Kreis(1) ⋆ Kreis(1)  +  Kreis(ε) ⋆ Kreis(ε)
+                                      − 2 · Überlappfläche(Kreis 1, Kreis ε; Abstand s)
+    mit s = 2f (Verschiebung in Pupillenradien), normiert auf die Ringfläche
+    π(1−ε²), d.h. MTF(0)=1 (Kontrastübertrag relativ zum Mittelwert).
+
+        MTF(f,ε) = [ M(f) + ε²·M(f/ε) − 2·A12(2f) / π ] / (1−ε²)
+    mit M(x) = (2/π)·(arccos(x) − x·√(1−x²)), A12 = Kreis-Kreis-Überlappfläche.
+    Quellen: Barakat (1962), O'Neill (1956); vgl. Sacek §4.2.
     """
     if f <= 0: return 1.0
     if f >= 1: return 0.0
@@ -672,12 +693,22 @@ def mtf_para_obstr(f: float, eps: float) -> float:
         if x <= 0: return 1.0
         return (2/math.pi) * (math.acos(x) - x * math.sqrt(1 - x**2))
 
+    def _overlap(r1, r2, d):
+        """Überlappfläche zweier Kreise (Radien r1, r2, Mittelpunktabstand d)."""
+        if d >= r1 + r2:
+            return 0.0
+        if d <= abs(r1 - r2):
+            return math.pi * min(r1, r2) ** 2
+        a = r1 * r1 * math.acos((d * d + r1 * r1 - r2 * r2) / (2 * d * r1))
+        b = r2 * r2 * math.acos((d * d + r2 * r2 - r1 * r1) / (2 * d * r2))
+        c = 0.5 * math.sqrt((-d + r1 + r2) * (d + r1 - r2)
+                            * (d - r1 + r2) * (d + r1 + r2))
+        return a + b - c
+
     norm = 1.0 - eps**2
     if norm <= 1e-6: return 0.0
-    if f <= eps:
-        return (M(f) - eps**2 * M(f / eps)) / norm
-    else:
-        return M(f) / norm
+    A12 = _overlap(1.0, eps, 2.0 * f) / math.pi
+    return (M(f) + eps**2 * M(f / eps) - 2.0 * A12) / norm
 
 
 def d_fang_min(D_mm: float, f_mm: float) -> float:
@@ -1408,6 +1439,70 @@ def kurven_blende(D_mm: float, f_mm: float, lam_nm: float,
 
 
 
+def qvis_einzelrechner(D_mm: float, S: float, V: float,
+                       lam_nm: float = 550.0) -> dict:
+    """Q_vis für EINEN einzelnen Spiegel: Öffnung D, Strehl S, Vergrößerung V
+    (neu in v6.10.0).
+
+    Für beliebige Kombinationen (z.B. den eigenen 400er mit gemessenem
+    Strehl 0,96), unabhängig von den Hauptreglern. Brennweite wird nicht
+    gebraucht: Q_vis hängt nur von D, vom Wellenfrontfehler Wb und von V ab;
+    Wb folgt aus S per Inversion des exakten Pupillenintegrals (_Wb_von_S).
+
+    Rückgabe:
+        Wb        Best-Fokus-Wellenfrontfehler PtV [λ]
+        Q         Q_vis exakt (MTF×CSF-Integral, rel. zum Paraboloid = 1)
+        Q_naeh    Näherung Q̃ = S + (1−S)·(1−w(V))   (wie im Diagramm gestrichelt)
+        verlust   Wahrnehmungsverlust ggü. Paraboloid [%]  = (1−Q)·100
+        V_krit    10%-Kontrastverlust-Schwelle (Näherung D/(13·Wb)), 1e9 = ∞
+        V_q90     Vergrößerung, ab der Q_vis exakt unter 0,90 fällt
+                  (auf 30…600× begrenzt; 600.0 heißt „≥ 600×“, 30.0 „≤ 30×“)
+    """
+    S  = min(max(float(S), 1e-6), 1.0)
+    Wb = _Wb_von_S(S)
+    Q  = 1.0 if Wb <= 1e-9 else perceived_quality_exakt_von_Wb(D_mm, Wb, lam_nm, V)
+    S_ph = _strehl_exakt(Wb)
+    Vk_w = v_wendepunkt_naeh(D_mm, Wb)
+    w    = 1.0 / (1.0 + (Vk_w / max(V, 1e-9)) ** 2)
+    Q_n  = S_ph + (1.0 - S_ph) * (1.0 - w)
+    return dict(D=D_mm, S=S, V=V, lam=lam_nm, Wb=Wb, Q=Q, Q_naeh=Q_n,
+                verlust=(1.0 - Q) * 100.0,
+                V_krit=v_krit_naeh(D_mm, Wb),
+                V_q90=(600.0 if Wb <= 1e-9 else
+                       v_krit_aus_qvis_von_Wb(D_mm, Wb, lam_nm, 0.90)))
+
+
+def qvis_kurve_mit_fangspiegel(D_mm: float, S: float, d_fang_mm: float,
+                               lam_nm: float, V_arr, n: int = 80) -> np.ndarray:
+    """Q_vis(V) eines Spiegels mit Strehl S UND zentraler Fangspiegel-Abschattung
+    (neu in v6.11.0).
+
+    Bezug wie im Wahrnehmungsdiagramm: Paraboloid OHNE Fangspiegel = 1.
+        Q = ∫ MTF_Aberration_rel(S) · MTF_Ring(ε) · CSF(V)  /  ∫ MTF_para · CSF(V)
+    mit ε = d_fang/D (Ringblenden-MTF, s. mtf_para_obstr).
+
+    NÄHERUNG: Die Aberrations-MTF (aus S bzw. Wb) wird unverändert mit der
+    Ring-MTF multipliziert; die Abschattung ändert die Wellenfront-Statistik
+    (Strehl) in Wirklichkeit geringfügig. d_fang_mm <= 0 → identisch zu
+    perceived_quality_exakt_von_Wb().
+    """
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    V_arr  = np.atleast_1d(np.asarray(V_arr, dtype=float))
+    eps    = min(max(d_fang_mm / D_mm, 0.0), 0.95)
+    Wb     = _Wb_von_S(min(max(float(S), 1e-6), 1.0))
+    nu     = np.linspace(0.0, 1.0, n)
+    mp     = np.array([mtf_para(x) for x in nu])
+    mo     = np.array([mtf_para_obstr(x, eps) for x in nu])
+    msr    = (np.ones_like(nu) if Wb <= 1e-9
+              else np.array([mtf_sph_rel(x, Wb) for x in nu]))
+    fc     = D_mm / (lam_nm * 1e-6 * 206265)
+    out = []
+    for V in V_arr:
+        w = np.array([csf(x * 3600.0 / V) for x in nu * fc])
+        out.append(float(_trapz(msr * mo * w, nu) / max(_trapz(mp * w, nu), 1e-12)))
+    return np.array(out)
+
+
 def beurteilung(strehl):
     if strehl >= 0.95:
         return "✓ Sehr gut — nahezu gleichwertig mit Parabolspiegel (Strehl ≥ 0.95)", "#2e7d32"
@@ -1538,7 +1633,7 @@ def T(key: str) -> str:
 # Diagramm-Schicht: 1:1 aus dem Desktop-Programm übernommen
 # ══════════════════════════════════════════════════════════════════════════════
 # Die Diagramm-Methoden unten sind wörtliche Kopien der _diagramm_*-Methoden
-# aus newton_spiegel_rechner.py (v6.9.1). Dadurch sehen Web- und Desktop-
+# aus newton_spiegel_rechner.py (v6.11.0). Dadurch sehen Web- und Desktop-
 # Version identisch aus; bei Änderungen am Desktop einfach erneut kopieren.
 # Nur die Tk-Variablen (StringVar/DoubleVar) werden durch _Var ersetzt.
 
@@ -1582,6 +1677,8 @@ class _Diagramme:
         self._vmaxD_Dmax      = _Var(500.0)
         self._foucault_letzte_kz = None
         self._foucault_letzte_D  = None
+        self._wn_V     = None    # Ablese-Cursor (Wahrnehmung)
+        self._wn_fang  = 0.0     # Fangspiegel-Ø [mm], 0 = aus
 
     def _ax_fmt(self, ax):
         ax.grid(True, color="#ddd", lw=0.5)
@@ -1917,6 +2014,14 @@ class _Diagramme:
         fig, ax, canvas = self._tab_wahrnehmung
         ax.cla()
 
+        # Ablese-Cursor (10/2026, v6.10.0): V_cur=None -> kein Cursor.
+        # Desktop: Werte aus den Eingabefeldern lesen + Textzeile aktualisieren;
+        # Web: Attribute werden von plot_wahrnehmung() gesetzt.
+        if hasattr(self, "_wn_V_var"):
+            self._wahrnehmung_lesen()
+            self._wahrnehmung_readout(D, f, lam, S_slide, S_real)
+        V_cur = getattr(self, "_wn_V", None)
+
         _, _, Wb, _, S_mar = _wellenfronten(D, f, lam)
         S_exakt = _strehl_exakt(Wb)
 
@@ -1924,7 +2029,11 @@ class _Diagramme:
         V_wende    = v_wendepunkt_naeh(D, Wb)
         V_halb     = v_halb_exakt(D, f, lam)
         V_max_plot = 400.0
-        V_arr      = np.linspace(30, V_max_plot, 150)
+        V_min_plot = 30.0
+        if V_cur is not None:                 # Achse so erweitern, dass V sichtbar bleibt
+            V_max_plot = max(V_max_plot, V_cur * 1.15)
+            V_min_plot = min(V_min_plot, V_cur * 0.85)
+        V_arr      = np.linspace(V_min_plot, V_max_plot, 150)
 
         Qe_sph  = perceived_quality_exakt_kurven(D, f, lam, V_arr)
         f_para  = D * 50.0
@@ -1976,7 +2085,7 @@ class _Diagramme:
                 (V_krit,  "#534AB7", "--", f"V_krit={V_krit:.0f}×  (10%-Schwelle)"),
                 (V_wende, "#c62828", "-.", f"V_wendepunkt≈{V_wende:.0f}×  (Näherung, =V_krit/³√S²)"),
                 (V_halb,  "#00838f", ":",  f"V½_exakt={V_halb:.0f}×  (echter Halbwertspunkt)")]:
-            if 30 <= V_m <= V_max_plot:
+            if V_min_plot <= V_m <= V_max_plot:
                 ax.axvline(V_m, color=col, lw=1.0, ls=ls, alpha=0.65)
                 ax.text(V_m + 2, 0.03, lbl,
                         fontsize=7, color=col, rotation=90, va="bottom", alpha=0.8)
@@ -1984,7 +2093,47 @@ class _Diagramme:
         for q_thresh, col, lbl in [(0.9, GRN, "Q=0.90 (sehr gut)"),
                                     (0.7, "#BA7517", "Q=0.70 (spürbar)")]:
             ax.axhline(q_thresh, color=col, lw=1.0, ls=":", alpha=0.7)
-            ax.text(32, q_thresh + 0.008, lbl, fontsize=8, color=col, alpha=0.85)
+            ax.text(V_min_plot * 1.03, q_thresh + 0.008, lbl, fontsize=8, color=col, alpha=0.85)
+
+        # ── Fangspiegel-Effekt auf den Schieber-Spiegel (zusätzliche Kurve) ──
+        d_fs = getattr(self, "_wn_fang", 0.0) or 0.0
+        S_fs = S_slide if S_slide is not None else S_exakt
+        if d_fs > 0:
+            Qe_fs = qvis_kurve_mit_fangspiegel(D, S_fs, d_fs, lam, V_arr)
+            ax.plot(V_arr, Qe_fs, color="#6a1b9a", lw=2.4, ls="-",
+                    label=f"Schieber + Fangspiegel  d={d_fs:.0f}mm "
+                          f"(ε={min(d_fs/D, 0.95):.2f}, S={S_fs:.3f})  Näherung")
+
+        # ── Ablese-Cursor: exakter Wert bei der gewählten Vergrößerung ───────
+        if V_cur is not None:
+            ax.axvline(V_cur, color="#111", lw=1.3, ls="-", alpha=0.8, zorder=4)
+            pts = [(perceived_quality_exakt(D, f, lam, V_cur), COR,
+                    f"Sphäre {{q:.3f}}"),
+                   (1.0, GRN, "Parab. 1.000")]
+            if has_slide:
+                pts.append((perceived_quality_exakt_von_Wb(D, Wb_s, lam, V_cur),
+                            ACC, "Schieber {q:.3f}"))
+            if d_fs > 0:
+                pts.append((float(qvis_kurve_mit_fangspiegel(D, S_fs, d_fs, lam, V_cur)[0]),
+                            "#6a1b9a", "Schieber+FS {q:.3f}"))
+            # Beschriftungen von oben nach unten, mit Mindestabstand (Punkte
+            # liegen oft dicht beieinander, z.B. Parabol 1.000 / Schieber 0.983)
+            axh_pt = fig.get_size_inches()[1] * 72.0 * 0.72      # grobe Achsenhöhe [pt]
+            y_top  = 1.28
+            vorher_q, vorher_off = None, None
+            for q, col, txt in sorted(pts, key=lambda t: -t[0]):
+                ax.scatter([V_cur], [q], color=col, s=46, zorder=7,
+                           edgecolor="white", linewidth=0.8)
+                off = 2.0
+                if vorher_q is not None:
+                    gap = (vorher_q - q) / y_top * axh_pt        # Abstand der Punkte [pt]
+                    off = vorher_off - 11.0 + gap if gap < 11.0 else 2.0
+                ax.annotate(txt.format(q=q), xy=(V_cur, q), xytext=(7, off - 5),
+                            textcoords="offset points", fontsize=8,
+                            fontweight="bold", color=col, zorder=8,
+                            bbox=dict(boxstyle="round,pad=0.15", fc="white",
+                                      ec="none", alpha=0.8))
+                vorher_q, vorher_off = q, off
 
         max_abw = float(np.max(np.abs(Qe_sph - Qn_sph)))
         ax.text(0.015, 0.985,
@@ -1994,12 +2143,14 @@ class _Diagramme:
                 transform=ax.transAxes, fontsize=7, family="monospace",
                 va="top", ha="left",
                 bbox=dict(boxstyle="round", fc="white", ec="#999", alpha=0.85))
-        ax.set_xlim(30, V_max_plot); ax.set_ylim(0, 1.12)
+        ax.set_xlim(V_min_plot, V_max_plot)
+        ax.set_ylim(0, 1.28 if V_cur is not None else 1.12)   # Kopfraum fuer Info-Kasten + Cursor-Werte
         ax.set_xlabel(T("ax_vergr"), fontsize=10)
         ax.set_ylabel(T("ax_qvis"), fontsize=10)
         ax.set_title(
             f"Visuelle Wahrnehmung  —  D={D:.0f}mm  f/{f/D:.1f}"
-            f"  |  S_exakt={S_exakt:.3f}  max.Abw.={max_abw:.3f}",
+            f"  |  S_exakt={S_exakt:.3f}  max.Abw.={max_abw:.3f}"
+            + (f"  |  Cursor V={V_cur:.0f}×" if V_cur is not None else ""),
             fontsize=9)
         ax.legend(fontsize=8, loc="lower right",
                   title="— exakt (MTF×CSF)   - - Näherung Q̃(V)",
@@ -2701,9 +2852,11 @@ def plot_mtf(D, f, lam, S_slide, paraxial=False, objekte="planeten",
     return fig
 
 
-def plot_wahrnehmung(D, f, lam, S_slide, S_real):
+def plot_wahrnehmung(D, f, lam, S_slide, S_real, V_cur=None, d_fang=0.0):
     fig, ax = _neue_figur((8, 5))
     d = _Diagramme(); d._tab_wahrnehmung = (fig, ax, _FakeCanvas())
+    d._wn_V = V_cur
+    d._wn_fang = d_fang
     d._diagramm_wahrnehmung(D, f, lam, S_slide=S_slide, S_real=S_real)
     return fig
 
@@ -2937,8 +3090,45 @@ def main():
                      _h + (paraxial, objekte_k, _fc_key))
 
     with tabs[5]:
+        # ── Ablesen: exakte Q_vis-Werte bei gewählter Vergrößerung ───────────
+        # Spiegel = Regler in der Seitenleiste (Öffnung, Brennweite, Strehl-Schieber)
+        wc1, wc2 = st.columns([3, 1.3])
+        d_fs = wc2.number_input(
+            "Fangspiegel Ø d [mm]  (0 = aus)", min_value=0, max_value=int(D * 0.9),
+            value=0, step=5, key="wn_fang",
+            help=f"Zusätzliche Kurve: Schieber-Spiegel MIT Fangspiegel-Abschattung "
+                 f"(ε = d/D). Mindestgröße für diese Öffnung/Brennweite: "
+                 f"{d_fang_min(D, f):.0f} mm. Näherung: Aberration bleibt unverändert.")
+        V_cur = wc1.slider("Ablesen bei Vergrößerung V [×]", 20, 800, 150, 1,
+                          key="wn_V",
+                          help="Senkrechte Linie im Diagramm; die exakten Q_vis-Werte "
+                               "stehen darunter und als Punkte im Diagramm. Der Spiegel "
+                               "ergibt sich aus Öffnung, Brennweite und Strehl-Schieber.")
+        _vt = lambda v: ("≥ 600×" if v >= 599.5 else "≤ 30×" if v <= 30.5 else f"{v:.0f}×")
+        _vk = lambda v: ("∞" if v >= 1e8 else f"{v:.0f}×")
+        _q_sph = perceived_quality_exakt(D, f, lam, V_cur)
+        _S_sph = _strehl_exakt(_wellenfronten(D, f, lam)[2])
+        _zeilen = [
+            "| Spiegel | Q_vis exakt | Q̃ Näherung | Verlust ggü. Parabol | Q ≥ 0.90 bis | V_krit |",
+            "|---|---|---|---|---|---|",
+            f"| Sphäre  D={D} mm, f/{f/D:.1f}, S={_S_sph:.3f} "
+            f"| **{_q_sph:.4f}** | – | {(1-_q_sph)*100:.1f} % | – | – |",
+        ]
+        if S_slide > S_real + 0.01:
+            _es = qvis_einzelrechner(D, S_slide, V_cur, lam)
+            _zeilen.append(f"| Schieber  S={S_slide:.3f} | **{_es['Q']:.4f}** | {_es['Q_naeh']:.4f} "
+                           f"| {_es['verlust']:.1f} % | {_vt(_es['V_q90'])} | {_vk(_es['V_krit'])} |")
+        if d_fs > 0:
+            _S_u = S_slide
+            _q_fs = float(qvis_kurve_mit_fangspiegel(D, _S_u, d_fs, lam, V_cur)[0])
+            _zeilen.append(f"| Schieber + Fangspiegel d={d_fs:.0f} mm (ε={min(d_fs/D, 0.95):.2f}) "
+                           f"| **{_q_fs:.4f}** | – | {(1-_q_fs)*100:.1f} % | – | – |")
+        _zeilen.append("| Paraboloid | **1.0000** | – | 0.0 % | – | – |")
+        st.markdown(f"**V = {V_cur}×** (λ = {lam:.0f} nm)\n\n" + "\n".join(_zeilen))
+
         _show_cached("fig_wahrnehmung", lambda: plot_wahrnehmung(D, f, lam,
-                     S_slide, S_real), _h)
+                     S_slide, S_real, V_cur=V_cur, d_fang=d_fs),
+                     _h + (V_cur, d_fs))
 
     with tabs[6]:
         _show_cached("fig_blende", lambda: plot_blende(D, f, lam, D_blend), _hb)

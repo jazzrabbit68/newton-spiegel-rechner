@@ -1,6 +1,15 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel V6.3.0
-============================================================================
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v6.11.0 (2026-10-25)
+============================================================================================
+Änderungshistorie (jüngste zuerst):
+  v6.11.0 (2026-10-25)  Wahrnehmung: Fangspiegel-Ø-Feld + Zusatzkurve "Schieber + Fangspiegel";
+                        Vergrößerungs- und Fangspiegelfeld nur ganzzahlig
+  v6.10.1 (2026-10-25)  Fehler behoben: mtf_para_obstr (Obstruktions-MTF, Kreuzterm fehlte)
+  v6.10.0 (2026-10-25)  Wahrnehmung: Ablese-Cursor (V) mit exakten Q_vis-Werten
+  v6.9.1  (2026-10-24)  Foucault: Abtrag-Vorzeichen korrigiert, Werkstatt-Ansicht wie FigureXP;
+                        Web-Version auf Desktop-Stand gebracht (inkl. Max. Vergrößerung,
+                        Vmax vs. Ø/Seeing)
+
 Berücksichtigt:
   - Wellenfrontfehler und Strehl-Quotient (Kontrast)
   - Geometrischen Unschärfefleck am besten Fokus (Schärfe)
@@ -23,7 +32,13 @@ Formeln:
     Dawes [arcsec]    = 116 / D[mm]
 
   Kritische Vergrößerung:
-    V_krit            = D[mm] · 0.7 · √Strehl      [eigene Erw. von Suiter Kap. 6]
+    V_krit            = D[mm] / (13·Wb)            [empirisch gefittet, s. Chat-
+                                                       Historie 08/2026: ersetzt alte,
+                                                       nachweislich falsche Formel
+                                                       D·0.7·√S — Wb monoton, S bei
+                                                       starker Aberration nicht mehr]
+    V_wendepunkt_naeh = V_krit / ³√(S²)             [nur für Sigmoid-Näherungskurve
+                                                       Q̃(V), nicht V_krit selbst]
 
   MTF:
     Paraboloid:  analytisch (Kreisapertur)          [Sacek §4.1]
@@ -157,20 +172,81 @@ def _Wb_von_S(S: float, n: int = 60) -> float:
     return (lo + hi) / 2.0
 
 
+def v_krit_naeh(D_mm: float, Wb: float) -> float:
+    """Schnelle Näherungsformel für V_krit ohne MTF×CSF-Integration.
+
+    V_krit ≈ D / (13 · Wb)
+
+    KORRIGIERT 08/2026: ersetzt die alte Formel D·0,7·√S. Die behauptete
+    Eigenschaft "= Wendepunkt von Q̃(V)" war nachweislich falsch (Faktor
+    2-5 daneben, s. Chat-Historie) — u.a. weil die EXAKTE Strehl S für
+    stark aberrierte (schnelle, sphärische) Spiegel ab Wb≈0,9λ nicht mehr
+    monoton in Wb ist (Ringing des Pupillenintegrals bei großer Aberration),
+    wodurch S als Eingabegröße für jede Formel strukturell ungeeignet ist.
+    Auch die Maréchal-Näherung (glatt, aber nur für kleine Aberrationen
+    gültig) taugt hier nicht — sie unterschätzt die Qualität bei den für
+    dieses Tool zentralen schlechten Kugelspiegeln massiv (>1000% Fehler
+    im Test).
+
+    Stattdessen: direkter Potenzfit von V_krit gegen den ECHTEN, numerisch
+    bestimmten 10%-Kontrastverlust-Punkt (s. v_krit_aus_qvis), mit Wb
+    (Wellenfrontfehler, immer positiv und monoton mit der tatsächlichen
+    Unschärfe) statt S als Eingabe. Getestet über D=80–400mm, f/4–f/10
+    (61 gültige Datenpunkte nach Ausschluss von Randfällen, wo die
+    10%-Schwelle im Suchbereich nicht erreicht wurde):
+        mittlerer Fehler ≈ 12%, Median ≈ 7%, worst-case (kleine,
+        bereits nahezu beugungsbegrenzte Öffnungen) bis ~85%.
+
+    Geht für Wb→0 (perfekte Optik) korrekt gegen unendlich, statt bei
+    einem willkürlichen endlichen Wert zu "deckeln" wie die alte Formel.
+    """
+    if Wb <= 1e-9:
+        return 1e9
+    return D_mm / (13.0 * Wb)
+
+
+def v_wendepunkt_naeh(D_mm: float, Wb: float) -> float:
+    """Separater 'Wendepunkt' NUR für die Sigmoid-Näherungskurve
+    Q̃(V) = S + (1-S)·(1-w(V)), w(V)=1/(1+(Vk/V)²) — NICHT dasselbe wie
+    V_krit (10%-Kontrastverlust-Schwelle, s. v_krit_naeh).
+
+    Hintergrund (08/2026, s. Chat-Historie): mit V_krit selbst als Vk in
+    der Sigmoid eingesetzt, trifft die Näherungskurve die exakte
+    MTF×CSF-Kurve bei schlechten (schnellen) Kugelspiegeln nur grob
+    (mittlerer Fehler bis ~0,27 bei f/6) — die Sigmoid-Form ist einfach zu
+    schmal/steil für den lang auslaufenden echten Verlauf. Ein GRÖSSERES,
+    strehlabhängiges Vk trifft die Kurve insgesamt besser (Fehler ~0,07-
+    0,12), auch wenn's kein sauber herleitbarer Wert ist wie V_krit selbst.
+
+    Faktor = 1 / ³√(S²) = S^(-2/3) — sauberer, fast identisch guter Ersatz
+    für den ursprünglichen Rohfit (0,9074·S^-0,713, Koeffizient≈1 also
+    einfach weggelassen). Deckel bei Faktor 20 gegen Extremfälle.
+
+    NUR für die Darstellung der Näherungskurve verwenden — für alle
+    anderen V_krit-Zwecke (Info-Panel, Vmax-Diagramme etc.) weiterhin
+    v_krit_naeh() (die echte 10%-Schwelle) benutzen.
+    """
+    if Wb <= 1e-9:
+        return 1e9
+    S = _strehl_exakt(Wb)
+    faktor = min(max(S, 1e-6) ** (-2.0 / 3.0), 20.0)
+    return v_krit_naeh(D_mm, Wb) * faktor
+
+
 def _kennzahlen_von_S(D_mm: float, S: float, Wb: float) -> dict:
     """Effektive Öffnungen und Vergrößerungsgrenzen aus S und Wb.
 
     D_eff_k = D · S^0.25  — äquivalente Öffnung bzgl. Kontrastübertragung
                              (eigene Näherung)
-    V_krit  = D · 0.7 · √S — Vergrößerung ab der Aberrationsblur sichtbar wird
-                              (eigene Erweiterung von Suiter Kap. 6 auf beliebiges S)
+    V_krit  = D / (13·Wb) — Vergrößerung ab der Aberrationsblur sichtbar
+                             wird (s. v_krit_naeh() für Herleitung/Genauigkeit)
     """
     sqrtS       = math.sqrt(max(S, 1e-9))
     Deff_k      = D_mm * S**0.25
     Deff_s      = D_mm * sqrtS
     theta_ideal = 116.0 / D_mm
     theta_eff   = theta_ideal / sqrtS
-    V_krit_vis  = D_mm * 0.7 * sqrtS
+    V_krit_vis  = v_krit_naeh(D_mm, Wb)
     Q02 = mtf_sph_rel(0.2, Wb)
     Q04 = mtf_sph_rel(0.4, Wb)
     Q06 = mtf_sph_rel(0.6, Wb)
@@ -209,12 +285,52 @@ def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr,
     weight    = np.array([csf(fi) if use_csf else mtf_eye(fi) for fi in f_cpd_arr])
     _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
     Q_raw  = float(_trapz(msa_arr * weight, nu) / max(_trapz(mp_arr * weight, nu), 1e-12))
-    V_krit = D_mm * 0.7 * math.sqrt(max(S, 1e-9))
+    V_krit = v_krit_naeh(D_mm, _Wb_von_S(S))
     w      = 1.0 / (1.0 + (V_krit / V) ** 2)
     return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
 
 
 # ── Öffentliche Rechenfunktionen ──────────────────────────────────────────────
+
+# ── Geglättete Strehl-Kurve (nur für das Diagramm „D_eff vs. Öffnung“) ────────
+
+_GLATT_TAB = None   # (ln Wb, ln S geglättet, ln S roh) — wird beim ersten Aufruf berechnet
+
+
+def _lnS_geglaettet(Wb, roh: bool = False) -> np.ndarray:
+    """ln(S) am besten Fokus, für Wb > ~0.4 λ über die Strehl-Oszillation geglättet.
+
+    Der exakte Strehl (Pupillenintegral) ist für starke sphärische Aberration
+    NICHT monoton: er pendelt zwischen ~0.03 und ~0.15 (Ringenergie wandert
+    zwischen Kern und Halo). Das ist echte Physik, aber die Spitzenintensität
+    sagt dort kaum noch etwas über die Bildqualität aus — und D·S^0.25 ist ohnehin
+    eine Näherung für S > ~0.1. Daher: Gauß-Glättung in ln(Wb) (σ = 0.4), weich
+    eingeblendet zwischen Wb = 0.4λ und 1.3λ. Darunter (S > ~0.5) bleibt die
+    exakte Kurve unverändert.
+
+    Alle Kurven f/N sind dieselbe Funktion S(Wb), denn Wb ∝ D/N³ — die Glättung
+    wird daher nur einmal auf der universellen Kurve gemacht und per Interpolation
+    auf beliebige (D, N) abgebildet.
+    roh=True liefert stattdessen die ungeglättete, exakte Kurve (Vergleichslinie).
+    """
+    global _GLATT_TAB
+    if _GLATT_TAB is None:
+        lw = np.linspace(np.log(0.01), np.log(10.0), 1400)
+        # __wrapped__: am lru_cache von _strehl_exakt vorbei (Cache nicht fluten)
+        y = np.log(np.array([_strehl_exakt.__wrapped__(w) for w in np.exp(lw)]))
+        sigma, W0, W1 = 0.4, 0.4, 1.3
+        step = lw[1] - lw[0]
+        h = int(4 * sigma / step)
+        k = np.arange(-h, h + 1) * step
+        ker = np.exp(-0.5 * (k / sigma) ** 2)
+        ker /= ker.sum()
+        ys = np.convolve(np.pad(y, h, mode="edge"), ker, mode="valid")
+        t = np.clip((lw - np.log(W0)) / (np.log(W1) - np.log(W0)), 0.0, 1.0)
+        t = t * t * (3.0 - 2.0 * t)                     # smoothstep
+        _GLATT_TAB = (lw, (1.0 - t) * y + t * ys, y)
+    lw, y_gl, y_roh = _GLATT_TAB
+    return np.interp(np.log(np.maximum(Wb, 1e-6)), lw, y_roh if roh else y_gl)
+
 
 def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
     """Grundlegende optische Kenngrößen (vergrößerungsunabhängig)."""
@@ -257,9 +373,10 @@ def berechne_vergr(D_mm: float, f_mm: float, lam_nm: float,
 
 def v_kritisch(D_mm: float, f_mm: float, lam_nm: float,
                eye_res_as: float = 60.0) -> dict:
-    """Kritische Vergrößerung: V_krit = D_mm · 0.7 · √Strehl  (eigene Erw. von Suiter Kap. 6)."""
+    """Kritische Vergrößerung: V_krit = D_mm / (13·Wb)  (s. Chat-Historie 08/2026,
+    ersetzt die alte, nachweislich falsche Formel D·0,7·√Strehl)."""
     r = berechne(D_mm, f_mm, lam_nm)
-    return dict(Vk_sph=r["V_krit_vis"], Vk_para=D_mm*0.7,
+    return dict(Vk_sph=r["V_krit_vis"], Vk_para=1e9,
                 Vmax=D_mm/0.5, Vmin=D_mm/7.0)
 
 
@@ -286,8 +403,9 @@ def v_krit_blur_direkt(D_mm: float, f_mm: float,
 
 def v_kritisch_strehl(D_mm: float, strehl: float) -> dict:
     """V_krit für beliebigen Strehl-Wert (für Schieber-Vergleich)."""
-    return dict(Vk_sph=D_mm * 0.7 * math.sqrt(max(strehl, 1e-9)),
-                Vk_para=D_mm * 0.7, Vmax=D_mm / 0.5, Vmin=D_mm / 7.0)
+    Wb = _Wb_von_S(strehl)
+    return dict(Vk_sph=v_krit_naeh(D_mm, Wb),
+                Vk_para=v_krit_naeh(D_mm, 1e-9), Vmax=D_mm / 0.5, Vmin=D_mm / 7.0)
 
 
 def v_krit_aus_qvis(D_mm: float, f_mm: float, lam_nm: float,
@@ -365,14 +483,17 @@ def v_krit_aus_qvis_von_Wb(D_mm: float, Wb: float, lam_nm: float,
 def v_halb_exakt(D_mm: float, f_mm: float, lam_nm: float,
                  V_min: float = 10.0, V_max: float = 800.0,
                  n: int = 50) -> float:
-    """Exaktes V½ via MTF×CSF-Integral — Analogon zur Näherung D·0.7·√S.
+    """Exaktes V½ via MTF×CSF-Integral — Analogon zur Näherung V_krit/³√(S²).
 
     Gesucht: V wo Q_vis(V) = (1 + S_exakt) / 2
     Das ist der Halbwertspunkt zwischen Q=1 (V→0) und Q=S_exakt (V→∞),
-    genau wie die Näherungsformel V½ = D·0.7·√S den Wendepunkt von Q̃(V)
-    bei Q̃ = (1+S)/2 beschreibt — hier aber via exaktem Pupillenintegral.
+    genau der Punkt, den die Sigmoid-Näherung Q̃(V) bei w(V)=0.5 (also
+    V=V_wendepunkt_naeh) approximieren soll — hier aber exakt via
+    Pupillenintegral statt der empirisch gefitteten Formel berechnet.
 
-    Ermöglicht direkten Vergleich: V½_naeh vs. V½_exakt
+    Ermöglicht direkten Vergleich: V_wendepunkt_naeh (schnell, ~10-15%
+    Fehler) vs. V½_exakt (hier, langsam aber exakt) — s. Chat-Historie
+    08/2026.
     """
     _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
     S_ex     = _strehl_exakt(Wb)
@@ -395,6 +516,157 @@ def v_halb_exakt(D_mm: float, f_mm: float, lam_nm: float,
         if q(mid) > schwelle: lo = mid
         else:                  hi = mid
     return (lo + hi) / 2.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# "Sinnvolle Maximalvergrößerung" — Gegenprobe zum "2×Öffnung(mm)"-Mythos
+# ═══════════════════════════════════════════════════════════════════════════
+# Motivation (Forum-Thread 08/2026): die "2×D[mm]"-Faustregel behauptet eine
+# einzige, aperturproportionale Grenze, unabhängig von Seeing und Objekt-
+# helligkeit. Drei separate, unabhängig begründbare Grenzen statt einer
+# einzelnen "V_optimal"-Zahl aus einem Integral (zwei Anläufe dazu sind an
+# einem Jacobian-Artefakt bzw. trivialer Entartung gescheitert, s. Chat-
+# Historie — das Objektspektrum selbst müsste mitmodelliert werden, was wir
+# nicht seriös tun können ohne echte Objektdaten). Stattdessen: drei
+# eigenständige Grenzen, jede für sich physikalisch klar begründet, analog
+# zum bereits etablierten Muster von v_krit_blur_direkt() (rein geometrisch,
+# keine Integration):
+#
+#   V_helligkeit_min — Austrittspupille = Augenpupille (ab hier kein
+#                       Lichtverlust mehr, aber auch kein Gewinn durch noch
+#                       groessere AP)
+#   V_seeing_max      — Seeing-Unschaerfe (vergroessert) erreicht die
+#                       Augenaufloesung (analog v_krit_blur_direkt, nur mit
+#                       Seeing statt Spiegel-Blur)
+#   V_helligkeit_max  — Netzhaut-Flaechenhelligkeit faellt unter die
+#                       Wahrnehmungsschwelle (photopisch/mesopisch-Grenze)
+#
+# "Sinnvoller Bereich" = [V_helligkeit_min, min(V_seeing_max, V_helligkeit_max)]
+
+def helligkeit_praxis(D_mm: float, V, L0: float, D_auge_mm: float = 6.0):
+    """Netzhaut-Flächenhelligkeit L(V) für ausgedehnte Objekte (Mond, Planeten,
+    Nebel — NICHT für Sterne, die dimmen mit V nicht, s. Modul-Docstring).
+
+    Etendue-Erhaltung: kein Teleskop kann die Flächenhelligkeit über den
+    Wert bei Austrittspupille=Augenpupille (=L0) hinaus steigern. Bei
+    kleinerer Austrittspupille (höhere Vergrößerung) sinkt sie quadratisch:
+
+        AP = D_mm / V                      (Austrittspupille, mm)
+        L(V) = L0 · min(1, (AP / D_auge_mm)²)
+    """
+    V  = np.asarray(V, dtype=float)
+    AP = D_mm / np.maximum(V, 1e-9)
+    return L0 * np.minimum(1.0, (AP / D_auge_mm) ** 2)
+
+
+def v_min_helligkeit(D_mm: float, D_auge_mm: float = 6.0) -> float:
+    """V ab der Austrittspupille <= Augenpupille — kein Lichtverlust mehr
+    durch eine für das Auge zu große Austrittspupille."""
+    return D_mm / D_auge_mm
+
+
+def v_max_seeing(fwhm_seeing_as: float, eye_res_as: float = 150.0) -> float:
+    """Onset-Schwelle: V ab der die (vergrößerte) Seeing-Unschärfe die
+    Augenauflösung übersteigt — analog v_krit_blur_direkt(), nur mit
+    Seeing statt Spiegel-Blur. Seeing-FWHM ist bereits ein Himmelswinkel
+    (arcsec), keine d_blur→α-Umrechnung nötig (gleiche Konvention wie
+    dort: Blur-Winkel × V = am Auge erscheinender Winkel).
+
+    KORRIGIERT 08/2026: eye_res_as war zunächst 60" (1 Bogenminute,
+    übernommen von v_krit_blur_direkt) — das ergab bei typischem Seeing
+    unrealistisch niedrige Praxiswerte (40×/80× bei 1,5"), deutlich unter
+    publizierter Praxis-Konsens (~1×D bei gutem, ~2×D bei exzellentem
+    Seeing, s. mehrere unabhängige Quellen: cosmicpursuits.com,
+    telescopicwatch.com, nexstarsite.com — "50×/Zoll ≈ 2×D(mm)" als unter
+    guten Bedingungen erreichbare Praxisgrenze, kein reiner Mythos).
+    Rückwärts aus dieser Praxis-Erwartung gelöst ergibt sich konsistent
+    ~150" (2,5 Bogenminuten) für BEIDE Testfälle (0,8" und 1,5" Seeing) —
+    plausibel, da ein weiches, kontrastarmes Seeing-"Kochen" am Okular
+    grober wahrgenommen wird als die scharfe 1-Bogenminuten-Sehschärfe-
+    Testtafel-Schwelle. Getrennt von der 60"-Konvention für Spiegel-Blur
+    (v_krit_blur_direkt) gehalten, da dort scharfe Beugungsringe eher
+    auffallen als diffuses Seeing-Schimmern — bewusst zwei verschiedene
+    Konstanten für zwei unterschiedlich wahrgenommene Unschärfe-Arten.
+
+    WICHTIG: das ist der Onset-Punkt (Blur wird gerade eben sichtbar),
+    NICHT die praktisch nutzbare Obergrenze — exakt wie V_krit für
+    Spiegelfehler auch nur der Onset ist. Der Blenden-Tab verwendet dafür
+    bereits die Konvention V_max_praktisch = 2×V_krit (s. _diagramm_blende,
+    V_max_orig = min(V_max_AP, V_krit_orig*2.0)); dieselbe Verdopplung wird
+    in _diagramm_vmax() für V_seeing_praktisch angewendet.
+    """
+    if fwhm_seeing_as <= 0:
+        return 1e9
+    return eye_res_as / fwhm_seeing_as
+
+
+def v_max_diffraktion(D_mm: float, eye_res_as: float = 150.0) -> float:
+    """Onset-Schwelle: V ab der die (vergrößerte) Beugungsscheibe (Dawes-
+    Grenze) die Augenauflösung übersteigt — fundamentale, aperturabhängige
+    Grenze, die auch für eine PERFEKTE Optik bestehen bleibt. Anders als
+    v_max_seeing (aperturunabhängig, reines Seeing) und anders als
+    v_krit_naeh (Onset durch Spiegelaberration, geht bei Wb→0 selbst
+    schon gegen unendlich) — dies hier ist die Beugungsgrenze als
+    eigener, dritter Effekt, unabhängig von Spiegelfehlern.
+
+    dawes_as = 116/D_mm  (Standard-Dawes-Auflösungsgrenze, Bogensekunden)
+    V = eye_res_as / dawes_as = eye_res_as · D_mm / 116
+
+    Steigt LINEAR mit D — im Gegensatz zu v_max_seeing (aperturunabhängig,
+    konstant). Für kleine Öffnungen dominiert i.d.R. diese Grenze, für
+    große Öffnungen i.d.R. das Seeing — kombiniert über v_kombiniert_blur().
+    Das ist der Kern der Gegenprobe zur "2×D"-Faustregel: die Regel trifft
+    näherungsweise zu, solange die Beugungsgrenze bindend ist (kleine
+    Öffnung), wird aber für große Öffnungen zunehmend zu optimistisch,
+    sobald das (aperturunabhängige) Seeing die Grenze übernimmt.
+    """
+    if D_mm <= 0:
+        return 0.0
+    dawes_as = 116.0 / D_mm
+    return eye_res_as * D_mm / 116.0
+
+
+def v_kombiniert_blur(V_a: float, V_b: float) -> float:
+    """Kombiniert zwei unabhängige Blur-Quellen (z.B. Seeing + Spiegelfehler),
+    jede bereits als eigene V-Schwelle (eye_res/α) ausgedrückt.
+
+    Herleitung: α_a=eye_res/V_a, α_b=eye_res/V_b. Unabhängige Unschärfen
+    addieren sich quadratisch (Gauß-Näherung): α_komb=√(α_a²+α_b²).
+    Daraus: V_komb = eye_res/α_komb = 1/√(1/V_a² + 1/V_b²).
+
+    Ergebnis ist immer <= min(V_a, V_b) — zwei Unschärfequellen zusammen
+    sind nie besser als die schlechtere allein.
+    """
+    if V_a <= 0 or V_b <= 0:
+        return 0.0
+    return 1.0 / math.sqrt(1.0 / V_a**2 + 1.0 / V_b**2)
+
+
+def v_max_helligkeit(D_mm: float, L0: float, D_auge_mm: float = 6.0,
+                     L_schwelle: float = 1.0) -> float:
+    """V ab der die Netzhaut-Flächenhelligkeit unter die Wahrnehmungs-
+    schwelle L_schwelle fällt (Default 1 cd/m², photopisch/mesopisch-
+    Grenze — grobe Orientierung, kein scharfer physiologischer Wert).
+    Gibt 0 zurück wenn das Objekt bereits bei minimaler Vergrößerung
+    (volle Austrittspupille) zu schwach ist.
+    """
+    if L0 <= L_schwelle:
+        return 0.0
+    return (D_mm / D_auge_mm) * math.sqrt(L0 / L_schwelle)
+
+
+# Referenz-Flächenhelligkeiten [cd/m²] — grobe Schätzwerte für typische
+# Beobachtungsobjekte (manuell überschreibbar in der UI). Bereits vorhandene
+# Werte aus csf_lum-Dokumentation übernommen, um Mars/Saturn getrennt und
+# Mond ergänzt.
+OBJEKT_HELLIGKEITEN = [
+    ("Mond",           2500.0),
+    ("Jupiter",        6000.0),
+    ("Saturn",          500.0),
+    ("Mars",            300.0),
+    ("Helles DSO",        5.0),
+    ("Schwaches DSO",     0.5),
+]
 
 
 def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
@@ -432,10 +704,22 @@ def mtf_para(f: float) -> float:
 def mtf_para_obstr(f: float, eps: float) -> float:
     """MTF eines Kreisteleskops mit zentraler Obstruktion ε = d_fang/D.
 
-    Nach Barakat (1962) / Sacek §4.2:
-      MTF(f,ε) = [M(f) − ε²·M(f/ε)] / (1−ε²)   für f ≤ ε
-      MTF(f,ε) =  M(f)               / (1−ε²)   für f > ε
-    mit M(x) = (2/π)·(arccos(x) − x·√(1−x²))
+    KORRIGIERT 10/2026 (v6.10.1): Die frühere Formel
+        [M(f) − ε²·M(f/ε)] / (1−ε²)   für f ≤ ε
+    ließ den Kreuzterm zwischen Außenkreis und Fangspiegelscheibe weg und
+    zeigte dadurch bei ε>0 fälschlich MTF-Werte ÜBER dem unobstruierten
+    Teleskop (Verbesserung statt Verlust bei mittleren Ortsfrequenzen).
+    Gegenprobe: numerische Autokorrelation der Ringpupille (FFT) — z.B.
+    ε=0.25, f=0.2: alt 0.790, richtig 0.671 (unobstruiert 0.747).
+
+    Autokorrelation der Ringpupille = Kreis(1) ⋆ Kreis(1)  +  Kreis(ε) ⋆ Kreis(ε)
+                                      − 2 · Überlappfläche(Kreis 1, Kreis ε; Abstand s)
+    mit s = 2f (Verschiebung in Pupillenradien), normiert auf die Ringfläche
+    π(1−ε²), d.h. MTF(0)=1 (Kontrastübertrag relativ zum Mittelwert).
+
+        MTF(f,ε) = [ M(f) + ε²·M(f/ε) − 2·A12(2f) / π ] / (1−ε²)
+    mit M(x) = (2/π)·(arccos(x) − x·√(1−x²)), A12 = Kreis-Kreis-Überlappfläche.
+    Quellen: Barakat (1962), O'Neill (1956); vgl. Sacek §4.2.
     """
     if f <= 0: return 1.0
     if f >= 1: return 0.0
@@ -446,12 +730,22 @@ def mtf_para_obstr(f: float, eps: float) -> float:
         if x <= 0: return 1.0
         return (2/math.pi) * (math.acos(x) - x * math.sqrt(1 - x**2))
 
+    def _overlap(r1, r2, d):
+        """Überlappfläche zweier Kreise (Radien r1, r2, Mittelpunktabstand d)."""
+        if d >= r1 + r2:
+            return 0.0
+        if d <= abs(r1 - r2):
+            return math.pi * min(r1, r2) ** 2
+        a = r1 * r1 * math.acos((d * d + r1 * r1 - r2 * r2) / (2 * d * r1))
+        b = r2 * r2 * math.acos((d * d + r2 * r2 - r1 * r1) / (2 * d * r2))
+        c = 0.5 * math.sqrt((-d + r1 + r2) * (d + r1 - r2)
+                            * (d - r1 + r2) * (d + r1 + r2))
+        return a + b - c
+
     norm = 1.0 - eps**2
     if norm <= 1e-6: return 0.0
-    if f <= eps:
-        return (M(f) - eps**2 * M(f / eps)) / norm
-    else:
-        return M(f) / norm
+    A12 = _overlap(1.0, eps, 2.0 * f) / math.pi
+    return (M(f) + eps**2 * M(f / eps) - 2.0 * A12) / norm
 
 
 def d_fang_min(D_mm: float, f_mm: float) -> float:
@@ -713,7 +1007,7 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
         W_zonen, W_c_zonen, W_rms, W_ptv, Wb_fit
         a4, a2, fit_residuum_rms, kennzahlen_zuverlaessig
         S_mar, S_exakt, Deff_k
-        Glas_f, Glas_zonen, Glas_ptv_nm, Glas_volumen_mm3, W_min, lam_nm
+        Glas_f, Glas_zonen, Glas_ptv_nm, Glas_volumen_mm3, W_min, W_max, lam_nm
         rho_f, W_best, W_c
     """
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
@@ -781,13 +1075,21 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
     S_mar   = math.exp(-(2 * math.pi * W_rms)**2)
     Deff_k  = D_mm * S_exakt**0.25
 
-    # Materialabtrag
-    Glas_f = Glas_zonen = Glas_ptv_nm = Glas_volumen_mm3 = W_min = None
+    # Materialabtrag (VORZEICHEN KORRIGIERT 10/2026, v6.9.1)
+    # W ist eine "Tiefen"-Groesse (W_c gross = Oberflaeche relativ zu tief).
+    # Abzutragen ist dort, wo die Oberflaeche relativ HOCH steht, also wo W
+    # klein ist: Abtrag(rho) = (W_max - W(rho)) * lam/2, Null im Tal von
+    # "Glass Remaining" (= Maximum von W). Fuer eine Kugel ergibt das Huegel
+    # in Mitte und Rand, Null bei ~0.7R -- identisch zu FigureXP.
+    # Vorher stand hier (W - W_min) -> exakt invertiert (Volumen 8.1 statt
+    # ~4 mm3 bei 200/f5-Kugel).
+    Glas_f = Glas_zonen = Glas_ptv_nm = Glas_volumen_mm3 = W_min = W_max = None
     if lam_nm is not None:
         lam_mm           = lam_nm * 1e-6
         W_min            = float(W_c.min())
-        Glas_f           = (W_c - W_min) * lam_mm / 2.0
-        Glas_zonen       = (W_c_zonen - W_c_zonen.min()) * lam_nm / 2.0
+        W_max            = float(W_c.max())
+        Glas_f           = (W_max - W_c) * lam_mm / 2.0
+        Glas_zonen       = (W_max - W_c_zonen) * lam_nm / 2.0
         Glas_ptv_nm      = float(W_ptv * lam_nm / 2.0)
         Glas_volumen_mm3 = float(
             2 * math.pi * R**2 * _trapz(Glas_f * rho_f, rho_f))
@@ -818,6 +1120,7 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
         Glas_zonen=Glas_zonen,
         Glas_ptv_nm=Glas_ptv_nm,
         W_min=W_min,
+        W_max=W_max,
         lam_nm=lam_nm,
         Glas_volumen_mm3=Glas_volumen_mm3,
         rho_f=rho_f,
@@ -1154,7 +1457,7 @@ def kurven_blende(D_mm: float, f_mm: float, lam_nm: float,
     V_arr = np.linspace(V_min, V_max, n_pts)
 
     def Q_naeh(V_a, S, D):
-        Vk = D * 0.7 * math.sqrt(max(S, 1e-9))
+        Vk = v_wendepunkt_naeh(D, _Wb_von_S(S))
         w  = 1.0 / (1.0 + (Vk / np.maximum(V_a, 1e-9))**2)
         return S + (1.0 - S) * (1.0 - w)
 
@@ -1170,6 +1473,70 @@ def kurven_blende(D_mm: float, f_mm: float, lam_nm: float,
     Q_blend = Q_naeh(V_arr, S_blend, D_blende)
 
     return V_arr, Q_orig, Q_blend, S_orig, S_blend
+
+
+def qvis_einzelrechner(D_mm: float, S: float, V: float,
+                       lam_nm: float = 550.0) -> dict:
+    """Q_vis für EINEN einzelnen Spiegel: Öffnung D, Strehl S, Vergrößerung V
+    (neu in v6.10.0).
+
+    Für beliebige Kombinationen (z.B. den eigenen 400er mit gemessenem
+    Strehl 0,96), unabhängig von den Hauptreglern. Brennweite wird nicht
+    gebraucht: Q_vis hängt nur von D, vom Wellenfrontfehler Wb und von V ab;
+    Wb folgt aus S per Inversion des exakten Pupillenintegrals (_Wb_von_S).
+
+    Rückgabe:
+        Wb        Best-Fokus-Wellenfrontfehler PtV [λ]
+        Q         Q_vis exakt (MTF×CSF-Integral, rel. zum Paraboloid = 1)
+        Q_naeh    Näherung Q̃ = S + (1−S)·(1−w(V))   (wie im Diagramm gestrichelt)
+        verlust   Wahrnehmungsverlust ggü. Paraboloid [%]  = (1−Q)·100
+        V_krit    10%-Kontrastverlust-Schwelle (Näherung D/(13·Wb)), 1e9 = ∞
+        V_q90     Vergrößerung, ab der Q_vis exakt unter 0,90 fällt
+                  (auf 30…600× begrenzt; 600.0 heißt „≥ 600×“, 30.0 „≤ 30×“)
+    """
+    S  = min(max(float(S), 1e-6), 1.0)
+    Wb = _Wb_von_S(S)
+    Q  = 1.0 if Wb <= 1e-9 else perceived_quality_exakt_von_Wb(D_mm, Wb, lam_nm, V)
+    S_ph = _strehl_exakt(Wb)
+    Vk_w = v_wendepunkt_naeh(D_mm, Wb)
+    w    = 1.0 / (1.0 + (Vk_w / max(V, 1e-9)) ** 2)
+    Q_n  = S_ph + (1.0 - S_ph) * (1.0 - w)
+    return dict(D=D_mm, S=S, V=V, lam=lam_nm, Wb=Wb, Q=Q, Q_naeh=Q_n,
+                verlust=(1.0 - Q) * 100.0,
+                V_krit=v_krit_naeh(D_mm, Wb),
+                V_q90=(600.0 if Wb <= 1e-9 else
+                       v_krit_aus_qvis_von_Wb(D_mm, Wb, lam_nm, 0.90)))
+
+
+def qvis_kurve_mit_fangspiegel(D_mm: float, S: float, d_fang_mm: float,
+                               lam_nm: float, V_arr, n: int = 80) -> np.ndarray:
+    """Q_vis(V) eines Spiegels mit Strehl S UND zentraler Fangspiegel-Abschattung
+    (neu in v6.11.0).
+
+    Bezug wie im Wahrnehmungsdiagramm: Paraboloid OHNE Fangspiegel = 1.
+        Q = ∫ MTF_Aberration_rel(S) · MTF_Ring(ε) · CSF(V)  /  ∫ MTF_para · CSF(V)
+    mit ε = d_fang/D (Ringblenden-MTF, s. mtf_para_obstr).
+
+    NÄHERUNG: Die Aberrations-MTF (aus S bzw. Wb) wird unverändert mit der
+    Ring-MTF multipliziert; die Abschattung ändert die Wellenfront-Statistik
+    (Strehl) in Wirklichkeit geringfügig. d_fang_mm <= 0 → identisch zu
+    perceived_quality_exakt_von_Wb().
+    """
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    V_arr  = np.atleast_1d(np.asarray(V_arr, dtype=float))
+    eps    = min(max(d_fang_mm / D_mm, 0.0), 0.95)
+    Wb     = _Wb_von_S(min(max(float(S), 1e-6), 1.0))
+    nu     = np.linspace(0.0, 1.0, n)
+    mp     = np.array([mtf_para(x) for x in nu])
+    mo     = np.array([mtf_para_obstr(x, eps) for x in nu])
+    msr    = (np.ones_like(nu) if Wb <= 1e-9
+              else np.array([mtf_sph_rel(x, Wb) for x in nu]))
+    fc     = D_mm / (lam_nm * 1e-6 * 206265)
+    out = []
+    for V in V_arr:
+        w = np.array([csf(x * 3600.0 / V) for x in nu * fc])
+        out.append(float(_trapz(msr * mo * w, nu) / max(_trapz(mp * w, nu), 1e-12)))
+    return np.array(out)
 
 
 def beurteilung(strehl):
@@ -1189,7 +1556,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "6.4.0 (2026-08-08)"
+VERSION  = "6.11.0 (2026-10-25)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -1225,7 +1592,7 @@ STRINGS = {
     "rS":           {"de": "Strehl Maréchal-Näherung",        "en": "Strehl Maréchal approx."},
     "rS_exakt":     {"de": "Strehl Pupillenintegral",         "en": "Strehl pupil integral"},
     "rDeff_k":      {"de": "Eff. Öffnung Kontrast [mm]",      "en": "Eff. aperture contrast [mm]"},
-    "rVkrit_naeh":  {"de": "V½  Wendepunkt Q̃(V) = D·0.7·√S", "en": "V½  inflection Q̃(V) = D·0.7·√S"},
+    "rVkrit_naeh":  {"de": "V_krit  Näherung  = D/(13·Wb)", "en": "V_crit  approx.  = D/(13·Wb)"},
     "rVkrit_blur":  {"de": "V_krit  Blur sichtbar  (geometrisch)",
                      "en": "V_crit  blur visible  (geometric)"},
     "rVkrit_exakt": {"de": "V_krit  Kontrastverlust >10%  (MTF×CSF)",
@@ -1247,6 +1614,8 @@ STRINGS = {
     "tab_wahrnehmung": {"de": "  Wahrnehmung  ",            "en": "  Perception  "},
     "tab_blende":      {"de": "  Blende  ",                 "en": "  Stop-down  "},
     "tab_foucault":    {"de": "  Foucault  ",               "en": "  Foucault  "},
+    "tab_vmax":        {"de": "  Max. Vergrößerung  ",       "en": "  Max. magnification  "},
+    "tab_vmax_D":      {"de": "  Vmax vs. Ø/Seeing  ",        "en": "  Vmax vs. D/seeing  "},
     # MTF-Beschriftungen
     "mtf_fokus_lbl":   {"de": "Fokusebene:",     "en": "Focus plane:"},
     "mtf_bf":  {"de": "Best Focus  (ρ⁴−ρ²,  telescope-optics.net)",
@@ -1510,6 +1879,8 @@ class App(tk.Tk):
             ("_tab_wahrnehmung",  "tab_wahrnehmung"),
             ("_tab_blende",       "tab_blende"),
             ("_tab_foucault",     "tab_foucault"),
+            ("_tab_vmax",         "tab_vmax"),
+            ("_tab_vmax_D",       "tab_vmax_D"),
         ]
         self._tab_keys = [k for _, k in tab_attrs]
         for attr, tab_key in tab_attrs:
@@ -1557,10 +1928,51 @@ class App(tk.Tk):
                 canvas.get_tk_widget().pack(fill="both", expand=True)
                 setattr(self, attr, (fig, ax, canvas))
             elif attr == "_tab_wahrnehmung":
+                # ── Ablese-Leiste: Cursor-Vergrößerung ──
+                wn = tk.Frame(frm, bg=BG)
+                wn.pack(side="top", fill="x", padx=8, pady=(6, 0))
+                tk.Label(wn, text="Ablesen bei V =", bg=BG, fg="#111",
+                         font=("Helvetica", 9, "bold")).pack(side="left")
+                self._wn_V_var = tk.StringVar(value="150")
+                e_v = tk.Entry(wn, textvariable=self._wn_V_var, width=6,
+                               font=("Helvetica", 9))
+                e_v.pack(side="left", padx=(3, 0))
+                tk.Label(wn, text="×   (oder ins Diagramm klicken;  Spiegel = Regler Öffnung / Brennweite / Strehl-Schieber)",
+                         bg=BG, fg="#666", font=("Helvetica", 9)).pack(side="left", padx=(2, 14))
+
+                wn2 = tk.Frame(frm, bg=BG)
+                wn2.pack(side="top", fill="x", padx=8, pady=(2, 0))
+                tk.Label(wn2, text="Fangspiegel Ø d =", bg=BG, fg="#6a1b9a",
+                         font=("Helvetica", 9, "bold")).pack(side="left")
+                self._wn_fang_var = tk.StringVar(value="0")
+                e_fs = tk.Entry(wn2, textvariable=self._wn_fang_var, width=6,
+                                font=("Helvetica", 9))
+                e_fs.pack(side="left", padx=(3, 0))
+                self._wn_fang_hint = tk.Label(wn2, text="mm   (0 = aus)", bg=BG,
+                                              fg="#666", font=("Helvetica", 9))
+                self._wn_fang_hint.pack(side="left", padx=(2, 0))
+                e_fs.bind("<Return>",   self._wahrnehmung_neu)
+                e_fs.bind("<FocusOut>", self._wahrnehmung_neu)
+                for _e in (e_v,):
+                    _e.bind("<Return>",   self._wahrnehmung_neu)
+                    _e.bind("<FocusOut>", self._wahrnehmung_neu)
+
+                self._wn_readout = tk.Label(frm, text="", bg=BG, fg="#222",
+                                            font=("Helvetica", 9), justify="left",
+                                            anchor="w")
+                self._wn_readout.pack(side="top", fill="x", padx=8, pady=(2, 0))
+
                 fig, ax = plt.subplots(figsize=(8.0, 4.8), dpi=96)
                 fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
                 canvas = FigureCanvasTkAgg(fig, master=frm)
                 canvas.get_tk_widget().pack(fill="both", expand=True)
+
+                def _wn_klick(ev, _ax=ax, _self=self):
+                    # Klick ins Diagramm setzt die Ablese-Vergrößerung
+                    if ev.inaxes is _ax and ev.xdata is not None and ev.button == 1:
+                        _self._wn_V_var.set(str(int(round(float(ev.xdata)))))
+                        _self._wahrnehmung_neu()
+                canvas.mpl_connect("button_press_event", _wn_klick)
                 setattr(self, attr, (fig, ax, canvas))
             elif attr == "_tab_blende":
                 fig, (ax, ax2) = plt.subplots(2, 1, figsize=(8.0, 7.0), dpi=96)
@@ -1613,7 +2025,7 @@ class App(tk.Tk):
                                command=self._foucault_aktualisieren
                                ).pack(side="left", padx=6)
 
-                self._foucault_werkstatt = tk.BooleanVar(value=False)
+                self._foucault_werkstatt = tk.BooleanVar(value=True)
                 tk.Checkbutton(ctrl2,
                                text="🔧 Werkstatt-Ansicht (wie FigureXP)",
                                variable=self._foucault_werkstatt,
@@ -1669,6 +2081,88 @@ class App(tk.Tk):
 
                 # Eingabefelder initial aufbauen
                 self._foucault_eingabe_neu()
+
+            elif attr == "_tab_vmax":
+                # ── Steuerleiste ──────────────────────────────────────────
+                ctrlv = tk.Frame(frm, bg=BG)
+                ctrlv.pack(side="top", fill="x", padx=8, pady=(6, 2))
+
+                tk.Label(ctrlv, text="Objekt:", bg=BG, fg="#555",
+                         font=("Helvetica", 9)).pack(side="left")
+                self._vmax_objekt = tk.StringVar(value=OBJEKT_HELLIGKEITEN[1][0])
+                objekt_namen = [n for n, _ in OBJEKT_HELLIGKEITEN]
+                om = tk.OptionMenu(ctrlv, self._vmax_objekt, *objekt_namen,
+                                   command=lambda *_: self._vmax_objekt_gewaehlt())
+                om.config(bg=BG, fg="#222", font=("Helvetica", 9),
+                          highlightthickness=0)
+                om.pack(side="left", padx=(4, 12))
+
+                tk.Label(ctrlv, text="L₀ [cd/m²]:", bg=BG, fg="#555",
+                         font=("Helvetica", 9)).pack(side="left")
+                self._vmax_L0 = tk.DoubleVar(value=6000.0)
+                tk.Entry(ctrlv, textvariable=self._vmax_L0, width=8,
+                         font=("Helvetica", 9)).pack(side="left", padx=(2, 12))
+                tk.Button(ctrlv, text="↻ Update", font=("Helvetica", 8),
+                          command=self._aktualisieren
+                          ).pack(side="left", padx=(0, 4))
+
+                ctrlv2 = tk.Frame(frm, bg=BG)
+                ctrlv2.pack(side="top", fill="x", padx=8, pady=(0, 4))
+
+                tk.Label(ctrlv2, text="Seeing FWHM [\"]:", bg=BG, fg="#555",
+                         font=("Helvetica", 9)).pack(side="left")
+                self._vmax_seeing = tk.DoubleVar(value=1.5)
+                tk.Entry(ctrlv2, textvariable=self._vmax_seeing, width=5,
+                         font=("Helvetica", 9)).pack(side="left", padx=(2, 12))
+
+                tk.Label(ctrlv2, text="Augenpupille [mm]:", bg=BG, fg="#555",
+                         font=("Helvetica", 9)).pack(side="left")
+                self._vmax_D_auge = tk.DoubleVar(value=6.0)
+                tk.Entry(ctrlv2, textvariable=self._vmax_D_auge, width=5,
+                         font=("Helvetica", 9)).pack(side="left", padx=(2, 12))
+
+                tk.Label(ctrlv2, text="Helligkeitsschwelle [cd/m²]:", bg=BG, fg="#555",
+                         font=("Helvetica", 9)).pack(side="left")
+                self._vmax_L_schwelle = tk.DoubleVar(value=1.0)
+                tk.Entry(ctrlv2, textvariable=self._vmax_L_schwelle, width=5,
+                         font=("Helvetica", 9)).pack(side="left", padx=(2, 4))
+
+                # ── Diagramm ──────────────────────────────────────────────
+                fig, ax = plt.subplots(figsize=(8.0, 4.8), dpi=96)
+                fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
+                canvas = FigureCanvasTkAgg(fig, master=frm)
+                canvas.get_tk_widget().pack(fill="both", expand=True)
+                setattr(self, attr, (fig, ax, canvas))
+
+            elif attr == "_tab_vmax_D":
+                # ── Steuerleiste ──────────────────────────────────────────
+                ctrld = tk.Frame(frm, bg=BG)
+                ctrld.pack(side="top", fill="x", padx=8, pady=(6, 4))
+
+                tk.Label(ctrld, text="Seeing-Werte [\"] (kommagetrennt):",
+                         bg=BG, fg="#555", font=("Helvetica", 9)
+                         ).pack(side="left")
+                self._vmaxD_seeings = tk.StringVar(value="0.8, 1.5, 2.5, 4.0")
+                tk.Entry(ctrld, textvariable=self._vmaxD_seeings, width=24,
+                         font=("Helvetica", 9)).pack(side="left", padx=(4, 12))
+
+                tk.Label(ctrld, text="D-Bereich [mm]:", bg=BG, fg="#555",
+                         font=("Helvetica", 9)).pack(side="left")
+                self._vmaxD_Dmin = tk.DoubleVar(value=50.0)
+                tk.Entry(ctrld, textvariable=self._vmaxD_Dmin, width=5,
+                         font=("Helvetica", 9)).pack(side="left", padx=(2, 2))
+                tk.Label(ctrld, text="–", bg=BG).pack(side="left")
+                self._vmaxD_Dmax = tk.DoubleVar(value=500.0)
+                tk.Entry(ctrld, textvariable=self._vmaxD_Dmax, width=5,
+                         font=("Helvetica", 9)).pack(side="left", padx=(2, 4))
+
+                # ── Diagramm ──────────────────────────────────────────────
+                fig, ax = plt.subplots(figsize=(8.0, 4.8), dpi=96)
+                fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
+                canvas = FigureCanvasTkAgg(fig, master=frm)
+                canvas.get_tk_widget().pack(fill="both", expand=True)
+                setattr(self, attr, (fig, ax, canvas))
+
             else:
                 fs = (7.5, 4.8) if attr == "_tab_beugung" else (5.6, 4.2)
                 fig, ax = plt.subplots(figsize=fs, dpi=96)
@@ -1814,6 +2308,161 @@ class App(tk.Tk):
                     self._foucault_eingabe_neu()
                 else:
                     self._foucault_aktualisieren()
+        elif tab_key == "tab_vmax":
+            self._diagramm_vmax(D, f, S_slide)
+        elif tab_key == "tab_vmax_D":
+            self._diagramm_vmax_D()
+
+    def _diagramm_vmax_D(self):
+        """Zeigt V_max(D) für PERFEKTE Optik (S=1): Beugungsgrenze (linear
+        in D) kombiniert mit Seeing (aperturunabhängig, konstant) für
+        mehrere Seeing-Werte, plus "2×D"-Mythos zum Vergleich.
+
+        Vereinfachung ggü. _diagramm_vmax() (08/2026, auf Wunsch): keine
+        Verknüpfung mit Spiegel-Strehl — zeigt nur die FUNDAMENTALE Grenze,
+        die auch bei perfekter Politur bleibt: Beugung + Seeing. Die
+        Kombination mit tatsächlichem Spiegel-Strehl macht _diagramm_vmax()
+        (inzwischen korrekt, seit v_krit_naeh bei Wb→0 sauber gegen
+        unendlich geht statt bei der alten D·0,7·√S-Formel zu deckeln).
+
+        Kernaussage: die "2×D"-Regel trifft näherungsweise zu, solange die
+        (aperturproportionale) Beugungsgrenze bindend ist (kleine
+        Öffnungen) — wird aber zunehmend zu optimistisch, sobald das
+        (aperturunabhängige) Seeing übernimmt (große Öffnungen). Der
+        Übergang ("Knick") liegt ungefähr dort, wo beide Kurven sich
+        schneiden.
+        """
+        fig, ax, canvas = self._tab_vmax_D
+        ax.cla()
+        ax.set_facecolor(BG)
+
+        try:
+            seeings = [float(s.strip()) for s in self._vmaxD_seeings.get().split(",") if s.strip()]
+        except ValueError:
+            seeings = [0.8, 1.5, 2.5, 4.0]
+        Dmin = max(self._vmaxD_Dmin.get(), 10.0)
+        Dmax = max(self._vmaxD_Dmax.get(), Dmin + 10.0)
+
+        D_arr = np.linspace(Dmin, Dmax, 300)
+        farben = ["#1565c0", "#2e7d32", "#E65100", "#8e44ad", "#00838f", "#ad1457"]
+
+        for i, seeing in enumerate(seeings):
+            V_see = v_max_seeing(seeing)
+            V_diff = np.array([v_max_diffraktion(D) for D in D_arr])
+            V_komb = np.array([v_kombiniert_blur(v, V_see) for v in V_diff])
+            farbe = farben[i % len(farben)]
+            ax.plot(D_arr, V_komb * 2.0, color=farbe, lw=2.0,
+                   label=f"Seeing {seeing:.1f}\"  (praktisch)")
+
+        ax.plot(D_arr, 2.0 * D_arr, color="#c62828", lw=1.8, ls=":",
+               label='"2×D"-Mythos')
+
+        ax.set_xlabel("Öffnung D [mm]", fontsize=9)
+        ax.set_ylabel("V_max praktisch  [×]  (perfekte Optik, S=1)", fontsize=9)
+        ax.set_title("Sinnvolle Maximalvergrößerung vs. Öffnung — "
+                     "Beugung + Seeing, perfekte Optik",
+                     fontsize=9, fontweight="bold")
+        ax.legend(fontsize=8, loc="upper left")
+        ax.grid(True, alpha=0.25)
+        ax.set_xlim(D_arr[0], D_arr[-1])
+        ax.set_ylim(bottom=0)
+        fig.tight_layout()
+        canvas.draw()
+
+    def _vmax_objekt_gewaehlt(self):
+        """Füllt L₀ mit dem Referenzwert des gewählten Objekt-Presets;
+        bleibt danach frei überschreibbar (Preset + manuell, s. Chat)."""
+        name = self._vmax_objekt.get()
+        for n, L0 in OBJEKT_HELLIGKEITEN:
+            if n == name:
+                self._vmax_L0.set(L0)
+                break
+        self._aktualisieren()
+
+    def _diagramm_vmax(self, D: float, f: float, S_slide: float):
+        """'Sinnvolle Maximalvergrößerung' — Gegenprobe zum 2×D-Mythos.
+
+        Zeigt L(V) (Netzhaut-Flächenhelligkeit) sowie die unabhängigen
+        Grenzen V_helligkeit_min, V_seeing (Onset/praktisch, jetzt mit
+        Spiegelfehler kombiniert), V_helligkeit_max, dazu die klassische
+        2×D-Faustregel zum Vergleich. S. Modul-Docstring bei
+        v_min_helligkeit() für die Herleitung und warum keine einzelne
+        'V_optimal'-Zahl aus einem Integral verwendet wird.
+
+        WICHTIG (08/2026): V_seeing allein ignoriert die Spiegelqualität.
+        Für einen schlechten (v.a. schnellen) Kugelspiegel kann der
+        Spiegel selbst mehr Unschärfe beitragen als die Atmosphäre — daher
+        wird die Seeing-Grenze jetzt mit dem geometrischen Spiegel-Blur des
+        AKTUELLEN Spiegels (S_slide, wie im Rest des Tools) über
+        v_kombiniert_blur() kombiniert. Für eine sehr gute Optik (S→1)
+        reduziert sich das automatisch auf reines Seeing.
+        """
+        fig, ax, canvas = self._tab_vmax
+        ax.cla()
+        ax.set_facecolor(BG)
+
+        L0         = max(self._vmax_L0.get(), 1e-6)
+        seeing     = max(self._vmax_seeing.get(), 0.0)
+        D_auge     = max(self._vmax_D_auge.get(), 0.5)
+        L_schwelle = max(self._vmax_L_schwelle.get(), 1e-6)
+        objekt     = self._vmax_objekt.get()
+
+        V_hmin   = v_min_helligkeit(D, D_auge)
+        V_seeM   = v_max_seeing(seeing)                 # Onset: Seeing allein
+        V_mirror = v_krit_naeh(D, _Wb_von_S(S_slide))    # Onset: Spiegel allein
+        V_komb   = v_kombiniert_blur(V_seeM, V_mirror)   # Onset: beide zusammen
+        V_komb_prakt = V_komb * 2.0                      # praktisch, s. Konvention V_max=2×V_krit
+        V_hmax   = v_max_helligkeit(D, L0, D_auge, L_schwelle)
+        V_mythos = 2.0 * D
+
+        V_obergrenze = max(V_mythos, V_komb_prakt, V_hmax if V_hmax > 0 else 0, V_hmin) * 1.15
+        V_arr = np.logspace(math.log10(3.0), math.log10(V_obergrenze), 400)
+        L_V   = helligkeit_praxis(D, V_arr, L0, D_auge)
+
+        ACC = "#1565c0"; COR = "#E65100"; GRN = "#2e7d32"; VIO = "#8e44ad"; GRA = "#888888"
+
+        ax.plot(V_arr, L_V, color=ACC, lw=2.0, label=f"L(V) — {objekt} (L₀={L0:.1f} cd/m²)")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.axhline(L_schwelle, color="#999", lw=1.0, ls=":",
+                   label=f"Wahrnehmungsschwelle ({L_schwelle:.2g} cd/m²)")
+
+        ax.axvline(V_hmin, color=GRN, lw=1.6, ls="--",
+                   label=f"V_helligkeit_min={V_hmin:.0f}×  (AP=Augenpupille)")
+        if V_seeM < V_obergrenze:
+            ax.axvline(V_seeM, color=GRA, lw=1.0, ls=":",
+                       label=f"V_seeing allein={V_seeM:.0f}×  (Seeing {seeing:.1f}\")")
+        if V_mirror < V_obergrenze:
+            ax.axvline(V_mirror, color=GRA, lw=1.0, ls="-.",
+                       label=f"V_spiegel allein={V_mirror:.0f}×  (S={S_slide:.3f})")
+        if V_komb < V_obergrenze:
+            ax.axvline(V_komb, color=COR, lw=1.2, ls=":",
+                       label=f"V_kombiniert Onset={V_komb:.0f}×")
+            ax.axvline(V_komb_prakt, color=COR, lw=1.6, ls="--",
+                       label=f"V_kombiniert praktisch={V_komb_prakt:.0f}×  (=2×Onset)")
+        if 0 < V_hmax < V_obergrenze:
+            ax.axvline(V_hmax, color=VIO, lw=1.6, ls="--",
+                       label=f"V_helligkeit_max={V_hmax:.0f}×")
+        ax.axvline(V_mythos, color="#c62828", lw=1.6, ls=":",
+                   label=f"\"2×D\"-Mythos={V_mythos:.0f}×")
+
+        V_ober_sinn = min(x for x in [V_komb_prakt, V_hmax if V_hmax > 0 else 1e9] if x > 0)
+        if V_ober_sinn > V_hmin:
+            ax.axvspan(V_hmin, V_ober_sinn, color=GRN, alpha=0.08,
+                       label=f"sinnvoller Bereich ≈ {V_hmin:.0f}–{V_ober_sinn:.0f}×")
+
+        ax.set_xlim(V_arr[0], V_arr[-1])
+        ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+        ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+        ax.set_xlabel("Vergrößerung V [×]  (log)", fontsize=9)
+        ax.set_ylabel("Netzhaut-Flächenhelligkeit L(V) [cd/m²]", fontsize=9)
+        ax.set_title(f"Sinnvolle Maximalvergrößerung  —  D={D:.0f}mm  f/{f/D:.1f}  S={S_slide:.3f}  "
+                     f"Seeing={seeing:.1f}\"  Augenpupille={D_auge:.1f}mm",
+                     fontsize=9, fontweight="bold")
+        ax.legend(fontsize=7.5, loc="upper right")
+        ax.grid(True, which="both", alpha=0.2)
+        fig.tight_layout()
+        canvas.draw()
 
     def _zeige_fehler(self, msg: str):
         """Zeigt Berechnungsfehler im Statusbereich an."""
@@ -1949,6 +2598,8 @@ class App(tk.Tk):
             ("_tab_wahrnehmung", "tab_wahrnehmung"),
             ("_tab_blende",      "tab_blende"),
             ("_tab_foucault",    "tab_foucault"),
+            ("_tab_vmax",        "tab_vmax"),
+            ("_tab_vmax_D",      "tab_vmax_D"),
         ]]
         startup = not getattr(self, "_first_draw_done", False)
         if startup:
@@ -2079,7 +2730,7 @@ class App(tk.Tk):
                 self._foucault_use_direct = tk.BooleanVar(value=False)
             use_direct = self._foucault_use_direct.get()
             if not hasattr(self, "_foucault_werkstatt"):
-                self._foucault_werkstatt = tk.BooleanVar(value=False)
+                self._foucault_werkstatt = tk.BooleanVar(value=True)
             werkstatt_ansicht = self._foucault_werkstatt.get()
             if not hasattr(self, "_foucault_grad_modus"):
                 self._foucault_grad_modus = tk.StringVar(value="bic")
@@ -2168,13 +2819,15 @@ class App(tk.Tk):
         rho_fine = kz["rho_f"]
         W_fine   = kz["W_c"]    # pistonbereinigt, bester Fokus
 
-        # Werkstatt-Ansicht: Referenz an den Taelern der Oberflaeche
-        # "anlegen" (kein Unterschuss moeglich, direkt ablesbar wo/wieviel
-        # Glas noch runter muss - entspricht FigureXPs Darstellung). Reine
-        # Anzeigeverschiebung um eine Konstante -> Kennzahlen in kz
-        # (S_exakt/W_rms/W_ptv) bleiben unveraendert (RMS-Bestfit).
-        W_shift = -float(np.min(W_fine)) if werkstatt_ansicht else 0.0
-        W_fine_disp = W_fine + W_shift
+        # Werkstatt-Ansicht (FigureXP-Darstellung): Kurve vertikal gespiegelt,
+        # Null im Tal (bei ~0.7R), Huegel in Mitte und Rand -- genau wie
+        # FigureXPs "Surface Error Analysis" / "Glass Remaining". Reine
+        # Anzeigetransformation y -> W_max - y: Kennzahlen in kz (S_exakt/
+        # W_rms/W_ptv) bleiben unveraendert. ACHTUNG Vorzeichen: gegenueber
+        # der Standardansicht (Abtrag-Sicht, Maximum im Tal bei 0.7R) ist das
+        # exakt die gespiegelte Kurve (Summe beider = PtV).
+        W_ref   = float(np.max(W_fine))
+        W_fine_disp = (W_ref - W_fine) if werkstatt_ansicht else W_fine
 
         _grad = kz.get("poly_grad", 1)
         _res  = kz.get("fit_residuum_rms", 0.0)
@@ -2195,13 +2848,16 @@ class App(tk.Tk):
         Glas_z = kz.get("Glas_zonen")
         W_min  = kz.get("W_min")
         if Glas_z is not None and W_min is not None:
-            y_punkte = Glas_z * 2.0 / lam + W_min + W_shift   # nm → λ (linke Achse, gleiche Position)
+            # Punkte liegen auf der Kurve (gleiche Referenz W_max wie Abtrag).
+            y_punkte = (W_ref - np.asarray(kz["W_c_zonen"])) if werkstatt_ansicht \
+                       else np.asarray(kz["W_c_zonen"])
+            Glas_lbl = Glas_z
             Wm_disc  = float(np.mean(W_z))
             ax_wf.scatter(rho_z, y_punkte, color=COR, s=50, zorder=5,
                           label=f"Messzonen (n={len(r_zon)})")
             for i, (rho, yp) in enumerate(zip(rho_z, y_punkte)):
                 wc  = W_z[i] - Wm_disc   # unverschoben, fuer λ-Angabe im Label
-                txt = f"Z{i+1}: {Glas_z[i]:.0f} nm\n({wc:+.3f}λ)"
+                txt = f"Z{i+1}: {Glas_lbl[i]:.0f} nm\n({wc:+.3f}λ)"
                 ax_wf.annotate(txt,
                                xy=(rho, yp), xytext=(0, 10),
                                textcoords="offset points",
@@ -2209,7 +2865,7 @@ class App(tk.Tk):
         else:
             # Fallback ohne lam_nm: nur λ-Skala
             Wm_disc  = float(np.mean(W_z))
-            W_c_disc = W_z - Wm_disc + W_shift
+            W_c_disc = (W_ref - (W_z - Wm_disc)) if werkstatt_ansicht else (W_z - Wm_disc)
             ax_wf.scatter(rho_z, W_c_disc, color=COR, s=50, zorder=5,
                           label=f"Messzonen (n={len(r_zon)})")
             for i, (rho, wc) in enumerate(zip(rho_z, W_c_disc)):
@@ -2228,8 +2884,10 @@ class App(tk.Tk):
                           label="λ/4 (Rayleigh, PtV)")
         ax_wf.set_xlim(-0.02, 1.05)
         ax_wf.set_xlabel("Normierter Zonenradius ρ = r/R", fontsize=8)
-        ax_wf.set_ylabel("Wellenfrontfehler W(ρ)  [Einheiten von λ]", fontsize=8)
-        ax_wf.set_title("Werkstatt-Ansicht (Referenz an Oberflächen-Tälern)"
+        ax_wf.set_ylabel("Oberflächenfehler, Wellenfront-Skala  [Einheiten von λ]"
+                         if werkstatt_ansicht else
+                         "Wellenfrontfehler W(ρ)  [Einheiten von λ]", fontsize=8)
+        ax_wf.set_title("Werkstatt-Ansicht (wie FigureXP: Surface Error / Glass Remaining)"
                         if werkstatt_ansicht else
                         "Gemessene Wellenfront (bester Fokus, pistonbereinigt)",
                         fontsize=8, fontweight="bold")
@@ -2241,11 +2899,16 @@ class App(tk.Tk):
         #    am wenigsten bearbeiteten Punkt (Minimum der Wellenfrontkurve) ──
         W_min = kz.get("W_min")
         if W_min is not None:
-            zu_glas = lambda w: (np.asarray(w) - W_shift - W_min) * lam / 2.0
-            zu_lam  = lambda g: np.asarray(g) * 2.0 / lam + W_min + W_shift
+            if werkstatt_ansicht:
+                zu_glas = lambda w: np.asarray(w) * lam / 2.0
+                zu_lam  = lambda g: np.asarray(g) * 2.0 / lam
+                _glas_lbl = "Glass Remaining [nm]  (0 = Tal: dort nichts abtragen, wie FigureXP)"
+            else:
+                zu_glas = lambda w: (W_ref - np.asarray(w)) * lam / 2.0
+                zu_lam  = lambda g: W_ref - np.asarray(g) * 2.0 / lam
+                _glas_lbl = "Materialabtrag [nm Glas]  (0 = Tal: dort nichts abtragen)"
             ax_glas = ax_wf.secondary_yaxis("right", functions=(zu_glas, zu_lam))
-            ax_glas.set_ylabel("Materialabtrag [nm Glas]  (0 = am wenigsten bearbeiteter Punkt)",
-                               fontsize=8, color="#6a1b9a")
+            ax_glas.set_ylabel(_glas_lbl, fontsize=8, color="#6a1b9a")
             ax_glas.tick_params(colors="#6a1b9a", labelsize=7)
 
         # ── Kennzahlentafel ───────────────────────────────────────────────
@@ -2281,7 +2944,7 @@ class App(tk.Tk):
             ("Abtrag PtV (Glas)",  f"{kz['Glas_ptv_nm']:.1f} nm"
                                    if kz.get("Glas_ptv_nm") is not None else "–"),
             ("Abtrag V (Glas)",  f"{kz['Glas_volumen_mm3']:.1f} mm³"
-                                   if kz.get("Glas_volumen_mm3") is not None else "–"),                      
+                                   if kz.get("Glas_volumen_mm3") is not None else "–"),
             ("", ""),
             ("Strehl  Maréchal",   f"{kz['S_mar']:.4f}"),
             ("Strehl  exakt",      _s_exakt_str),
@@ -2429,20 +3092,18 @@ class App(tk.Tk):
         colors_N = {5:"#c62828", 6:"#D85A30", 7:"#c8a020", 8:"#2e7d32", 10:"#1565c0"}
 
         for N in N_list:
-            loss_pct, loss_qvis = [], []
-            for D in D_arr:
-                r = berechne(D, D * N, 550.0)
-                loss_pct.append((1 - r["strehl"]**0.25) * 100)
-                loss_qvis.append((1 - r["Qvis"]**0.25) * 100)
+            Wb_arr = np.array([_wellenfronten(D, D * N, 550.0)[2] for D in D_arr])
+            loss_pct = (1.0 - np.exp(0.25 * _lnS_geglaettet(Wb_arr))) * 100
             col = colors_N[N]
-            ax.plot(D_arr, loss_pct,  color=col, lw=2,   label=f"f/{N}")
-            ax.plot(D_arr, loss_qvis, color=col, lw=1.2, ls="--", alpha=0.6)
+            loss_roh = (1.0 - np.exp(0.25 * _lnS_geglaettet(Wb_arr, roh=True))) * 100
+            ax.plot(D_arr, loss_roh, color=col, lw=1.0, ls="--", alpha=0.35, zorder=1)
+            ax.plot(D_arr, loss_pct, color=col, lw=2, label=f"f/{N}", zorder=3)
             ax.text(D_arr[-1] + 3, loss_pct[-1], f"f/{N}",
                     color=col, fontsize=9, va="center", fontweight="bold")
 
-        r_akt    = berechne(D_akt, D_akt * N_akt, 550.0)
-        S_akt    = r_akt["strehl"]
-        loss_akt = (1 - S_akt**0.25) * 100
+        Wb_akt   = _wellenfronten(D_akt, D_akt * N_akt, 550.0)[2]
+        S_akt    = _strehl_exakt(Wb_akt)          # exakt, für Vergleich mit Schieber
+        loss_akt = (1.0 - np.exp(0.25 * float(_lnS_geglaettet(Wb_akt)))) * 100  # auf der Kurve
         ax.scatter([D_akt], [loss_akt], color=ACC, s=80, zorder=6)
         ax.annotate(f"D={D_akt:.0f}mm f/{N_akt:.1f}  -{loss_akt:.0f}% Öffnung",
                     xy=(D_akt, loss_akt), xytext=(D_akt + 15, loss_akt + 5),
@@ -2475,15 +3136,17 @@ class App(tk.Tk):
         ax.set_ylabel(T("ax_oeff_loss"), fontsize=10)
         from matplotlib.lines import Line2D
         proxy = [
-            Line2D([0],[0], color="#555", lw=2,            label="D × S^0.25  (Kontrast)"),
-            Line2D([0],[0], color="#555", lw=1.2, ls="--", label="D × Q_vis^0.25  (visuell)"),
+            Line2D([0],[0], color="#555", lw=2,   label="D × S^0.25  (geglättet)"),
+            Line2D([0],[0], color="#555", lw=1.0, ls="--", alpha=0.5,
+                   label="D × S^0.25  (exakter Strehl, ungeglättet)"),
         ]
         ax.legend(handles=proxy, fontsize=9, loc="upper left")
-        ax.set_title("Öffnungsverlust vs. Öffnung — "
-                     "durchgezogen: D×S^0.25  |  gestrichelt: D×Q_vis^0.25", fontsize=9)
+        ax.set_title("Öffnungsverlust vs. Öffnung — D × S^0.25  (Kontrast)", fontsize=9)
         ax.text(0.5, -0.13,
                 "Gilt für V→∞ (reine Kontrast-/MTF-Form, ohne Augenauflösung/CSF) — "
-                "bei kleiner Vergrößerung besser: Tab „Q_vis vs. Vergrößerung“",
+                "bei kleiner Vergrößerung besser: Tab „Q_vis vs. Vergrößerung“\n"
+                "Durchgezogen: Oszillation des exakten Strehl ab S < ~0.5 geglättet; "
+                "gestrichelt: exakte Kurve. Dort ist S^0.25 nur noch qualitativ.",
                 transform=ax.transAxes, ha="center", va="top",
                 fontsize=7.5, color="#777", style="italic")
         self._ax_fmt(ax); fig.tight_layout(); canvas.draw_idle()
@@ -2639,35 +3302,117 @@ class App(tk.Tk):
         ax.legend(fontsize=9, loc="lower left")
         self._ax_fmt(ax); fig.tight_layout(); canvas.draw_idle()
 
+    def _wahrnehmung_lesen(self):
+        """Liest Cursor-V und Fangspiegel-Ø als GANZE Zahlen aus den Feldern
+        (Nachkommastellen werden gerundet; Komma oder Punkt sind erlaubt).
+        Ungültige Eingaben (leer/Text/V≤0/d<0) lassen den letzten Wert stehen;
+        das Feld wird danach auf die ganze Zahl zurückgeschrieben."""
+        def _ganz(var, fallback, minimum):
+            try:
+                x = int(round(float(str(var.get()).strip().replace(",", "."))))
+                if x >= minimum:
+                    return x
+            except (tk.TclError, ValueError):
+                pass
+            return fallback
+        V = _ganz(self._wn_V_var, int(getattr(self, "_wn_V", 150)), 1)
+        d = _ganz(self._wn_fang_var, int(getattr(self, "_wn_fang", 0)), 0)
+        self._wn_V, self._wn_fang = float(V), float(d)   # d: Fangspiegel-Ø [mm], 0 = aus
+        self._wn_V_var.set(str(V))
+        self._wn_fang_var.set(str(d))
+        return V
+
+    def _wahrnehmung_readout(self, D, f, lam, S_slide, S_real):
+        """Exakte Q_vis-Werte bei der Cursor-Vergrößerung für die Spiegel der
+        Hauptregler (Öffnung, Brennweite, Strehl-Schieber)."""
+        V = self._wn_V
+
+        def _vtxt(v):
+            return "≥ 600×" if v >= 599.5 else "≤ 30×" if v <= 30.5 else f"{v:.0f}×"
+        def _vk(v):
+            return "∞" if v >= 1e8 else f"{v:.0f}×"
+        q_sph = perceived_quality_exakt(D, f, lam, V)
+        _, _, Wb_sph, _, _ = _wellenfronten(D, f, lam)
+        S_sph = _strehl_exakt(Wb_sph)
+        zeilen = [
+            f"V = {V:.0f}×  (λ={lam:.0f} nm)   —   D={D:.0f} mm  f={f:.0f} mm  (f/{f/D:.1f})",
+            f"Sphäre   S={S_sph:.3f}:   Q_vis = {q_sph:.4f}   Verlust {(1-q_sph)*100:.1f} %",
+        ]
+        if S_slide is not None and S_real is not None and S_slide > S_real + 0.01:
+            e = qvis_einzelrechner(D, S_slide, V, lam)
+            zeilen.append(
+                f"Schieber S={S_slide:.3f}:   Q_vis = {e['Q']:.4f}   Q̃ = {e['Q_naeh']:.4f}   "
+                f"Verlust {e['verlust']:.1f} %   Q≥0.90 bis {_vtxt(e['V_q90'])}   V_krit {_vk(e['V_krit'])}")
+        d_fs = getattr(self, "_wn_fang", 0.0)
+        d_min = d_fang_min(D, f)
+        self._wn_fang_hint.config(
+            text=f"mm   (0 = aus;  Mindestgröße für D/f: {d_min:.0f} mm)")
+        if d_fs > 0:
+            S_u = S_slide if S_slide is not None else S_sph
+            q_fs = float(qvis_kurve_mit_fangspiegel(D, S_u, d_fs, lam, V)[0])
+            zeilen.append(f"Schieber + Fangspiegel  d={d_fs:.0f} mm (ε={min(d_fs/D,0.95):.2f}):   "
+                          f"Q_vis = {q_fs:.4f}   (Näherung)")
+        zeilen.append("Paraboloid:   Q_vis = 1.0000")
+        self._wn_readout.config(text="\n".join(zeilen))
+
+    def _wahrnehmung_neu(self, *_):
+        """Nur das Wahrnehmungs-Diagramm neu zeichnen (Cursor)."""
+        res = getattr(self, "_last_params", None)
+        if res is None:
+            return
+        try:
+            self._diagramm_fuer_tab("tab_wahrnehmung", res)
+        except Exception:
+            import traceback
+            self._zeige_fehler(traceback.format_exc())
+
     def _diagramm_wahrnehmung(self, D, f, lam,
                                S_slide=None, S_real=None):
         """Visueller Qualitätsindex Q_vis vs. Vergrößerung.
 
         Zwei Kurven pro Spiegel:
           · Q_vis exakt  = MTF×CSF-Integral ohne w(V)         (durchgezogen)
-          · Q̃ Näherung  = S + (1−S)·(1−w(V))  [eigene Formel] (gestrichelt)
+          · Q̃ Näherung  = S + (1−S)·(1−w(V))  [w(V) mit V_wendepunkt_naeh,
+                           NICHT V_krit — s. Chat-Historie 08/2026:
+                           V_krit selbst passt die Kurvenform schlecht,
+                           separater gröberer Korrekturfaktor für S<1]
+                           (gestrichelt)
         """
         fig, ax, canvas = self._tab_wahrnehmung
         ax.cla()
 
+        # Ablese-Cursor (10/2026, v6.10.0): V_cur=None -> kein Cursor.
+        # Desktop: Werte aus den Eingabefeldern lesen + Textzeile aktualisieren;
+        # Web: Attribute werden von plot_wahrnehmung() gesetzt.
+        if hasattr(self, "_wn_V_var"):
+            self._wahrnehmung_lesen()
+            self._wahrnehmung_readout(D, f, lam, S_slide, S_real)
+        V_cur = getattr(self, "_wn_V", None)
+
         _, _, Wb, _, S_mar = _wellenfronten(D, f, lam)
         S_exakt = _strehl_exakt(Wb)
 
-        V_krit     = D * 0.7 * math.sqrt(max(S_exakt, 1e-9))
+        V_krit     = v_krit_naeh(D, Wb)
+        V_wende    = v_wendepunkt_naeh(D, Wb)
+        V_halb     = v_halb_exakt(D, f, lam)
         V_max_plot = 400.0
-        V_arr      = np.linspace(30, V_max_plot, 150)
+        V_min_plot = 30.0
+        if V_cur is not None:                 # Achse so erweitern, dass V sichtbar bleibt
+            V_max_plot = max(V_max_plot, V_cur * 1.15)
+            V_min_plot = min(V_min_plot, V_cur * 0.85)
+        V_arr      = np.linspace(V_min_plot, V_max_plot, 150)
 
         Qe_sph  = perceived_quality_exakt_kurven(D, f, lam, V_arr)
         f_para  = D * 50.0
         Qe_para = perceived_quality_exakt_kurven(D, f_para, lam, V_arr)
 
-        def Q_naeh(V_a, S):
-            Vk = D * 0.7 * math.sqrt(max(S, 1e-9))
+        def Q_naeh(V_a, S, Wb_val):
+            Vk = v_wendepunkt_naeh(D, Wb_val)
             w  = 1.0 / (1.0 + (Vk / np.maximum(V_a, 1e-9))**2)
             return S + (1 - S) * (1 - w)
 
-        Qn_sph  = Q_naeh(V_arr, S_exakt)
-        Qn_para = Q_naeh(V_arr, 1.0)
+        Qn_sph  = Q_naeh(V_arr, S_exakt, Wb)
+        Qn_para = Q_naeh(V_arr, 1.0, 1e-9)
 
         has_slide = (S_slide is not None and S_real is not None
                      and S_slide > S_mar + 0.01)
@@ -2676,7 +3421,7 @@ class App(tk.Tk):
             S_ex_s    = S_slide
             S_ex_s_ph = _strehl_exakt(Wb_s)
             Qe_slide  = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr)
-            Qn_slide  = Q_naeh(V_arr, S_ex_s_ph)
+            Qn_slide  = Q_naeh(V_arr, S_ex_s_ph, Wb_s)
 
         strehl_label = f"Sphäre f/{f/D:.1f}  S={S_exakt:.3f} (exakt)"
 
@@ -2704,8 +3449,10 @@ class App(tk.Tk):
 
         for V_m, col, ls, lbl in [
                 (D / 7.0, "#888888", ":",  f"V_min={D/7:.0f}×"),
-                (V_krit,  "#534AB7", "--", f"V_krit={V_krit:.0f}×")]:
-            if 30 <= V_m <= V_max_plot:
+                (V_krit,  "#534AB7", "--", f"V_krit={V_krit:.0f}×  (10%-Schwelle)"),
+                (V_wende, "#c62828", "-.", f"V_wendepunkt≈{V_wende:.0f}×  (Näherung, =V_krit/³√S²)"),
+                (V_halb,  "#00838f", ":",  f"V½_exakt={V_halb:.0f}×  (echter Halbwertspunkt)")]:
+            if V_min_plot <= V_m <= V_max_plot:
                 ax.axvline(V_m, color=col, lw=1.0, ls=ls, alpha=0.65)
                 ax.text(V_m + 2, 0.03, lbl,
                         fontsize=7, color=col, rotation=90, va="bottom", alpha=0.8)
@@ -2713,15 +3460,64 @@ class App(tk.Tk):
         for q_thresh, col, lbl in [(0.9, GRN, "Q=0.90 (sehr gut)"),
                                     (0.7, "#BA7517", "Q=0.70 (spürbar)")]:
             ax.axhline(q_thresh, color=col, lw=1.0, ls=":", alpha=0.7)
-            ax.text(32, q_thresh + 0.008, lbl, fontsize=8, color=col, alpha=0.85)
+            ax.text(V_min_plot * 1.03, q_thresh + 0.008, lbl, fontsize=8, color=col, alpha=0.85)
+
+        # ── Fangspiegel-Effekt auf den Schieber-Spiegel (zusätzliche Kurve) ──
+        d_fs = getattr(self, "_wn_fang", 0.0) or 0.0
+        S_fs = S_slide if S_slide is not None else S_exakt
+        if d_fs > 0:
+            Qe_fs = qvis_kurve_mit_fangspiegel(D, S_fs, d_fs, lam, V_arr)
+            ax.plot(V_arr, Qe_fs, color="#6a1b9a", lw=2.4, ls="-",
+                    label=f"Schieber + Fangspiegel  d={d_fs:.0f}mm "
+                          f"(ε={min(d_fs/D, 0.95):.2f}, S={S_fs:.3f})  Näherung")
+
+        # ── Ablese-Cursor: exakter Wert bei der gewählten Vergrößerung ───────
+        if V_cur is not None:
+            ax.axvline(V_cur, color="#111", lw=1.3, ls="-", alpha=0.8, zorder=4)
+            pts = [(perceived_quality_exakt(D, f, lam, V_cur), COR,
+                    f"Sphäre {{q:.3f}}"),
+                   (1.0, GRN, "Parab. 1.000")]
+            if has_slide:
+                pts.append((perceived_quality_exakt_von_Wb(D, Wb_s, lam, V_cur),
+                            ACC, "Schieber {q:.3f}"))
+            if d_fs > 0:
+                pts.append((float(qvis_kurve_mit_fangspiegel(D, S_fs, d_fs, lam, V_cur)[0]),
+                            "#6a1b9a", "Schieber+FS {q:.3f}"))
+            # Beschriftungen von oben nach unten, mit Mindestabstand (Punkte
+            # liegen oft dicht beieinander, z.B. Parabol 1.000 / Schieber 0.983)
+            axh_pt = fig.get_size_inches()[1] * 72.0 * 0.72      # grobe Achsenhöhe [pt]
+            y_top  = 1.28
+            vorher_q, vorher_off = None, None
+            for q, col, txt in sorted(pts, key=lambda t: -t[0]):
+                ax.scatter([V_cur], [q], color=col, s=46, zorder=7,
+                           edgecolor="white", linewidth=0.8)
+                off = 2.0
+                if vorher_q is not None:
+                    gap = (vorher_q - q) / y_top * axh_pt        # Abstand der Punkte [pt]
+                    off = vorher_off - 11.0 + gap if gap < 11.0 else 2.0
+                ax.annotate(txt.format(q=q), xy=(V_cur, q), xytext=(7, off - 5),
+                            textcoords="offset points", fontsize=8,
+                            fontweight="bold", color=col, zorder=8,
+                            bbox=dict(boxstyle="round,pad=0.15", fc="white",
+                                      ec="none", alpha=0.8))
+                vorher_q, vorher_off = q, off
 
         max_abw = float(np.max(np.abs(Qe_sph - Qn_sph)))
-        ax.set_xlim(30, V_max_plot); ax.set_ylim(0, 1.12)
+        ax.text(0.015, 0.985,
+                f"V_krit (10%-Schwelle, exakt)   = {V_krit:.0f}×   [D/(13·Wb)]\n"
+                f"V_wendepunkt (Näherungsformel) = {V_wende:.0f}×   [V_krit/³√(S²)]\n"
+                f"V½ (echter Halbwertspunkt)     = {V_halb:.0f}×   [nur via Integral]",
+                transform=ax.transAxes, fontsize=7, family="monospace",
+                va="top", ha="left",
+                bbox=dict(boxstyle="round", fc="white", ec="#999", alpha=0.85))
+        ax.set_xlim(V_min_plot, V_max_plot)
+        ax.set_ylim(0, 1.28 if V_cur is not None else 1.12)   # Kopfraum fuer Info-Kasten + Cursor-Werte
         ax.set_xlabel(T("ax_vergr"), fontsize=10)
         ax.set_ylabel(T("ax_qvis"), fontsize=10)
         ax.set_title(
             f"Visuelle Wahrnehmung  —  D={D:.0f}mm  f/{f/D:.1f}"
-            f"  |  S_exakt={S_exakt:.3f}  max.Abw.={max_abw:.3f}",
+            f"  |  S_exakt={S_exakt:.3f}  max.Abw.={max_abw:.3f}"
+            + (f"  |  Cursor V={V_cur:.0f}×" if V_cur is not None else ""),
             fontsize=9)
         ax.legend(fontsize=8, loc="lower right",
                   title="— exakt (MTF×CSF)   - - Näherung Q̃(V)",
@@ -2747,11 +3543,13 @@ class App(tk.Tk):
         # Sinnvoller Vergrößerungsbereich — abhängig von Original-Öffnung
         V_min_orig  = D / 7.0
         V_max_AP    = D / 0.5
-        V_krit_orig = D * 0.7 * math.sqrt(max(S_von_D(D), 1e-9))
+        _, _, Wb_orig, _, _ = _wellenfronten(D, f, lam)
+        V_krit_orig = v_krit_naeh(D, Wb_orig)
         V_max_orig  = min(V_max_AP, V_krit_orig * 2.0)
         V_min_blend = D_blend / 7.0
         V_max_AP_bl = D_blend / 0.5
-        V_krit_bl   = D_blend * 0.7 * math.sqrt(max(S_von_D(D_blend), 1e-9))
+        _, _, Wb_bl, _, _ = _wellenfronten(D_blend, f, lam)
+        V_krit_bl   = v_krit_naeh(D_blend, Wb_bl)
         V_max_blend = min(V_max_AP_bl, V_krit_bl * 2.0)
 
         _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
@@ -2776,7 +3574,7 @@ class App(tk.Tk):
 
             _, _, Wb, _, _ = _wellenfronten(Db, f, lam)
             S       = _strehl_exakt(Wb)          # gecacht durch @lru_cache
-            Vk      = Db * 0.7 * math.sqrt(max(S, 1e-9))
+            Vk      = v_krit_naeh(Db, Wb)
             eps     = min(d_fang / Db, 0.99)
             fc_bl   = Db / (lam * 1e-6 * 206265)
             f_ratio = fc_bl / _fc_orig
