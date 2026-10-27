@@ -1,7 +1,11 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v6.11.0 (2026-10-25)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.0.0-beta (2026-10-26)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.0.0-beta (2026-10-26) Neuer Tab "Vergleich (Beta)": absolutes Q_abs (fester Referenzspiegel), Seeing-Schalter,
+                        D×S-Karte, Break-even-Strehl; Fangspiegel automatisch aus D und f/D
+  v6.12.0 (2026-10-25)  Neuer Tab "Fangspiegel": Mindestgröße aus Okularauszug/Tubus/Bildfeld,
+                        Obstruktion, Q_vis-Verlust
   v6.11.0 (2026-10-25)  Wahrnehmung: Fangspiegel-Ø-Feld + Zusatzkurve "Schieber + Fangspiegel";
                         Vergrößerungs- und Fangspiegelfeld nur ganzzahlig
   v6.10.1 (2026-10-25)  Fehler behoben: mtf_para_obstr (Obstruktions-MTF, Kreuzterm fehlte)
@@ -1539,6 +1543,332 @@ def qvis_kurve_mit_fangspiegel(D_mm: float, S: float, d_fang_mm: float,
     return np.array(out)
 
 
+def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
+                        tubus_mm: float = 0.0, bild_mm: float = 10.0,
+                        S: float = 1.0, V: float = 150.0,
+                        lam_nm: float = 550.0) -> dict:
+    """Fangspiegel-Rechner (neu in v6.12.0).
+
+    Minimaler Fangspiegel-Durchmesser (Strahlkegel-Geometrie, identisch zur
+    Katalog-Formel  DF = A/f# + B  mit A = TAR + BüT):
+
+        d_min = (TAR + BüT) · D/f + B
+
+    TAR   Tubus-Außenradius  (tubus_mm/2; 0 = wie Hauptspiegel-Ø, D/2)
+    BüT   Brennpunkt über Tubus (Abstand Fokalebene – Tubus-Außenwand)
+    B     zu 100 % ausgeleuchtetes Bildfeld (visuell 10 mm reichen)
+
+    Rückgabe (dict): A, d_min, d_pass (aufgerundet auf ganze mm), eps
+    (=d/D), flaeche (Flächenverlust [%], ε²), D_kontrast (lineare
+    Näherung D−d, Zmek/ICS), Q0 (Q_vis ohne Fangspiegel), Q (mit Fangspiegel
+    d_pass, bei V), Q_verlust (Q0−Q).
+    """
+    tar = (tubus_mm if tubus_mm > 0 else D_mm) / 2.0
+    A   = tar + max(buet_mm, 0.0)
+    d   = A * D_mm / f_mm + max(bild_mm, 0.0)
+    dp  = float(math.ceil(d - 1e-9))
+    eps = min(dp / D_mm, 0.95)
+    q0  = float(qvis_kurve_mit_fangspiegel(D_mm, S, 0.0, lam_nm, V)[0])
+    q1  = float(qvis_kurve_mit_fangspiegel(D_mm, S, dp,  lam_nm, V)[0])
+    return dict(A=A, d_min=d, d_pass=dp, eps=eps, flaeche=eps**2 * 100.0,
+                D_kontrast=D_mm - dp, Q0=q0, Q=q1, Q_verlust=q0 - q1)
+
+
+def fangspiegel_zeichnen(ax, D, f, lam, S_u, S_txt, r, V):
+    """Zeichnet Q_vis(V) für Mindest-Fangspiegel und +10/+20 mm in ax
+    (gemeinsam für Desktop und Web, neu in v6.12.0)."""
+    Vs = np.linspace(30, 400, 38)
+    ax.plot(Vs, np.ones_like(Vs), color="#2e7d32", lw=1.3,
+            label="Paraboloid ohne Fangspiegel = 1")
+    ax.plot(Vs, qvis_kurve_mit_fangspiegel(D, S_u, 0.0, lam, Vs),
+            color="#555", lw=1.5, ls="--", label=f"{S_txt} ohne Fangspiegel")
+    for dd, col in [(r["d_pass"], "#6a1b9a"), (r["d_pass"] + 10, "#d84315"),
+                    (r["d_pass"] + 20, "#b71c1c")]:
+        lab = (f"d = {dd:.0f} mm (Minimum)" if dd == r["d_pass"]
+               else f"d = {dd:.0f} mm (+{dd - r['d_pass']:.0f})")
+        ax.plot(Vs, qvis_kurve_mit_fangspiegel(D, S_u, dd, lam, Vs),
+                color=col, lw=1.6, label=lab)
+    ax.axvline(V, color="#999", lw=0.8, ls=":")
+    ax.set_xlabel("Vergrößerung V [×]")
+    ax.set_ylabel("Q_vis (Paraboloid ohne Fangspiegel = 1)")
+    ax.set_title(f"Fangspiegel-Einfluss  —  D={D:.0f}mm  f/{f/D:.1f}", fontsize=10)
+    ax.grid(alpha=0.3); ax.legend(fontsize=8, loc="lower left")
+    lo = min(float(np.min(l.get_ydata())) for l in ax.get_lines())
+    ax.set_ylim(max(0.0, lo - 0.05), 1.03)
+
+
+def fangspiegel_text(D, f, S_u, S_txt, r, V):
+    return (
+        f"D={D:.0f} mm  f={f:.0f} mm (f/{f/D:.1f})   Abstand Fangspiegel–Fokus A = {r['A']:.0f} mm\n"
+        f"Mindest-Ø Fangspiegel: {r['d_min']:.1f} mm  →  nehmen: {r['d_pass']:.0f} mm   "
+        f"(Obstruktion {r['eps']*100:.0f} %, Flächenverlust {r['flaeche']:.1f} %)\n"
+        f"Q_vis bei {V}× ({S_txt} S={S_u:.3f}):  ohne Fangspiegel {r['Q0']:.4f}  →  "
+        f"mit {r['d_pass']:.0f} mm: {r['Q']:.4f}   (Verlust {r['Q_verlust']*100:.1f} %-Punkte)\n"
+        f"Effektiver Kontrast-Ø (D − d, Näherung): {r['D_kontrast']:.0f} mm")
+
+
+# ── v7.0.0-beta: Vergleich verschiedener Spiegel (absolutes Q_abs) ────────────
+
+def fangspiegel_d(D_mm: float, f_mm: float, buet_mm: float = 50.0,
+                  tubus_mm: float = 0.0, bild_mm: float = 10.0) -> float:
+    """Nur die Geometrie: Fangspiegel-Ø aufgerundet auf ganze mm (v7.0.0)."""
+    tar = (tubus_mm if tubus_mm > 0 else D_mm) / 2.0
+    d = (tar + max(buet_mm, 0.0)) * D_mm / f_mm + max(bild_mm, 0.0)
+    return float(math.ceil(d - 1e-9))
+
+
+def seeing_mtf(nu_cyc_rad, seeing_arcsec: float, lam_nm: float = 550.0):
+    """Langzeit-Seeing-MTF (Fried):  exp(−3,44·(λν/r0)^(5/3)),
+    r0 = 0,98·λ/FWHM.  seeing_arcsec <= 0 → 1 (aus).
+    Langzeit-Belichtung = eher pessimistisch für den visuellen Eindruck."""
+    nu = np.asarray(nu_cyc_rad, dtype=float)
+    if seeing_arcsec <= 0:
+        return np.ones_like(nu)
+    lam_mm = lam_nm * 1e-6
+    r0 = 0.98 * lam_mm / (seeing_arcsec / 206265.0)
+    return np.exp(-3.44 * (lam_mm * nu / r0) ** (5.0 / 3.0))
+
+
+_QABS_N = 100
+_QABS_MSR = {}
+_QABS_MO = {}
+
+
+def _qabs_msr(S: float) -> np.ndarray:
+    key = round(float(S), 4)
+    if key not in _QABS_MSR:
+        Wb = _Wb_von_S(min(max(key, 1e-6), 1.0))
+        nu = np.linspace(0.0, 1.0, _QABS_N)
+        _QABS_MSR[key] = (np.ones_like(nu) if Wb <= 1e-9
+                          else np.array([mtf_sph_rel(x, Wb) for x in nu]))
+    return _QABS_MSR[key]
+
+
+def _qabs_mo(eps: float) -> np.ndarray:
+    key = round(min(max(float(eps), 0.0), 0.95), 4)
+    if key not in _QABS_MO:
+        nu = np.linspace(0.0, 1.0, _QABS_N)
+        _QABS_MO[key] = np.array([mtf_para_obstr(x, key) for x in nu])
+    return _QABS_MO[key]
+
+
+def _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing):
+    """Strehl-unabhängiger Teil: (x_ang [cyc/″], Gewicht) für Spiegel-Ø D."""
+    nu = np.linspace(0.0, 1.0, _QABS_N)
+    fc = D_mm / (lam_nm * 1e-6 * 206265.0)             # cyc/arcsec
+    x  = nu * fc
+    w  = np.array([csf(v * 3600.0 / V) for v in x])
+    see = seeing_mtf(x * 206265.0, seeing, lam_nm)
+    return x, _qabs_mo(d_fang_mm / D_mm) * w * see
+
+
+def qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm=550.0, seeing=0.0) -> float:
+    """∫ MTF_ges(ν) · CSF(ν/V) dν  über die WINKELfrequenz (absolut)."""
+    _tr = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    x, base = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing)
+    return float(_tr(_qabs_msr(S) * base, x))
+
+
+def qabs(D_mm, S, d_fang_mm, V, ref_D=200.0, ref_S=1.0, ref_d=0.0,
+         lam_nm=550.0, seeing=0.0) -> float:
+    """Absolutes Q_abs: sichtbare Detailübertragung relativ zu einem festen
+    Referenzspiegel (Standard: idealer 200-mm ohne Fangspiegel = 1)."""
+    return (qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm, seeing) /
+            max(qabs_zaehler(ref_D, ref_S, ref_d, V, lam_nm, seeing), 1e-12))
+
+
+def qabs_karte(Ds, Ss, ratio_N, V, ref, lam_nm=550.0, seeing=0.0,
+               buet=50.0, tubus=0.0, bild=10.0) -> np.ndarray:
+    """Q_abs auf einem D×S-Gitter; Fangspiegel aus D und f=ratio_N·D."""
+    _tr = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    nenner = qabs_zaehler(ref[0], ref[1], ref[2], V, lam_nm, seeing)
+    Z = np.zeros((len(Ss), len(Ds)))
+    for j, D in enumerate(Ds):
+        d = fangspiegel_d(D, ratio_N * D, buet, tubus, bild)
+        x, base = _qabs_basis(D, d, V, lam_nm, seeing)
+        for i, S in enumerate(Ss):
+            Z[i, j] = _tr(_qabs_msr(S) * base, x) / max(nenner, 1e-12)
+    return Z
+
+
+def qabs_breakeven_S(D2, d2, target, V, lam_nm=550.0, seeing=0.0,
+                     ref=(200.0, 1.0, 0.0)):
+    """Kleinstes S des Spiegels (D2, Fangspiegel d2), das Q_abs >= target hält.
+    Rückgabe: S, oder None (selbst S=1 reicht nicht), oder 0.3 (≤0,30)."""
+    f = lambda S: qabs(D2, S, d2, V, ref[0], ref[1], ref[2], lam_nm, seeing)
+    if f(1.0) < target:
+        return None
+    if f(0.3) >= target:
+        return 0.3
+    lo, hi = 0.3, 1.0
+    for _ in range(18):
+        mid = 0.5 * (lo + hi)
+        if f(mid) >= target:
+            hi = mid
+        else:
+            lo = mid
+    return hi
+
+
+def qabs_aequiv_D(q_ziel, V, lam_nm=550.0, seeing=0.0, ref=(200.0, 1.0, 0.0)):
+    """Durchmesser [mm] eines IDEALEN Spiegels ohne Fangspiegel mit Q_abs = q_ziel
+    (Bisektion).  None, wenn q_ziel im Bereich 20…2000 mm nicht erreicht wird."""
+    f = lambda D: qabs(D, 1.0, 0.0, V, ref[0], ref[1], ref[2], lam_nm, seeing)
+    lo, hi = 20.0, 2000.0
+    if q_ziel < f(lo) or q_ziel > f(hi):
+        return None
+    for _ in range(30):
+        mid = 0.5 * (lo + hi)
+        if f(mid) < q_ziel:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def planet_objekt(n=384, px_arcsec=0.1, seed=7):
+    """Synthetisches Planetenscheibchen (Ø 24″) mit Bändern, ovalem Fleck und
+    feinen Details bis ≈0,1″ — nur zur Veranschaulichung (v7.0.0-beta)."""
+    rng = np.random.default_rng(seed)
+    y, x = (np.mgrid[0:n, 0:n] - n / 2.0) * px_arcsec
+    r = np.hypot(x, y); R = 12.0
+    disk = (r < R).astype(float)
+    lat = y / R
+    img = 0.55 + 0.18 * np.sin(lat * 9.0) + 0.10 * np.sin(lat * 23.0 + 1.0)
+    img += 0.08 * np.sin(lat * 41.0 + 2.0)
+    img += -0.30 * np.exp(-(((x - 4.0) / 2.6) ** 2 + ((y + 4.5) / 1.3) ** 2))   # roter Fleck
+    for _ in range(140):                                                       # feine Details
+        cx, cy = rng.uniform(-R, R, 2)
+        s = rng.uniform(0.12, 0.28)
+        img += rng.choice([-1, 1]) * rng.uniform(0.08, 0.2) * np.exp(
+            -((x - cx) ** 2 + (y - cy) ** 2) / (2 * s * s))
+    for k, sep in enumerate([0.25, 0.4, 0.6, 0.9]):                           # Doppelpunkte
+        yy = -8.0 + 2.4 * k
+        for sx in (-sep / 2, sep / 2):
+            img -= 0.35 * np.exp(-((x + 4.0 - sx) ** 2 + (y - yy) ** 2) / (2 * 0.09 ** 2))
+    img *= (1.0 - 0.35 * (r / R) ** 2)                                         # Randabdunklung
+    img = np.clip(img, 0.0, 1.0) * disk
+    # Strichgitter-Testtafel links neben der Scheibe (Perioden in Bogensekunden):
+    # zeigt Auflösung und Mittelfrequenz-Kontrast, wo sich S bemerkbar macht
+    for per, y0 in [(0.30, -9.0), (0.45, -4.5), (0.70, 0.0), (1.10, 4.5)]:
+        m = (x > -19.0) & (x < -14.5) & (y > y0) & (y < y0 + 3.0)
+        img[m] = 0.5 + 0.5 * np.sign(np.sin(2 * np.pi * (x[m] + 19.0) / per))
+    return img
+
+
+def bild_mit_mtf(obj, px_arcsec, D_mm, S, d_fang_mm, lam_nm=550.0, seeing=0.0):
+    """Objekt mit der Gesamt-MTF (Aberration × Ringblende × Seeing) falten."""
+    n0 = obj.shape[0]
+    n = 2 * n0                                            # Null-Auffüllung gegen Umlauf-Artefakte
+    pad = np.zeros((n, n)); pad[n0 // 2:n0 // 2 + n0, n0 // 2:n0 // 2 + n0] = obj
+    fx = np.fft.fftfreq(n, d=px_arcsec)                   # cyc/arcsec
+    fr = np.hypot(*np.meshgrid(fx, fx))
+    fc = D_mm / (lam_nm * 1e-6 * 206265.0)
+    nu = np.linspace(0.0, 1.0, _QABS_N)
+    m1 = _qabs_msr(S) * _qabs_mo(d_fang_mm / D_mm)
+    mtf = np.interp(fr / fc, nu, m1, right=0.0) * seeing_mtf(fr * 206265.0, seeing, lam_nm)
+    out = np.real(np.fft.ifft2(np.fft.fft2(pad) * mtf))
+    return out[n0 // 2:n0 // 2 + n0, n0 // 2:n0 // 2 + n0]
+
+
+def vergleich_achsen(fig):
+    """2×6-Raster: oben Q_abs(V) und Karte, unten drei Bildfelder."""
+    gs = fig.add_gridspec(2, 6, height_ratios=[1.25, 1.0])
+    ax1 = fig.add_subplot(gs[0, 0:3]); ax2 = fig.add_subplot(gs[0, 3:6])
+    axb = [fig.add_subplot(gs[1, 0:2]), fig.add_subplot(gs[1, 2:4]),
+           fig.add_subplot(gs[1, 4:6])]
+    return ax1, ax2, axb
+
+
+def vergleich_zeichnen(ax1, ax2, p: dict, axb=None):
+    """Zeichnet links Q_abs(V) für Spiegel 1/2, rechts die D×S-Karte.
+    p: V, seeing, refD, refS, N, D1, S1, D2, S2, lam, buet, tubus, bild.
+    Rückgabe: Textzeilen (Ergebnis)."""
+    lam, see, V = p["lam"], p["seeing"], p["V"]
+    ref = (p["refD"], p["refS"], 0.0)
+    kw = dict(lam_nm=lam, seeing=see)
+    geo = (p["buet"], p["tubus"], p["bild"])
+    d1 = fangspiegel_d(p["D1"], p["N"] * p["D1"], *geo)
+    d2 = fangspiegel_d(p["D2"], p["N"] * p["D2"], *geo)
+    Vs = np.linspace(30, 500, 24)
+    for (D, S, d, col, nm) in [(p["D1"], p["S1"], d1, "#1565c0", "Spiegel 1"),
+                               (p["D2"], p["S2"], d2, "#d84315", "Spiegel 2")]:
+        ax1.plot(Vs, [qabs(D, S, d, v, *ref, **kw) for v in Vs], color=col, lw=1.8,
+                 label=f"{nm}: {D:.0f} mm  S={S:.2f}  (Fangsp. {d:.0f} mm)")
+    ax1.axhline(1.0, color="#555", ls=":", lw=1.0,
+                label=f"Referenz: idealer {p['refD']:.0f} mm (S={p['refS']:.2f})")
+    ax1.axvline(V, color="#999", lw=0.8, ls=":")
+    ax1.set_xlabel("Vergrößerung V [×]"); ax1.set_ylabel("Q_abs  (Referenz = 1)")
+    ax1.set_title("Q_abs(V)" + (f"  —  Seeing {see:.1f}\"" if see > 0 else "  —  ohne Seeing"),
+                  fontsize=10)
+    ax1.grid(alpha=0.3); ax1.legend(fontsize=7.5, loc="best")
+    lo, hi = ax1.get_ylim()
+    if hi - lo < 0.3:                       # keine übertriebene Vergrößerung kleiner Unterschiede
+        mid = 0.5 * (lo + hi); ax1.set_ylim(mid - 0.15, mid + 0.15)
+
+    Ds = np.linspace(100, 500, 17); Ss = np.linspace(0.5, 1.0, 11)
+    Z = qabs_karte(Ds, Ss, p["N"], V, ref, lam, see, *geo)
+    cf = ax2.contourf(Ds, Ss, Z, levels=14, cmap="viridis")
+    ax2.figure.colorbar(cf, ax=ax2, label="Q_abs")
+    q1 = qabs(p["D1"], p["S1"], d1, V, *ref, **kw)
+    q2 = qabs(p["D2"], p["S2"], d2, V, *ref, **kw)
+    try:
+        cs = ax2.contour(Ds, Ss, Z, levels=[q1], colors="white", linewidths=2.4)
+        ax2.clabel(cs, fmt=lambda v: f"= Spiegel 1 ({v:.2f})", fontsize=8)
+    except Exception:
+        pass
+    ax2.plot([p["D1"]], [min(max(p["S1"], 0.5), 1.0)], "o", color="#1565c0",
+             mec="white", ms=9, label="Spiegel 1")
+    ax2.plot([p["D2"]], [min(max(p["S2"], 0.5), 1.0)], "s", color="#d84315",
+             mec="white", ms=9, label="Spiegel 2")
+    ax2.set_xlabel(f"Öffnung D [mm]  (f/{p['N']:g}, Fangspiegel automatisch)")
+    ax2.set_ylabel("Strehl S")
+    ax2.set_title(f"Q_abs-Karte bei {V:.0f}×  —  weiße Linie = gleich gut wie Spiegel 1",
+                  fontsize=10)
+    ax2.legend(fontsize=8, loc="lower right")
+
+    # äquivalente ideale Durchmesser
+    e1 = qabs_aequiv_D(q1, V, lam, see, ref)
+    e2 = qabs_aequiv_D(q2, V, lam, see, ref)
+    _et = lambda e: "außerhalb 20–2000 mm" if e is None else f"{e:.0f} mm"
+
+    # Bildvergleich
+    if axb is not None:
+        px = 0.1
+        obj = planet_objekt(384, px)
+        b1 = bild_mit_mtf(obj, px, p["D1"], p["S1"], d1, lam, see)
+        b2 = bild_mit_mtf(obj, px, p["D2"], p["S2"], d2, lam, see)
+        vmax = float(obj.max())
+        ext = [-19.2, 19.2, -19.2, 19.2]
+        for a, im, tt in [(axb[0], b1, f"Spiegel 1  ({p['D1']:.0f} mm, S={p['S1']:.2f})"),
+                          (axb[1], b2, f"Spiegel 2  ({p['D2']:.0f} mm, S={p['S2']:.2f})")]:
+            a.imshow(im, cmap="gray", vmin=0, vmax=vmax, extent=ext, interpolation="bicubic")
+            a.set_title(tt, fontsize=9); a.set_xticks([]); a.set_yticks([])
+        diff = b2 - b1
+        lim = max(float(np.max(np.abs(diff))), 1e-3)
+        axb[2].imshow(diff, cmap="RdBu_r", vmin=-lim, vmax=lim, extent=ext,
+                      interpolation="bicubic")
+        axb[2].set_title(f"Differenz Sp.2 − Sp.1  (rot = 2 heller, Skala ±{lim*100:.0f} % der Helligkeit)",
+                         fontsize=9)
+        axb[2].set_xticks([]); axb[2].set_yticks([])
+        axb[0].set_xlabel("synthetisches Planetenscheibchen Ø 24″ + Strichgitter (0,30 / 0,45 / 0,70 / 1,10″), ohne Augen-Filter",
+                          fontsize=7.5)
+
+    be = qabs_breakeven_S(p["D2"], d2, q1, V, lam, see, ref)
+    if be is None:
+        bt = "selbst ein perfekter Spiegel 2 erreicht Spiegel 1 nicht"
+    elif be <= 0.3001:
+        bt = "Spiegel 2 erreicht Spiegel 1 selbst bei S ≤ 0,30 (Modell dort unsicher)"
+    else:
+        bt = f"Spiegel 2 braucht mindestens S = {be:.2f}, um Spiegel 1 zu erreichen"
+    return [f"V={V:.0f}×   Seeing {'aus' if see <= 0 else f'{see:.1f}″'}   Referenz: idealer {p['refD']:.0f} mm = 1",
+            f"Spiegel 1: {p['D1']:.0f} mm, S={p['S1']:.2f}, Fangspiegel {d1:.0f} mm  →  Q_abs = {q1:.3f}",
+            f"Spiegel 2: {p['D2']:.0f} mm, S={p['S2']:.2f}, Fangspiegel {d2:.0f} mm  →  Q_abs = {q2:.3f}   "
+            f"(Verhältnis 2/1 = {q2/max(q1,1e-12):.2f})",
+            f"Entspricht einem idealen Spiegel (ohne Fangspiegel) von:  Spiegel 1 ≙ {_et(e1)},  Spiegel 2 ≙ {_et(e2)}",
+            bt]
+
+
 def beurteilung(strehl):
     if strehl >= 0.95:
         return T("verdict_good"), "#2e7d32"
@@ -1556,7 +1886,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "6.11.0 (2026-10-25)"
+VERSION  = "7.0.0-beta (2026-10-26)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -1616,6 +1946,8 @@ STRINGS = {
     "tab_foucault":    {"de": "  Foucault  ",               "en": "  Foucault  "},
     "tab_vmax":        {"de": "  Max. Vergrößerung  ",       "en": "  Max. magnification  "},
     "tab_vmax_D":      {"de": "  Vmax vs. Ø/Seeing  ",        "en": "  Vmax vs. D/seeing  "},
+    "tab_fangspiegel": {"de": "  Fangspiegel  ",              "en": "  Secondary mirror  "},
+    "tab_vergleich":   {"de": "  Vergleich (Beta)  ",         "en": "  Comparison (beta)  "},
     # MTF-Beschriftungen
     "mtf_fokus_lbl":   {"de": "Fokusebene:",     "en": "Focus plane:"},
     "mtf_bf":  {"de": "Best Focus  (ρ⁴−ρ²,  telescope-optics.net)",
@@ -1881,6 +2213,8 @@ class App(tk.Tk):
             ("_tab_foucault",     "tab_foucault"),
             ("_tab_vmax",         "tab_vmax"),
             ("_tab_vmax_D",       "tab_vmax_D"),
+            ("_tab_fangspiegel",  "tab_fangspiegel"),
+            ("_tab_vergleich",    "tab_vergleich"),
         ]
         self._tab_keys = [k for _, k in tab_attrs]
         for attr, tab_key in tab_attrs:
@@ -2163,6 +2497,68 @@ class App(tk.Tk):
                 canvas.get_tk_widget().pack(fill="both", expand=True)
                 setattr(self, attr, (fig, ax, canvas))
 
+            elif attr == "_tab_vergleich":
+                self._vg_vars = {}
+                def _zeile(felder):
+                    fr = tk.Frame(frm, bg=BG)
+                    fr.pack(side="top", fill="x", padx=8, pady=(4, 0))
+                    for lbl, key, val, hint in felder:
+                        tk.Label(fr, text=lbl, bg=BG, fg="#1565c0",
+                                 font=("Helvetica", 9, "bold")).pack(side="left", padx=(0, 3))
+                        v = tk.StringVar(value=val); self._vg_vars[key] = v
+                        e = tk.Entry(fr, textvariable=v, width=6, font=("Helvetica", 9))
+                        e.pack(side="left")
+                        e.bind("<Return>",   self._vergleich_neu)
+                        e.bind("<FocusOut>", self._vergleich_neu)
+                        tk.Label(fr, text=hint, bg=BG, fg="#666",
+                                 font=("Helvetica", 8)).pack(side="left", padx=(2, 12))
+                _zeile([("Spiegel 1  D =", "D1", "200", "mm"), ("S =", "S1", "1.00", ""),
+                        ("Spiegel 2  D =", "D2", "300", "mm"), ("S =", "S2", "0.80", ""),
+                        ("f/D =", "N", "5", "(Fangspiegel automatisch)")])
+                _zeile([("V =", "V", "200", "×"), ("Seeing", "seeing", "1.5", "″  (0 = aus)"),
+                        ("Referenz: idealer", "refD", "200", "mm"),
+                        ("Okularauszug", "buet", "50", "mm"),
+                        ("Bildfeld", "bild", "10", "mm")])
+                self._vg_readout = tk.Label(frm, text="", bg=BG, fg="#222",
+                                            font=("Helvetica", 10), justify="left",
+                                            anchor="w")
+                self._vg_readout.pack(side="top", fill="x", padx=8, pady=(4, 0))
+                fig = plt.figure(figsize=(11.0, 7.4), dpi=96)
+                fig.patch.set_facecolor(BG)
+                ax1, ax2, _axb = vergleich_achsen(fig)
+                canvas = FigureCanvasTkAgg(fig, master=frm)
+                canvas.get_tk_widget().pack(fill="both", expand=True)
+                setattr(self, attr, (fig, ax1, ax2, canvas))
+
+            elif attr == "_tab_fangspiegel":
+                fsr = tk.Frame(frm, bg=BG)
+                fsr.pack(side="top", fill="x", padx=8, pady=(6, 0))
+                self._fs_vars = {}
+                for lbl, key, val, hint in [
+                        ("Okularauszug (Fokus über Tubus)", "buet", "50", "mm"),
+                        ("Tubus-Außen-Ø (0 = wie Spiegel)", "tubus", "0", "mm"),
+                        ("100%-Bildfeld", "bild", "10", "mm  (visuell 10, Foto 20–25)"),
+                        ("Q_vis bei V =", "V", "150", "×")]:
+                    tk.Label(fsr, text=lbl, bg=BG, fg="#6a1b9a",
+                             font=("Helvetica", 9, "bold")).pack(side="left", padx=(0, 3))
+                    v = tk.StringVar(value=val)
+                    self._fs_vars[key] = v
+                    e = tk.Entry(fsr, textvariable=v, width=5, font=("Helvetica", 9))
+                    e.pack(side="left")
+                    e.bind("<Return>",   self._fangspiegel_neu)
+                    e.bind("<FocusOut>", self._fangspiegel_neu)
+                    tk.Label(fsr, text=hint, bg=BG, fg="#666",
+                             font=("Helvetica", 8)).pack(side="left", padx=(2, 10))
+                self._fs_readout = tk.Label(frm, text="", bg=BG, fg="#222",
+                                            font=("Helvetica", 10), justify="left",
+                                            anchor="w")
+                self._fs_readout.pack(side="top", fill="x", padx=8, pady=(4, 0))
+                fig, ax = plt.subplots(figsize=(8.0, 4.4), dpi=96)
+                fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
+                canvas = FigureCanvasTkAgg(fig, master=frm)
+                canvas.get_tk_widget().pack(fill="both", expand=True)
+                setattr(self, attr, (fig, ax, canvas))
+
             else:
                 fs = (7.5, 4.8) if attr == "_tab_beugung" else (5.6, 4.2)
                 fig, ax = plt.subplots(figsize=fs, dpi=96)
@@ -2312,6 +2708,93 @@ class App(tk.Tk):
             self._diagramm_vmax(D, f, S_slide)
         elif tab_key == "tab_vmax_D":
             self._diagramm_vmax_D()
+        elif tab_key == "tab_fangspiegel":
+            self._diagramm_fangspiegel(D, f, lam, S_slide, S_real)
+        elif tab_key == "tab_vergleich":
+            self._diagramm_vergleich(lam)
+
+    def _vg_eingaben(self):
+        """Eingaben des Vergleich-Tabs (Komma/Punkt, Fallback bei Fehler)."""
+        std = dict(D1=200, S1=1.0, D2=300, S2=0.8, N=5, V=200, seeing=1.5,
+                   refD=200, buet=50, bild=10)
+        out = {}
+        for k, v in self._vg_vars.items():
+            try:
+                x = float(v.get().replace(",", ".").strip())
+                if k in ("D1", "D2", "refD", "N", "V") and x <= 0: raise ValueError
+                if k in ("S1", "S2"): x = min(max(x, 0.05), 1.0)
+                if x < 0: raise ValueError
+            except ValueError:
+                x = std[k]
+            if k not in ("S1", "S2", "N", "seeing"):
+                x = int(round(x))
+            out[k] = x
+            v.set(f"{x:.2f}" if k in ("S1", "S2") else f"{x:g}")
+        return out
+
+    def _vergleich_neu(self, *_):
+        try:
+            self._diagramm_vergleich(getattr(self, "_last_params", {}).get("lam", 550.0))
+        except Exception:
+            import traceback
+            self._zeige_fehler(traceback.format_exc())
+
+    def _diagramm_vergleich(self, lam):
+        """v7.0.0-beta: Q_abs-Vergleich zweier Spiegel + D×S-Karte."""
+        fig, ax1, ax2, canvas = self._tab_vergleich
+        e = self._vg_eingaben()
+        fig.clf()
+        ax1, ax2, axb = vergleich_achsen(fig)
+        for a in (ax1, ax2): a.set_facecolor(BG)
+        self._tab_vergleich = (fig, ax1, ax2, canvas)
+        p = dict(e, refS=1.0, tubus=0.0, lam=lam)
+        zeilen = vergleich_zeichnen(ax1, ax2, p, axb)
+        self._vg_readout.config(text="\n".join(zeilen))
+        fig.tight_layout()
+        canvas.draw_idle()
+
+    def _fs_eingaben(self):
+        """Ganzzahlige Eingaben des Fangspiegel-Tabs (Komma/Punkt, Fallback)."""
+        std = dict(buet=50, tubus=0, bild=10, V=150)
+        out = {}
+        for k, v in self._fs_vars.items():
+            try:
+                x = int(round(float(v.get().replace(",", ".").strip())))
+                if x < 0 or (k == "V" and x < 1):
+                    raise ValueError
+            except ValueError:
+                x = std[k]
+            out[k] = x
+            v.set(str(x))
+        return out
+
+    def _fangspiegel_neu(self, *_):
+        res = getattr(self, "_last_params", None)
+        if res is None:
+            return
+        try:
+            self._diagramm_fuer_tab("tab_fangspiegel", res)
+        except Exception:
+            import traceback
+            self._zeige_fehler(traceback.format_exc())
+
+    def _diagramm_fangspiegel(self, D, f, lam, S_slide=None, S_real=None):
+        """Fangspiegel-Rechner: Mindestgröße + Q_vis(V) für d_min, +10, +20 mm
+        (neu in v6.12.0).  Spiegel: Strehl-Schieber, sonst Sphäre."""
+        fig, ax, canvas = self._tab_fangspiegel
+        ax.cla(); ax.set_facecolor(BG)
+        e = self._fs_eingaben()
+        if S_slide is not None:
+            S_u, S_txt = S_slide, "Schieber"
+        else:
+            _, _, Wb_sph, _, _ = _wellenfronten(D, f, lam)
+            S_u, S_txt = _strehl_exakt(Wb_sph), "Sphäre"
+        r = fangspiegel_rechner(D, f, e["buet"], e["tubus"], e["bild"],
+                                S_u, e["V"], lam)
+        self._fs_readout.config(text=fangspiegel_text(D, f, S_u, S_txt, r, e["V"]))
+        fangspiegel_zeichnen(ax, D, f, lam, S_u, S_txt, r, e["V"])
+        fig.tight_layout()
+        canvas.draw_idle()
 
     def _diagramm_vmax_D(self):
         """Zeigt V_max(D) für PERFEKTE Optik (S=1): Beugungsgrenze (linear
@@ -2600,6 +3083,8 @@ class App(tk.Tk):
             ("_tab_foucault",    "tab_foucault"),
             ("_tab_vmax",        "tab_vmax"),
             ("_tab_vmax_D",      "tab_vmax_D"),
+            ("_tab_fangspiegel", "tab_fangspiegel"),
+            ("_tab_vergleich",   "tab_vergleich"),
         ]]
         startup = not getattr(self, "_first_draw_done", False)
         if startup:
