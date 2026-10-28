@@ -1966,22 +1966,36 @@ def vergleich_zeichnen(ax1, ax2, p: dict, axb=None, axw=None):
         b1 = bild_mit_mtf(obj, px, p["D1"], p["S1"], d1, lam, see, mtf_nu=m1, V_auge=va)
         b2 = bild_mit_mtf(obj, px, p["D2"], p["S2"], d2, lam, see, mtf_nu=m2, V_auge=va)
         vmax = float(obj.max())
-        ext = [-19.2, 19.2, -19.2, 19.2]
+        # Darstellung im AUGENmaßstab: der Planet wird mit V größer (feste 1 ′-Augenauflösung
+        # ⇒ bei kleinem V ist er klein und wirkt scharf, aber ohne Feinstruktur).
+        augenmass = bool(va) and p.get("augenmass", True)
+        if augenmass:
+            h = 19.2 * V / 60.0                      # halbe Feldbreite des Bildes am Auge [′]
+            ext = [-h, h, -h, h]
+            win = max(60.0, h)                       # Fenster ±60′ (wächst erst ab V>190)
+        else:
+            ext = [-19.2, 19.2, -19.2, 19.2]
+            win = 19.2
         t1 = "Foucault-Wellenfront" if wf1 is not None else f"S={p['S1']:.2f}"
         t2 = "Foucault-Wellenfront" if wf2 is not None else f"S={p['S2']:.2f}"
         for a, im, tt in [(axb[0], b1, f"Spiegel 1  ({p['D1']:.0f} mm, {t1})"),
                           (axb[1], b2, f"Spiegel 2  ({p['D2']:.0f} mm, {t2})")]:
+            a.set_facecolor("black")
             a.imshow(im, cmap="gray", vmin=0, vmax=vmax, extent=ext, interpolation="bicubic")
+            a.set_xlim(-win, win); a.set_ylim(-win, win)
             a.set_title(tt, fontsize=9); a.set_xticks([]); a.set_yticks([])
         diff = b2 - b1
         lim = max(float(np.max(np.abs(diff))), 1e-3)
+        axb[2].set_facecolor("#f7f7f7")
         axb[2].imshow(diff, cmap="RdBu_r", vmin=-lim, vmax=lim, extent=ext,
                       interpolation="bicubic")
+        axb[2].set_xlim(-win, win); axb[2].set_ylim(-win, win)
         axb[2].set_title(f"Differenz Sp.2 − Sp.1  (rot = 2 heller, Skala ±{lim*100:.0f} % der Helligkeit)",
                          fontsize=9)
         axb[2].set_xticks([]); axb[2].set_yticks([])
-        axb[0].set_xlabel("synthetisches Planetenscheibchen Ø 24″ + Strichgitter (0,30 / 0,45 / 0,70 / 1,10″), "
-                          + (f"Auge bei {V:.0f}× (Barten-Tiefpass)" if va else "ohne Augen-Filter"),
+        axb[0].set_xlabel("Planet Ø 24″ + Gitter 0,30/0,45/0,70/1,10″;  "
+                          + ((f"Auge bei {V:.0f}×, Augenmaßstab (Fenster ±{win:.0f}′)" if augenmass
+                              else f"Auge bei {V:.0f}×, Himmelsmaßstab") if va else "ohne Augen-Filter"),
                           fontsize=7.5)
 
     # Wellenfront-/MTF-Vergleich (nur mit Foucault-Daten)
@@ -2691,6 +2705,11 @@ class App(tk.Tk):
                                bg=BG, fg="#1565c0", activebackground=BG, selectcolor=BG2,
                                font=("Helvetica", 9, "bold"),
                                command=self._vergleich_neu).pack(side="left", padx=(0, 14))
+                self._vg_mass = tk.BooleanVar(value=True)
+                tk.Checkbutton(fr_wf, text="Augenmaßstab (Planet wächst mit V)", variable=self._vg_mass,
+                               bg=BG, fg="#1565c0", activebackground=BG, selectcolor=BG2,
+                               font=("Helvetica", 9, "bold"),
+                               command=self._vergleich_neu).pack(side="left", padx=(0, 14))
                 self._vg_readout = tk.Label(frm, text="", bg=BG, fg="#222",
                                             font=("Helvetica", 10), justify="left",
                                             anchor="w")
@@ -2954,7 +2973,8 @@ class App(tk.Tk):
         for a in (ax1, ax2): a.set_facecolor(BG)
         self._tab_vergleich = (fig, ax1, ax2, canvas)
         p = dict(e, refS=1.0, tubus=0.0, lam=lam,
-                 wf1=wf.get("1"), wf2=wf.get("2"), auge=self._vg_auge.get())
+                 wf1=wf.get("1"), wf2=wf.get("2"), auge=self._vg_auge.get(),
+                 augenmass=self._vg_mass.get())
         zeilen = vergleich_zeichnen(ax1, ax2, p, axb, axw)
         self._vg_readout.config(text="\n".join(notiz + zeilen))
         fig.tight_layout()
