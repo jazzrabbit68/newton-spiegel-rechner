@@ -5,6 +5,12 @@ Streamlit-Version v7.0.0-beta (2026-10-26)
 Entspricht newton_spiegel_rechner.py v7.0.0-beta
 
 Änderungshistorie (jüngste zuerst):
+  v7.0.0-beta (2026-10-28) Kern: mtf_sph_rel jetzt exakt (2D-Pupillen-Autokorrelation per FFT statt 1D-Näherung,
+                        alte Funktion als mtf_sph_rel_1d erhalten) → alle Q_vis-/MTF-Tabs; Vergleich: Planetenbild
+                        mit Augen-Filter bei der gewählten Vergrößerung (schaltbar)
+  v7.0.0-beta (2026-10-28) Vergleich: Spiegel 1/2 wahlweise aus der Foucault-Wellenfront (MTF aus 2D-Pupillen-
+                        Autokorrelation, mit Fangspiegel); S-Modell jetzt über exakte FFT-MTF statt 1D-Näherung.
+                        Fehler behoben: _Wb_von_S war bei S<0,49 abgeschnitten (Suchbereich 0,44 → 0,90)
   v7.0.0-beta (2026-10-26) Neuer Tab "Vergleich (Beta)": absolutes Q_abs (fester Referenzspiegel), Seeing-Schalter,
                         D×S-Karte, Break-even-Strehl; Fangspiegel automatisch aus D und f/D
   v6.12.0 (2026-10-25)  Neuer Tab "Fangspiegel": Mindestgröße aus Okularauszug/Tubus/Bildfeld,
@@ -33,7 +39,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.0.0-beta (2026-10-26)"
+VERSION = "7.0.0-beta (2026-10-28)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -129,7 +135,7 @@ def _Wb_von_S(S: float, n: int = 60) -> float:
     """
     if S >= 0.9999:
         return 0.0
-    lo, hi = 0.0, 0.44
+    lo, hi = 0.0, 0.90   # S(Wb) ist bis ≈0,9 monoton fallend (S≈0,09); vorher 0,44 → S<0,49 wurde abgeschnitten
     for _ in range(n):
         mid = (lo + hi) / 2.0
         if _strehl_exakt(mid) > S:
@@ -1096,8 +1102,8 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
     )
 
 
-def mtf_sph_rel(f: float, Wb: float, n: int = 80,
-                paraxial: bool = False) -> float:
+def mtf_sph_rel_1d(f: float, Wb: float, n: int = 80,
+                   paraxial: bool = False) -> float:
     """Relative MTF eines sphärischen Spiegels (normiert: MTF(0)=1).
 
     OTF-Faltungsintegral [Sacek §4.7]:
@@ -1149,6 +1155,43 @@ def mtf_sph_rel(f: float, Wb: float, n: int = 80,
     if norm < 1e-10:
         return 0.0
     return math.sqrt(re**2 + im**2) / norm
+
+
+_MSR_CACHE = {}
+
+
+def mtf_sph_rel(f: float, Wb: float, n: int = 80,
+                paraxial: bool = False) -> float:
+    """Relative MTF eines sphärischen Spiegels (MTF(0)=1) — EXAKT (v7.0.0-beta).
+
+    Berechnet über die 2D-Pupillen-Autokorrelation (FFT) der Wellenfront
+    W = 4·Wb·(ρ⁴−ρ²)  (bester Fokus)  bzw.  4·Wb·ρ⁴  (paraxial) und teilt
+    durch die ideale MTF.  Ersetzt die frühere 1D-Linienintegral-Näherung
+    (jetzt mtf_sph_rel_1d), die bei S < ~0,9 die MTF überschätzte; die
+    FFT-Methode reproduziert den Strehl exakt (OTF-Summe = S).
+    Für ν > 0,9 wird das Verhältnis konstant fortgesetzt (ideale MTF ≈ 0,
+    Beitrag vernachlässigbar).  Parameter n bleibt aus Kompatibilitätsgründen."""
+    if f <= 0:
+        return 1.0
+    if f >= 1:
+        return 0.0
+    key = (round(float(Wb), 5), bool(paraxial))
+    tab = _MSR_CACHE.get(key)
+    if tab is None:
+        Np = 192
+        rho = np.linspace(0.0, 1.0, 600)
+        W = 4.0 * Wb * (rho ** 4 if paraxial else (rho ** 4 - rho ** 2))
+        nu_g = np.arange(Np) / float(Np)
+        m = mtf_aus_wellenfront(rho, W, 0.0, Np=Np, nu=nu_g)
+        mp = np.array([mtf_para(x) for x in nu_g])
+        ratio = np.where(mp > 1e-9, m / np.maximum(mp, 1e-9), 1.0)
+        kmax = int(0.9 * Np)
+        ratio[kmax:] = ratio[kmax]
+        ratio[0] = 1.0
+        tab = (nu_g, np.clip(ratio, 0.0, 1.5))
+        _MSR_CACHE[key] = tab
+    return float(np.interp(f, tab[0], tab[1]))
+
 
 
 def _mtf_arrays_klassisch(Wb: float, S: float, fc: float,
@@ -1616,28 +1659,74 @@ def _qabs_mo(eps: float) -> np.ndarray:
     return _QABS_MO[key]
 
 
-def _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing):
+_QABS_MTF = {}
+_QABS_RHO = np.linspace(0.0, 1.0, 400)
+
+
+def _qabs_mtf(S: float, eps: float) -> np.ndarray:
+    """Gesamt-MTF (Aberration + Ringblende) für Strehl S und Obstruktion eps,
+    exakt über die 2D-Pupillen-Autokorrelation (v7.0.0-beta). Ersetzt das
+    1D-Näherungsmodell mtf_sph_rel·mtf_para_obstr, das bei S<~0,9 die MTF
+    überschätzt (Strehl-Kontrolle: FFT reproduziert S exakt)."""
+    key = (round(float(S), 4), round(min(max(float(eps), 0.0), 0.95), 4))
+    if key not in _QABS_MTF:
+        Wb = _Wb_von_S(min(max(key[0], 1e-6), 1.0))
+        W = 4.0 * Wb * (_QABS_RHO ** 4 - _QABS_RHO ** 2)
+        _QABS_MTF[key] = mtf_aus_wellenfront(_QABS_RHO, W, key[1])
+    return _QABS_MTF[key]
+
+
+def _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=True):
     """Strehl-unabhängiger Teil: (x_ang [cyc/″], Gewicht) für Spiegel-Ø D."""
     nu = np.linspace(0.0, 1.0, _QABS_N)
     fc = D_mm / (lam_nm * 1e-6 * 206265.0)             # cyc/arcsec
     x  = nu * fc
     w  = np.array([csf(v * 3600.0 / V) for v in x])
     see = seeing_mtf(x * 206265.0, seeing, lam_nm)
-    return x, _qabs_mo(d_fang_mm / D_mm) * w * see
+    return x, (_qabs_mo(d_fang_mm / D_mm) if mit_mo else 1.0) * w * see
 
 
-def qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm=550.0, seeing=0.0) -> float:
-    """∫ MTF_ges(ν) · CSF(ν/V) dν  über die WINKELfrequenz (absolut)."""
+def mtf_aus_wellenfront(rho, W_c, eps=0.0, Np=128, nu=None) -> np.ndarray:
+    """MTF aus einer rotationssymmetrischen Wellenfront W(ρ) [λ] (v7.0.0-beta).
+
+    Pupille P = Maske(eps ≤ ρ ≤ 1)·exp(i·2π·W(ρ)); OTF = Autokorrelation von P
+    (über FFT, Auffüllung ×2), normiert auf OTF(0); Rückgabe auf dem
+    ν/ν_c-Gitter linspace(0,1,_QABS_N).  Enthält Fangspiegel (eps) und
+    beliebige Fehlerform (Zonen, Kante) exakt — im Gegensatz zum S-Modell."""
+    rho = np.asarray(rho, float); W_c = np.asarray(W_c, float)
+    ax = (np.arange(Np) - Np / 2.0 + 0.5) / (Np / 2.0)
+    X, Y = np.meshgrid(ax, ax)
+    R = np.hypot(X, Y)
+    Wg = np.interp(R, rho, W_c)
+    P = ((R <= 1.0) & (R >= eps)) * np.exp(2j * np.pi * Wg)
+    M = 2 * Np
+    F = np.fft.fft2(P, s=(M, M))
+    ac = np.fft.ifft2(np.abs(F) ** 2)
+    otf = np.real(ac[0, :Np]) / max(float(np.real(ac[0, 0])), 1e-12)
+    nu_k = np.arange(Np) / float(Np)
+    if nu is None:
+        nu = np.linspace(0.0, 1.0, _QABS_N)
+    return np.clip(np.interp(nu, nu_k, otf, right=0.0), 0.0, 1.0)
+
+
+def qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm=550.0, seeing=0.0,
+                 mtf_nu=None) -> float:
+    """∫ MTF_ges(ν) · CSF(ν/V) dν  über die WINKELfrequenz (absolut).
+    mtf_nu: optional fertige Gesamt-MTF (inkl. Fangspiegel) auf dem
+    ν/ν_c-Gitter, z.B. aus mtf_aus_wellenfront (ersetzt das S-Modell)."""
     _tr = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    x, base = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing)
-    return float(_tr(_qabs_msr(S) * base, x))
+    if mtf_nu is not None:
+        x, base = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=False)
+        return float(_tr(mtf_nu * base, x))
+    x, base = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=False)
+    return float(_tr(_qabs_mtf(S, d_fang_mm / D_mm) * base, x))
 
 
 def qabs(D_mm, S, d_fang_mm, V, ref_D=200.0, ref_S=1.0, ref_d=0.0,
-         lam_nm=550.0, seeing=0.0) -> float:
+         lam_nm=550.0, seeing=0.0, mtf_nu=None) -> float:
     """Absolutes Q_abs: sichtbare Detailübertragung relativ zu einem festen
     Referenzspiegel (Standard: idealer 200-mm ohne Fangspiegel = 1)."""
-    return (qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm, seeing) /
+    return (qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm, seeing, mtf_nu) /
             max(qabs_zaehler(ref_D, ref_S, ref_d, V, lam_nm, seeing), 1e-12))
 
 
@@ -1649,9 +1738,9 @@ def qabs_karte(Ds, Ss, ratio_N, V, ref, lam_nm=550.0, seeing=0.0,
     Z = np.zeros((len(Ss), len(Ds)))
     for j, D in enumerate(Ds):
         d = fangspiegel_d(D, ratio_N * D, buet, tubus, bild)
-        x, base = _qabs_basis(D, d, V, lam_nm, seeing)
+        x, base = _qabs_basis(D, d, V, lam_nm, seeing, mit_mo=False)
         for i, S in enumerate(Ss):
-            Z[i, j] = _tr(_qabs_msr(S) * base, x) / max(nenner, 1e-12)
+            Z[i, j] = _tr(_qabs_mtf(S, d / D) * base, x) / max(nenner, 1e-12)
     return Z
 
 
@@ -1720,7 +1809,20 @@ def planet_objekt(n=384, px_arcsec=0.1, seed=7):
     return img
 
 
-def bild_mit_mtf(obj, px_arcsec, D_mm, S, d_fang_mm, lam_nm=550.0, seeing=0.0):
+def augen_filter(f_cyc_arcsec, V: float):
+    """Augen-Tiefpass bei Vergrößerung V (v7.0.0-beta): Barten-CSF normiert auf ihr
+    Maximum, nur oberhalb des Maximums wirksam (darunter 1, damit Scheibe/Bänder
+    nicht als Kantenbild erscheinen).  f im Himmel [cyc/″] → Auge [cyc/°] = f·3600/V."""
+    fe = np.maximum(np.asarray(f_cyc_arcsec, float) * 3600.0 / max(V, 1e-9), 1e-6)
+    g = np.linspace(0.2, 60.0, 600)
+    cg = 2.6 * (0.0192 + 0.114 * g) * np.exp(-((0.114 * g) ** 1.1))
+    fpk, cpk = float(g[int(np.argmax(cg))]), float(cg.max())
+    c = 2.6 * (0.0192 + 0.114 * fe) * np.exp(-((0.114 * fe) ** 1.1))
+    return np.where(fe > fpk, c / cpk, 1.0)
+
+
+def bild_mit_mtf(obj, px_arcsec, D_mm, S, d_fang_mm, lam_nm=550.0, seeing=0.0,
+                 mtf_nu=None, V_auge=None):
     """Objekt mit der Gesamt-MTF (Aberration × Ringblende × Seeing) falten."""
     n0 = obj.shape[0]
     n = 2 * n0                                            # Null-Auffüllung gegen Umlauf-Artefakte
@@ -1729,36 +1831,60 @@ def bild_mit_mtf(obj, px_arcsec, D_mm, S, d_fang_mm, lam_nm=550.0, seeing=0.0):
     fr = np.hypot(*np.meshgrid(fx, fx))
     fc = D_mm / (lam_nm * 1e-6 * 206265.0)
     nu = np.linspace(0.0, 1.0, _QABS_N)
-    m1 = _qabs_msr(S) * _qabs_mo(d_fang_mm / D_mm)
+    m1 = mtf_nu if mtf_nu is not None else _qabs_mtf(S, d_fang_mm / D_mm)
     mtf = np.interp(fr / fc, nu, m1, right=0.0) * seeing_mtf(fr * 206265.0, seeing, lam_nm)
+    if V_auge:                                   # Auge bei Vergrößerung V
+        mtf = mtf * augen_filter(fr, V_auge)
     out = np.real(np.fft.ifft2(np.fft.fft2(pad) * mtf))
     return out[n0 // 2:n0 // 2 + n0, n0 // 2:n0 // 2 + n0]
 
 
-def vergleich_achsen(fig):
-    """2×6-Raster: oben Q_abs(V) und Karte, unten drei Bildfelder."""
-    gs = fig.add_gridspec(2, 6, height_ratios=[1.25, 1.0])
+def vergleich_achsen(fig, extra=False):
+    """Raster: oben Q_abs(V) und Karte, Mitte drei Bildfelder, optional unten
+    MTF- und Wellenfront-Vergleich (wenn eine Foucault-Wellenfront benutzt wird)."""
+    if extra:
+        gs = fig.add_gridspec(3, 6, height_ratios=[1.25, 1.0, 1.1])
+    else:
+        gs = fig.add_gridspec(2, 6, height_ratios=[1.25, 1.0])
     ax1 = fig.add_subplot(gs[0, 0:3]); ax2 = fig.add_subplot(gs[0, 3:6])
     axb = [fig.add_subplot(gs[1, 0:2]), fig.add_subplot(gs[1, 2:4]),
            fig.add_subplot(gs[1, 4:6])]
-    return ax1, ax2, axb
+    axw = ([fig.add_subplot(gs[2, 0:3]), fig.add_subplot(gs[2, 3:6])]
+           if extra else None)
+    return ax1, ax2, axb, axw
 
 
-def vergleich_zeichnen(ax1, ax2, p: dict, axb=None):
-    """Zeichnet links Q_abs(V) für Spiegel 1/2, rechts die D×S-Karte.
-    p: V, seeing, refD, refS, N, D1, S1, D2, S2, lam, buet, tubus, bild.
+def _wf_mtf(wf, D, d_fang, lam):
+    """MTF-Gitter aus einer Foucault-Wellenfront (dict rho, W, lam) für den
+    Spiegel (D, Fangspiegel d_fang); W [λ_Messung] → [λ_vis]."""
+    if wf is None:
+        return None
+    W = np.asarray(wf["W"], float) * (wf.get("lam", lam) / lam)
+    return mtf_aus_wellenfront(wf["rho"], W, min(d_fang / D, 0.95))
+
+
+def vergleich_zeichnen(ax1, ax2, p: dict, axb=None, axw=None):
+    """Zeichnet links Q_abs(V) für Spiegel 1/2, rechts die D×S-Karte, darunter
+    Bildsimulation und (mit Foucault-Wellenfront) MTF/Wellenfront-Vergleich.
+    p: V, seeing, refD, refS, N, D1, S1, D2, S2, lam, buet, tubus, bild,
+       optional wf1/wf2 = dict(rho, W, lam) aus dem Foucault-Test.
     Rückgabe: Textzeilen (Ergebnis)."""
     lam, see, V = p["lam"], p["seeing"], p["V"]
     ref = (p["refD"], p["refS"], 0.0)
     kw = dict(lam_nm=lam, seeing=see)
     geo = (p["buet"], p["tubus"], p["bild"])
+    wf1, wf2 = p.get("wf1"), p.get("wf2")
     d1 = fangspiegel_d(p["D1"], p["N"] * p["D1"], *geo)
     d2 = fangspiegel_d(p["D2"], p["N"] * p["D2"], *geo)
+    m1 = _wf_mtf(wf1, p["D1"], d1, lam)
+    m2 = _wf_mtf(wf2, p["D2"], d2, lam)
     Vs = np.linspace(30, 500, 24)
-    for (D, S, d, col, nm) in [(p["D1"], p["S1"], d1, "#1565c0", "Spiegel 1"),
-                               (p["D2"], p["S2"], d2, "#d84315", "Spiegel 2")]:
-        ax1.plot(Vs, [qabs(D, S, d, v, *ref, **kw) for v in Vs], color=col, lw=1.8,
-                 label=f"{nm}: {D:.0f} mm  S={S:.2f}  (Fangsp. {d:.0f} mm)")
+    for (D, S, d, m, col, nm, wf) in [
+            (p["D1"], p["S1"], d1, m1, "#1565c0", "Spiegel 1", wf1),
+            (p["D2"], p["S2"], d2, m2, "#d84315", "Spiegel 2", wf2)]:
+        quelle = "Foucault-Wellenfront" if wf is not None else f"S={S:.2f}"
+        ax1.plot(Vs, [qabs(D, S, d, v, *ref, mtf_nu=m, **kw) for v in Vs], color=col,
+                 lw=1.8, label=f"{nm}: {D:.0f} mm  {quelle}  (Fangsp. {d:.0f} mm)")
     ax1.axhline(1.0, color="#555", ls=":", lw=1.0,
                 label=f"Referenz: idealer {p['refD']:.0f} mm (S={p['refS']:.2f})")
     ax1.axvline(V, color="#999", lw=0.8, ls=":")
@@ -1774,8 +1900,8 @@ def vergleich_zeichnen(ax1, ax2, p: dict, axb=None):
     Z = qabs_karte(Ds, Ss, p["N"], V, ref, lam, see, *geo)
     cf = ax2.contourf(Ds, Ss, Z, levels=14, cmap="viridis")
     ax2.figure.colorbar(cf, ax=ax2, label="Q_abs")
-    q1 = qabs(p["D1"], p["S1"], d1, V, *ref, **kw)
-    q2 = qabs(p["D2"], p["S2"], d2, V, *ref, **kw)
+    q1 = qabs(p["D1"], p["S1"], d1, V, *ref, mtf_nu=m1, **kw)
+    q2 = qabs(p["D2"], p["S2"], d2, V, *ref, mtf_nu=m2, **kw)
     try:
         cs = ax2.contour(Ds, Ss, Z, levels=[q1], colors="white", linewidths=2.4)
         ax2.clabel(cs, fmt=lambda v: f"= Spiegel 1 ({v:.2f})", fontsize=8)
@@ -1785,7 +1911,7 @@ def vergleich_zeichnen(ax1, ax2, p: dict, axb=None):
              mec="white", ms=9, label="Spiegel 1")
     ax2.plot([p["D2"]], [min(max(p["S2"], 0.5), 1.0)], "s", color="#d84315",
              mec="white", ms=9, label="Spiegel 2")
-    ax2.set_xlabel(f"Öffnung D [mm]  (f/{p['N']:g}, Fangspiegel automatisch)")
+    ax2.set_xlabel(f"Öffnung D [mm]  (f/{p['N']:g}, Fangspiegel automatisch; Karte = S-Modell)")
     ax2.set_ylabel("Strehl S")
     ax2.set_title(f"Q_abs-Karte bei {V:.0f}×  —  weiße Linie = gleich gut wie Spiegel 1",
                   fontsize=10)
@@ -1800,12 +1926,15 @@ def vergleich_zeichnen(ax1, ax2, p: dict, axb=None):
     if axb is not None:
         px = 0.1
         obj = planet_objekt(384, px)
-        b1 = bild_mit_mtf(obj, px, p["D1"], p["S1"], d1, lam, see)
-        b2 = bild_mit_mtf(obj, px, p["D2"], p["S2"], d2, lam, see)
+        va = V if p.get("auge", True) else None
+        b1 = bild_mit_mtf(obj, px, p["D1"], p["S1"], d1, lam, see, mtf_nu=m1, V_auge=va)
+        b2 = bild_mit_mtf(obj, px, p["D2"], p["S2"], d2, lam, see, mtf_nu=m2, V_auge=va)
         vmax = float(obj.max())
         ext = [-19.2, 19.2, -19.2, 19.2]
-        for a, im, tt in [(axb[0], b1, f"Spiegel 1  ({p['D1']:.0f} mm, S={p['S1']:.2f})"),
-                          (axb[1], b2, f"Spiegel 2  ({p['D2']:.0f} mm, S={p['S2']:.2f})")]:
+        t1 = "Foucault-Wellenfront" if wf1 is not None else f"S={p['S1']:.2f}"
+        t2 = "Foucault-Wellenfront" if wf2 is not None else f"S={p['S2']:.2f}"
+        for a, im, tt in [(axb[0], b1, f"Spiegel 1  ({p['D1']:.0f} mm, {t1})"),
+                          (axb[1], b2, f"Spiegel 2  ({p['D2']:.0f} mm, {t2})")]:
             a.imshow(im, cmap="gray", vmin=0, vmax=vmax, extent=ext, interpolation="bicubic")
             a.set_title(tt, fontsize=9); a.set_xticks([]); a.set_yticks([])
         diff = b2 - b1
@@ -1815,8 +1944,37 @@ def vergleich_zeichnen(ax1, ax2, p: dict, axb=None):
         axb[2].set_title(f"Differenz Sp.2 − Sp.1  (rot = 2 heller, Skala ±{lim*100:.0f} % der Helligkeit)",
                          fontsize=9)
         axb[2].set_xticks([]); axb[2].set_yticks([])
-        axb[0].set_xlabel("synthetisches Planetenscheibchen Ø 24″ + Strichgitter (0,30 / 0,45 / 0,70 / 1,10″), ohne Augen-Filter",
+        axb[0].set_xlabel("synthetisches Planetenscheibchen Ø 24″ + Strichgitter (0,30 / 0,45 / 0,70 / 1,10″), "
+                          + (f"Auge bei {V:.0f}× (Barten-Tiefpass)" if va else "ohne Augen-Filter"),
                           fontsize=7.5)
+
+    # Wellenfront-/MTF-Vergleich (nur mit Foucault-Daten)
+    zusatz = []
+    if axw is not None:
+        nu = np.linspace(0.0, 1.0, _QABS_N)
+        for (wf, D, S, d, m, nm, col) in [(wf1, p["D1"], p["S1"], d1, m1, "Spiegel 1", "#1565c0"),
+                                          (wf2, p["D2"], p["S2"], d2, m2, "Spiegel 2", "#d84315")]:
+            if wf is None:
+                continue
+            m_s = _qabs_mtf(S, d / D)
+            m_id = _qabs_mtf(1.0, d / D)
+            axw[0].plot(nu, m, color=col, lw=2.0, label=f"{nm}: aus Foucault-Wellenfront")
+            axw[0].plot(nu, m_s, color=col, lw=1.3, ls="--",
+                        label=f"{nm}: S-Modell (S={S:.3f})")
+            axw[0].plot(nu, m_id, color="#2e7d32", lw=1.0, ls=":",
+                        label="ideal mit Fangspiegel" if nm == "Spiegel 1" else None)
+            axw[1].plot(wf["rho"], np.asarray(wf["W"]) * (wf.get("lam", lam) / lam),
+                        color=col, lw=1.8, label=f"{nm}: W(ρ) bester Fokus")
+            qS = qabs(D, S, d, V, *ref, **kw)
+            qW = qabs(D, S, d, V, *ref, mtf_nu=m, **kw)
+            zusatz.append(f"{nm}: Q_abs aus Foucault-Wellenfront {qW:.3f}  vs. S-Modell (S={S:.3f}) {qS:.3f}  "
+                          f"(Differenz {100*(qW/max(qS,1e-12)-1):+.1f} %)")
+        axw[0].set_xlabel("normierte Ortsfrequenz ν/ν_c"); axw[0].set_ylabel("MTF")
+        axw[0].set_title("MTF: echte Wellenfrontform vs. S-Modell (inkl. Fangspiegel)", fontsize=10)
+        axw[0].grid(alpha=0.3); axw[0].legend(fontsize=7.5)
+        axw[1].set_xlabel("Pupillenradius ρ"); axw[1].set_ylabel("W [λ]")
+        axw[1].set_title("Wellenfront aus dem Foucault-Test (kolbenfrei, bester Fokus)", fontsize=10)
+        axw[1].grid(alpha=0.3); axw[1].legend(fontsize=7.5)
 
     be = qabs_breakeven_S(p["D2"], d2, q1, V, lam, see, ref)
     if be is None:
@@ -1825,12 +1983,12 @@ def vergleich_zeichnen(ax1, ax2, p: dict, axb=None):
         bt = "Spiegel 2 erreicht Spiegel 1 selbst bei S ≤ 0,30 (Modell dort unsicher)"
     else:
         bt = f"Spiegel 2 braucht mindestens S = {be:.2f}, um Spiegel 1 zu erreichen"
-    return [f"V={V:.0f}×   Seeing {'aus' if see <= 0 else f'{see:.1f}″'}   Referenz: idealer {p['refD']:.0f} mm = 1",
-            f"Spiegel 1: {p['D1']:.0f} mm, S={p['S1']:.2f}, Fangspiegel {d1:.0f} mm  →  Q_abs = {q1:.3f}",
-            f"Spiegel 2: {p['D2']:.0f} mm, S={p['S2']:.2f}, Fangspiegel {d2:.0f} mm  →  Q_abs = {q2:.3f}   "
-            f"(Verhältnis 2/1 = {q2/max(q1,1e-12):.2f})",
-            f"Entspricht einem idealen Spiegel (ohne Fangspiegel) von:  Spiegel 1 ≙ {_et(e1)},  Spiegel 2 ≙ {_et(e2)}",
-            bt]
+    return ([f"V={V:.0f}×   Seeing {'aus' if see <= 0 else f'{see:.1f}″'}   Referenz: idealer {p['refD']:.0f} mm = 1",
+             f"Spiegel 1: {p['D1']:.0f} mm, S={p['S1']:.2f}{' (Foucault)' if wf1 is not None else ''}, Fangspiegel {d1:.0f} mm  →  Q_abs = {q1:.3f}",
+             f"Spiegel 2: {p['D2']:.0f} mm, S={p['S2']:.2f}{' (Foucault)' if wf2 is not None else ''}, Fangspiegel {d2:.0f} mm  →  Q_abs = {q2:.3f}   "
+             f"(Verhältnis 2/1 = {q2/max(q1,1e-12):.2f})",
+             f"Entspricht einem idealen Spiegel (ohne Fangspiegel) von:  Spiegel 1 ≙ {_et(e1)},  Spiegel 2 ≙ {_et(e2)}",
+             bt] + zusatz)
 
 
 def beurteilung(strehl):
@@ -3236,9 +3394,10 @@ def plot_fangspiegel(D, f, lam, S_u, S_txt, r, V):
 
 
 def plot_vergleich(p):
-    fig = plt.figure(figsize=(11, 7.4))
-    ax1, ax2, axb = vergleich_achsen(fig)
-    zeilen = vergleich_zeichnen(ax1, ax2, p, axb)
+    extra = bool(p.get("wf1") or p.get("wf2"))
+    fig = plt.figure(figsize=(11, 10.6 if extra else 7.4))
+    ax1, ax2, axb, axw = vergleich_achsen(fig, extra=extra)
+    zeilen = vergleich_zeichnen(ax1, ax2, p, axb, axw)
     fig.tight_layout()
     return fig, zeilen
 
@@ -3762,15 +3921,43 @@ def main():
         vRD = d3c.number_input("Referenz: idealer D [mm]", 50, 1500, 200, 10, key="vg_refD")
         vBu = d4c.number_input("Okularauszug [mm]", 0, 300, 50, 5, key="vg_buet")
         vBi = d5c.number_input("Bildfeld [mm]", 0, 60, 10, 1, key="vg_bild")
+        _kz = st.session_state.get("fc_last_kz")
+        _Df = st.session_state.get("fc_last_D")
+        w1c, w2c = st.columns(2)
+        use_w1 = w1c.checkbox("Spiegel 1 aus Foucault-Test (Wellenfront)", key="vg_wf1")
+        use_w2 = w2c.checkbox("Spiegel 2 aus Foucault-Test (Wellenfront)", key="vg_wf2")
+        v_auge = st.checkbox("Bild mit Augen-Filter bei V (Barten-Tiefpass)", value=True, key="vg_auge")
+        _notiz = []
+        _wf = {}
+        if (use_w1 or use_w2) and (_kz is None or _Df is None):
+            _notiz.append("Keine Foucault-Daten vorhanden — erst im Foucault-Tab Messwerte eingeben.")
+        elif use_w1 or use_w2:
+            _wfd = dict(rho=_kz["rho_f"], W=_kz["W_c"], lam=_kz.get("lam_nm") or 550.0)
+            if use_w1:
+                _wf["1"] = _wfd; vD1 = float(_Df); vS1 = float(_kz["S_exakt"])
+            if use_w2:
+                _wf["2"] = _wfd; vD2 = float(_Df); vS2 = float(_kz["S_exakt"])
+            vN = f / D                       # f/D des gemessenen Spiegels (Hauptregler)
+            _notiz.append(f"Foucault-Wellenfront: D={_Df:.0f} mm, S={_kz['S_exakt']:.3f}, f/D={vN:.2f}")
+            if not _kz.get("kennzahlen_zuverlaessig", True):
+                _notiz.append("⚠ Foucault-Fit unzuverlässig (Polynom-Modus, Residuum hoch) — "
+                              "Ergebnis optimistisch! Hybrid-Modus (n≥6) verwenden.")
         _p = dict(V=vV, seeing=vSe, refD=vRD, refS=1.0, N=vN, D1=vD1, S1=vS1,
-                  D2=vD2, S2=vS2, lam=lam, buet=vBu, tubus=0.0, bild=vBi)
-        _key = tuple(sorted(_p.items()))
+                  D2=vD2, S2=vS2, lam=lam, buet=vBu, tubus=0.0, bild=vBi,
+                  wf1=_wf.get("1"), wf2=_wf.get("2"), auge=v_auge)
+        _sig = {k: v for k, v in _p.items() if k not in ("wf1", "wf2")}
+        _sig["wf"] = tuple(None if _wf.get(k) is None else
+                           (round(float(np.sum(_wf[k]["W"])), 5), round(float(_wf[k]["lam"]), 1))
+                           for k in ("1", "2"))
+        _key = tuple(sorted(_sig.items()))
         if st.session_state.get("vg_key") != _key:
             _fig, _z = plot_vergleich(_p)
             st.session_state["vg_png"] = _fig_to_png(_fig)
             st.session_state["vg_txt"] = _z
             st.session_state["vg_key"] = _key
             plt.close(_fig)
+        for _t in _notiz:
+            st.warning(_t) if _t.startswith(("⚠", "Keine")) else st.caption(_t)
         st.markdown("  \n".join(st.session_state["vg_txt"]))
         st.image(st.session_state["vg_png"])
 
