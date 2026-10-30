@@ -2,6 +2,7 @@
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.0.0-beta (2026-10-29)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.0.0-beta (2026-10-29) Fangspiegel-Tab: Blende gegenüber dem OAZ (Gittertubus/Hutring) aus Hutring-Ø, Okular-f, AFOV und OAZ-Rohr (Innen-Ø, Länge) als Blendenrohr, Blende um den Hutring gebogen, Skizze (Draufsicht) mit Maßen und Strahlengang.
   v7.0.0-beta (2026-10-29) Vergleich: Augenpupille (Abblendung bei Austrittspupille > Augenpupille, mit Refokus),
                         Option „Spiegel sphärisch (aus D, f/D)“; Fehler behoben: Q_abs-Integrationsgitter war bei
                         großem D / kleinem V zu grob (nicht-monotones Q_abs(D))
@@ -1592,7 +1593,9 @@ def qvis_kurve_mit_fangspiegel(D_mm: float, S: float, d_fang_mm: float,
 def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
                         tubus_mm: float = 0.0, bild_mm: float = 10.0,
                         S: float = 1.0, V: float = 150.0,
-                        lam_nm: float = 550.0) -> dict:
+                        lam_nm: float = 550.0, hut_mm: float = 0.0,
+                        fe_mm: float = 21.0, afov_deg: float = 85.0,
+                        oaz_d_mm: float = 50.0, oaz_l_mm: float = 80.0) -> dict:
     """Fangspiegel-Rechner (neu in v6.12.0).
 
     Minimaler Fangspiegel-Durchmesser (Strahlkegel-Geometrie, identisch zur
@@ -1603,6 +1606,22 @@ def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
     TAR   Tubus-Außenradius  (tubus_mm/2; 0 = wie Hauptspiegel-Ø, D/2)
     BüT   Brennpunkt über Tubus (Abstand Fokalebene – Tubus-Außenwand)
     B     zu 100 % ausgeleuchtetes Bildfeld (visuell 10 mm reichen)
+
+    Blende gegenüber dem OAZ (Gittertubus, Tubusersatz am Hutring, v7.0.0):
+        Geometrie: Das OAZ-Rohr (Innen-Ø d_t, Länge L, Fokalebene = Feld-
+        blende des Okulars am einen Ende) wirkt als Blendenrohr.  Die
+        steilste Sichtlinie läuft vom Feldblendenrand (r_f = B_ok/2) über
+        den gegenüberliegenden Innenrand am Rohrende (r_t = d_t/2, im
+        Abstand L) und wird bis zur Blende im Abstand x = A + R_hut
+        verlängert:
+            r_blende = (r_t + r_f)·x/L − r_f
+        Mindestens aber der Strahlkegel  x·D/f + B_ok.
+        Die Blende ist um den Hutring gebogen (Radius R_hut): die Sichtlinie
+        wird mit dem Kreis geschnitten (nicht mit einer Ebene im Abstand x),
+        das macht die Blende kleiner.  Ausgabe: Sehne (Breite von der Seite)
+        und abgewickelte Bogenlänge (Zuschnitt).
+        B_ok = max(fe·AFOV/57,3; B)
+    R_hut = hut_mm/2 (0 = Tubus-Außenradius bzw. D/2).
 
     Rückgabe (dict): A, d_min, d_pass (aufgerundet auf ganze mm), eps
     (=d/D), flaeche (Flächenverlust [%], ε²), D_kontrast (lineare
@@ -1616,8 +1635,45 @@ def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
     eps = min(dp / D_mm, 0.95)
     q0  = float(qvis_kurve_mit_fangspiegel(D_mm, S, 0.0, lam_nm, V)[0])
     q1  = float(qvis_kurve_mit_fangspiegel(D_mm, S, dp,  lam_nm, V)[0])
+    r_hut = (hut_mm if hut_mm > 0 else (tubus_mm if tubus_mm > 0 else D_mm)) / 2.0
+    b_ok = max(fe_mm * afov_deg / 57.2958, max(bild_mm, 0.0))
+    x_bl = A + r_hut
+    r_t = max(oaz_d_mm, 1.0) / 2.0
+    r_f = b_ok / 2.0
+    R_h = r_hut
+
+    def _hit(m, v0):
+        """Schnitt der Sichtlinie v = v0 + m·u (Start auf der OAZ-Achse bei
+        u=0, Hutring-Mitte bei u=A, Radius R_h) mit dem Hutring (fernere
+        Seite) -> halbe Sehne v (Blende ist um den Hutring gebogen)."""
+        qa = 1.0 + m * m
+        qb = -2.0 * (A - m * v0)
+        qc = A * A + v0 * v0 - R_h * R_h
+        disc = qb * qb - 4.0 * qa * qc
+        if disc < 0:
+            return R_h, A + R_h
+        u = (-qb + math.sqrt(disc)) / (2.0 * qa)
+        return min(abs(v0 + m * u), R_h), u
+
+    m_oaz = (r_t + r_f) / max(oaz_l_mm, 1.0)
+    m_keg = 0.5 * D_mm / f_mm
+    v_geo, u_geo = _hit(m_oaz, -r_f)
+    v_keg, u_keg = _hit(m_keg, r_f)
+    v_bl = max(v_geo, v_keg)
+    hit = (u_geo, v_geo) if v_geo >= v_keg else (u_keg, v_keg)
+    x_flach = A + R_h
+    d_geo = 2.0 * (m_oaz * x_flach - r_f)        # flache Blende (zum Vergleich)
+    d_kegel = x_flach * D_mm / f_mm + b_ok
+    d_bl = 2.0 * v_bl                            # Sehne (Breite in Draufsicht)
+    d_bogen = 2.0 * R_h * math.asin(min(v_bl / R_h, 1.0))   # abgewickelte Länge
+    w_oaz = math.degrees(math.atan(m_oaz))
     return dict(A=A, d_min=d, d_pass=dp, eps=eps, flaeche=eps**2 * 100.0,
-                D_kontrast=D_mm - dp, Q0=q0, Q=q1, Q_verlust=q0 - q1)
+                D_kontrast=D_mm - dp, Q0=q0, Q=q1, Q_verlust=q0 - q1,
+                x_blende=x_bl, B_ok=b_ok, d_geo=d_geo, d_kegel=d_kegel, w_oaz=w_oaz, d_bogen=d_bogen,
+                R_hut=R_h, d_blende=d_bl, oaz_r=r_t, oaz_l=float(oaz_l_mm),
+                m_oaz=m_oaz, m_keg=m_keg, hit=hit, hit_geo=(u_geo, v_geo),
+                d_blende_pass=float(math.ceil(d_bl - 1e-9)),
+                d_bogen_pass=float(math.ceil(d_bogen - 1e-9)))
 
 
 def fangspiegel_zeichnen(ax, D, f, lam, S_u, S_txt, r, V):
@@ -1650,7 +1706,92 @@ def fangspiegel_text(D, f, S_u, S_txt, r, V):
         f"(Obstruktion {r['eps']*100:.0f} %, Flächenverlust {r['flaeche']:.1f} %)\n"
         f"Q_vis bei {V}× ({S_txt} S={S_u:.3f}):  ohne Fangspiegel {r['Q0']:.4f}  →  "
         f"mit {r['d_pass']:.0f} mm: {r['Q']:.4f}   (Verlust {r['Q_verlust']*100:.1f} %-Punkte)\n"
-        f"Effektiver Kontrast-Ø (D − d, Näherung): {r['D_kontrast']:.0f} mm")
+        f"Effektiver Kontrast-Ø (D − d, Näherung): {r['D_kontrast']:.0f} mm\n"
+        f"Blende gegenüber dem OAZ (Hutring-Ø {2*r['R_hut']:.0f} mm, um den Hutring gebogen): "
+        f"Fokus–Hutring-Achse {r['x_blende']:.0f} mm, Feld {r['B_ok']:.0f} mm\n"
+        f"   Sichtlinie durch das OAZ-Rohr (steilster Winkel {r['w_oaz']:.0f}°); ebene Blende wäre Ø {r['d_geo']:.0f} mm, "
+        f"Strahlkegel allein {r['d_kegel']:.0f} mm\n"
+        f"   → gebogene Blende: Breite (Sehne) mind. {r['d_blende']:.0f} mm, "
+        f"Zuschnitt (Bogenlänge) {r['d_bogen_pass']:.0f} mm")
+
+
+def fangspiegel_skizze(ax, D, f, r):
+    """Draufsicht (Blick entlang der optischen Achse) auf Hutring, Fangspiegel,
+    OAZ-Rohr und die gebogene Blende gegenüber dem OAZ, mit Maßen,
+    Lichtkegel (Hauptspiegel → Okular) und der steilsten Sichtlinie durch das
+    OAZ-Rohr (v7.0.0, gemeinsam für Desktop und Web).
+    Koordinaten: u entlang der OAZ-Achse (Feldblende/Fokus bei u = 0),
+    v quer dazu; optische Achse bei u = A."""
+    A, R, rf, rt = r["A"], r["R_hut"], r["B_ok"] / 2.0, r["oaz_r"]
+    L, dF, N = r["oaz_l"], r["d_pass"], f / D
+    ax.set_aspect("equal")
+    ax.set_title("Draufsicht: Blende gegenüber dem OAZ (Blick entlang der Achse)",
+                 fontsize=9)
+    # Hutring
+    t = np.linspace(0, 2 * np.pi, 361)
+    ax.plot(A + R * np.cos(t), R * np.sin(t), color="#999", lw=1.2)
+    ax.text(A, -R - 0.06 * R, f"Hutring Ø {2 * R:.0f}", ha="center", va="top",
+            fontsize=7, color="#666")
+    # Blende (gebogen) auf der OAZ-abgewandten Seite
+    u_h, v_h = r["hit"]
+    ph = math.atan2(v_h, u_h - A)
+    tb = np.linspace(-ph, ph, 60)
+    ax.plot(A + R * np.cos(tb), R * np.sin(tb), color="k", lw=4,
+            solid_capstyle="butt")
+    ax.text(A + R * 1.04, 0, f"Blende\nSehne {r['d_blende']:.0f}\nBogen {r['d_bogen_pass']:.0f}",
+            fontsize=8, va="center", ha="left")
+    # Fangspiegel von oben (Ellipse: d√2 längs u, d quer)
+    from matplotlib.patches import Ellipse, Rectangle
+    ax.add_patch(Ellipse((A, 0), dF * math.sqrt(2), dF, fc="#b3c7e6", ec="#1a4a8a",
+                         lw=1.2, zorder=3))
+    ax.text(A, 0, f"Fang-\nspiegel\nØ {dF:.0f}", ha="center", va="center", fontsize=7,
+            zorder=4)
+    # OAZ-Rohr (Wände) von u = -0.35 L (außen) bis u = L (Ende zum Fangspiegel)
+    u0 = -0.35 * L
+    for s in (-1, 1):
+        ax.plot([u0, L], [s * rt, s * rt], color="#444", lw=2)
+    ax.plot([L, L], [rt, rt + 0.0], color="#444")
+    ax.add_patch(Rectangle((u0 - 0.5 * L, -rf), 0.5 * L, 2 * rf, fc="#ddd", ec="#888",
+                           lw=1))
+    ax.text(u0 - 0.25 * L, rf + 0.04 * R, "Okular", ha="center", va="bottom", fontsize=7)
+    ax.plot([0, 0], [-rf, rf], color="#d84315", lw=3)
+    ax.text(0, rf + 0.04 * R, "Feldblende", ha="center", va="bottom", fontsize=7,
+            color="#d84315")
+    # Lichtkegel: Feldblendenrand → Fangspiegel → (gestrichelt) bis zur Blende
+    mk = r["m_keg"]
+    for s in (-1, 1):
+        ax.plot([0, A], [s * rf, s * (rf + mk * A)], color="#2e7d32", lw=1.4)
+        uu = np.array([A, A + R])
+        ax.plot(uu, s * (rf + mk * uu), color="#2e7d32", lw=1, ls="--")
+    ax.fill([0, A, A, 0], [rf, rf + mk * A, -(rf + mk * A), -rf], color="#2e7d32",
+            alpha=0.10, lw=0)
+    # steilste Sichtlinie durch das OAZ-Rohr
+    m = r["m_oaz"]
+    ug = r["hit_geo"][0]
+    for s in (-1, 1):
+        ax.plot([0, ug], [-s * rf, -s * rf + s * m * ug], color="#c62828", lw=1.4)
+    # Maße
+    yb = -R * 0.80
+    ax.annotate("", xy=(A, yb), xytext=(0, yb),
+                arrowprops=dict(arrowstyle="<->", color="#1a4a8a", lw=0.9))
+    ax.text(A / 2, yb - 0.03 * R, f"A = {A:.0f}", ha="center", va="top", fontsize=7,
+            color="#1a4a8a")
+    ya = -rt - 0.10 * R
+    ax.annotate("", xy=(L, ya), xytext=(0, ya),
+                arrowprops=dict(arrowstyle="<->", color="#6a1b9a", lw=0.9))
+    ax.text(L / 2, ya - 0.02 * R, f"L = {L:.0f}", ha="center", va="top", fontsize=7,
+            color="#6a1b9a")
+    ax.annotate("", xy=(L + 0.04 * L, -rt), xytext=(L + 0.04 * L, rt),
+                arrowprops=dict(arrowstyle="<->", color="#6a1b9a", lw=0.9))
+    ax.text(L + 0.08 * L, rt * 0.0, f"Ø {2 * rt:.0f}", rotation=90, ha="left", va="center",
+            fontsize=7, color="#6a1b9a")
+    ax.plot([], [], color="#2e7d32", lw=1.4, label="Lichtkegel Hauptspiegel → Okular")
+    ax.plot([], [], color="#c62828", lw=1.4, label="steilste Sichtlinie (Feldblendenrand\n"
+            "über OAZ-Rohrende) → Blende")
+    ax.legend(fontsize=7, loc="upper left", framealpha=0.85)
+    ax.set_xlim(u0 - 0.6 * L, A + R * 1.45)
+    ax.set_ylim(-R * 1.18, R * 1.18)
+    ax.axis("off")
 
 
 # ── v7.0.0-beta: Vergleich verschiedener Spiegel (absolutes Q_abs) ────────────
@@ -2814,7 +2955,15 @@ class App(tk.Tk):
                         ("Okularauszug (Fokus über Tubus)", "buet", "50", "mm"),
                         ("Tubus-Außen-Ø (0 = wie Spiegel)", "tubus", "0", "mm"),
                         ("100%-Bildfeld", "bild", "10", "mm  (visuell 10, Foto 20–25)"),
-                        ("Q_vis bei V =", "V", "150", "×")]:
+                        ("Q_vis bei V =", "V", "150", "×"),
+                        ("Hutring-Ø (0 = Tubus-Ø)", "hut", "0", "mm"),
+                        ("Übersichtsokular f", "fe", "21", "mm"),
+                        ("AFOV", "afov", "85", "°"),
+                        ("OAZ-Rohr Innen-Ø", "oazd", "50", "mm"),
+                        ("OAZ-Rohr Länge", "oazl", "80", "mm")]:
+                    if key == "hut":
+                        fsr = tk.Frame(frm, bg=BG)
+                        fsr.pack(side="top", fill="x", padx=8, pady=(2, 0))
                     tk.Label(fsr, text=lbl, bg=BG, fg="#6a1b9a",
                              font=("Helvetica", 9, "bold")).pack(side="left", padx=(0, 3))
                     v = tk.StringVar(value=val)
@@ -2829,8 +2978,9 @@ class App(tk.Tk):
                                             font=("Helvetica", 10), justify="left",
                                             anchor="w")
                 self._fs_readout.pack(side="top", fill="x", padx=8, pady=(4, 0))
-                fig, ax = plt.subplots(figsize=(8.0, 4.4), dpi=96)
-                fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
+                fig = plt.figure(figsize=(11.0, 5.0), dpi=96)
+                fig.patch.set_facecolor(BG)
+                ax = fig.add_subplot(1, 2, 1); ax.set_facecolor(BG)
                 canvas = FigureCanvasTkAgg(fig, master=frm)
                 canvas.get_tk_widget().pack(fill="both", expand=True)
                 setattr(self, attr, (fig, ax, canvas))
@@ -3068,12 +3218,12 @@ class App(tk.Tk):
 
     def _fs_eingaben(self):
         """Ganzzahlige Eingaben des Fangspiegel-Tabs (Komma/Punkt, Fallback)."""
-        std = dict(buet=50, tubus=0, bild=10, V=150)
+        std = dict(buet=50, tubus=0, bild=10, V=150, hut=0, fe=21, afov=85, oazd=50, oazl=80)
         out = {}
         for k, v in self._fs_vars.items():
             try:
                 x = int(round(float(v.get().replace(",", ".").strip())))
-                if x < 0 or (k == "V" and x < 1):
+                if x < 0 or (k in ("V", "fe", "afov", "oazd", "oazl") and x < 1):
                     raise ValueError
             except ValueError:
                 x = std[k]
@@ -3095,7 +3245,10 @@ class App(tk.Tk):
         """Fangspiegel-Rechner: Mindestgröße + Q_vis(V) für d_min, +10, +20 mm
         (neu in v6.12.0).  Spiegel: Strehl-Schieber, sonst Sphäre."""
         fig, ax, canvas = self._tab_fangspiegel
-        ax.cla(); ax.set_facecolor(BG)
+        fig.clf()
+        ax = fig.add_subplot(1, 2, 1); ax.set_facecolor(BG)
+        ax2 = fig.add_subplot(1, 2, 2); ax2.set_facecolor(BG)
+        self._tab_fangspiegel = (fig, ax, canvas)
         e = self._fs_eingaben()
         if S_slide is not None:
             S_u, S_txt = S_slide, "Schieber"
@@ -3103,9 +3256,10 @@ class App(tk.Tk):
             _, _, Wb_sph, _, _ = _wellenfronten(D, f, lam)
             S_u, S_txt = _strehl_exakt(Wb_sph), "Sphäre"
         r = fangspiegel_rechner(D, f, e["buet"], e["tubus"], e["bild"],
-                                S_u, e["V"], lam)
+                                S_u, e["V"], lam, e["hut"], e["fe"], e["afov"], e["oazd"], e["oazl"])
         self._fs_readout.config(text=fangspiegel_text(D, f, S_u, S_txt, r, e["V"]))
         fangspiegel_zeichnen(ax, D, f, lam, S_u, S_txt, r, e["V"])
+        fangspiegel_skizze(ax2, D, f, r)
         fig.tight_layout()
         canvas.draw_idle()
 
