@@ -1,7 +1,11 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.0.0-beta (2026-10-29)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.1.0 (2026-10-30)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.1.0 (2026-10-30)  Oberfläche neu geordnet: Tabs in Gruppen (Grundlagen / Bildqualität / Messen / Grenzen (Max. Vergrößerung + Vmax vs. Ø/Seeing in einem Tab) /
+                        Bauen / Vergleich), Grundlagen als 2×2-Übersicht (Klick vergrößert), linke Spalte nur
+                        Kernwerte (Rest im Unter-Reiter „Kennwerte“); Paraboloid-V_krit als ∞; Schieber
+                        „Verbesserung“ (0 = Kugel, 100 = Parabel). Rechenkerne unverändert; Beta-Phase beendet.
   v7.0.0-beta (2026-10-29) Fangspiegel-Tab: Blende gegenüber dem OAZ (Gittertubus/Hutring) aus Hutring-Ø, Okular-f, AFOV und OAZ-Rohr (Innen-Ø, Länge) als Blendenrohr, Blende um den Hutring gebogen, Skizze (Draufsicht) mit Maßen und Strahlengang.
   v7.0.0-beta (2026-10-29) Vergleich: Augenpupille (Abblendung bei Austrittspupille > Augenpupille, mit Refokus),
                         Option „Spiegel sphärisch (aus D, f/D)“; Fehler behoben: Q_abs-Integrationsgitter war bei
@@ -2275,7 +2279,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.0.0-beta (2026-10-29)"
+VERSION  = "7.1.0 (2026-10-30)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -2294,7 +2298,7 @@ STRINGS = {
     "sl_D":      {"de": "Öffnung D",       "en": "Aperture D"},
     "sl_f":      {"de": "Brennweite f",    "en": "Focal length f"},
     "sl_lam":    {"de": "Wellenlänge λ",   "en": "Wavelength λ"},
-    "sl_strehl": {"de": "Strehl-Quotient", "en": "Strehl ratio"},
+    "sl_strehl": {"de": "Verbesserung", "en": "Improvement"},
     "sl_blende": {"de": "Blende D [mm]",   "en": "Stop D [mm]"},
     # Karten-Gruppen
     "grp_contrast": {"de": "Kontrast",
@@ -2325,6 +2329,15 @@ STRINGS = {
     "rQp350":       {"de": "Q_perc  bei 160×",          "en": "Q_perc  at 160×"},
     "rQpV":         {"de": "Q_perc  bei Slider-Vergr.", "en": "Q_perc  at slider magnif."},
     # Tab-Titel
+    "grp_kern":        {"de": "Kernwerte", "en": "Key values"},
+    "grp_t_grund":     {"de": "  Grundlagen  ",             "en": "  Basics  "},
+    "grp_t_bild":      {"de": "  Bildqualität  ",           "en": "  Image quality  "},
+    "grp_t_messen":    {"de": "  Messen  ",                 "en": "  Testing  "},
+    "grp_t_grenzen":   {"de": "  Grenzen  ",                "en": "  Limits  "},
+    "grp_t_bauen":     {"de": "  Bauen  ",                  "en": "  Building  "},
+    "grp_t_vergleich": {"de": "  Vergleich (Beta)  ",       "en": "  Comparison (beta)  "},
+    "tab_grund":       {"de": "  Diagramme  ",              "en": "  Charts  "},
+    "tab_kennwerte":   {"de": "  Kennwerte  ",              "en": "  Details  "},
     "tab_strehl":      {"de": "  Strehl vs. f/D  ",         "en": "  Strehl vs. f/D  "},
     "tab_oeff":        {"de": "  Eff. Öffnung vs. f/D  ",   "en": "  Eff. aperture vs. f/D  "},
     "tab_deff_D":      {"de": "  D_eff vs. Öffnung  ",      "en": "  D_eff vs. aperture  "},
@@ -2334,7 +2347,7 @@ STRINGS = {
     "tab_blende":      {"de": "  Blende  ",                 "en": "  Stop-down  "},
     "tab_foucault":    {"de": "  Foucault  ",               "en": "  Foucault  "},
     "tab_vmax":        {"de": "  Max. Vergrößerung  ",       "en": "  Max. magnification  "},
-    "tab_vmax_D":      {"de": "  Vmax vs. Ø/Seeing  ",        "en": "  Vmax vs. D/seeing  "},
+    "tab_vmax_D":      {"de": "  Vmax vs. Ø / Seeing  ",        "en": "  Vmax vs. D/seeing  "},
     "tab_fangspiegel": {"de": "  Fangspiegel  ",              "en": "  Secondary mirror  "},
     "tab_vergleich":   {"de": "  Vergleich (Beta)  ",         "en": "  Comparison (beta)  "},
     # MTF-Beschriftungen
@@ -2443,8 +2456,12 @@ class App(tk.Tk):
         for key, widget in self._karten_name_widgets.items():
             widget.config(text=T(key))
         # Tab-Titel
-        for i, key in enumerate(self._tab_keys):
-            self._nb.tab(i, text=T(key))
+        for key, (nbk, frm) in self._tab_nb.items():
+            if nbk is self._nb:
+                continue
+            nbk.tab(frm, text=T(key))
+        for gi, (gkey, keys) in enumerate(self._tab_gruppen):
+            self._nb.tab(gi, text=T(gkey))
         # MTF-Beschriftungen
         for key, widget in self._mtf_label_widgets.items():
             widget.config(text=T(key))
@@ -2493,7 +2510,7 @@ class App(tk.Tk):
         param_defs = [
             ("sl_D",      self.var_D,        50,   500,  "mm",  14),
             ("sl_f",      self.var_f,        200,  4000, "mm",  14),
-            ("sl_strehl", self.var_strehl,   0,    100,  "%",   22),
+            ("sl_strehl", self.var_strehl,   0,    100,  "%",   40),
         ]
         self._param_labels = {}   # key → (lbl_val, unit)
         self._param_vars   = {}   # key → (var, mn, mx)
@@ -2540,39 +2557,26 @@ class App(tk.Tk):
         self._res = {}
         self._karten_name_widgets = {}
 
-        karten_gruppen = [
-            ("grp_contrast", [
-                ("rN",           "rN"),
-                ("rWp",          "rWp"),
-                ("rWb",          "rWb"),
-                ("rWrms",        "rWrms"),
-                ("rS",           "rS"),
-                ("rS_exakt",     "rS_exakt"),
-                ("rDeff_k",      "rDeff_k"),
-                ("rVkrit_naeh",  "rVkrit_naeh"),
-                ("rVkrit_blur",  "rVkrit_blur"),
-                ("rVkrit_exakt", "rVkrit_exakt"),
-            ]),
-            ("grp_sharpness", [
-                ("rAuflVerlust", "rAuflVerlust"),
-                ("rVerlustV",    "rVerlustV"),
-            ]),
-            ("grp_qvis", [
-                ("rQp80",  "rQp80"),
-                ("rQp200", "rQp200"),
-                ("rQp350", "rQp350"),
-                ("rQpV",   "rQpV"),
-            ]),
+        # v7.1.0: links nur Kernwerte, die übrigen Karten im Tab "Kennwerte"
+        karten_links = [("rS_exakt", "rS_exakt"), ("rVkrit_exakt", "rVkrit_exakt"),
+                        ("rDeff_k", "rDeff_k"), ("rQpV", "rQpV")]
+        self._karten_rest = [
+            ("grp_contrast", [("rN", "rN"), ("rWp", "rWp"), ("rWb", "rWb"),
+                              ("rWrms", "rWrms"), ("rS", "rS"),
+                              ("rVkrit_naeh", "rVkrit_naeh"),
+                              ("rVkrit_blur", "rVkrit_blur")]),
+            ("grp_sharpness", [("rAuflVerlust", "rAuflVerlust"),
+                               ("rVerlustV", "rVerlustV")]),
+            ("grp_qvis", [("rQp80", "rQp80"), ("rQp200", "rQp200"),
+                          ("rQp350", "rQp350")]),
         ]
-
-        for grp_key, karten in karten_gruppen:
-            grp_w = tk.Label(left, text=T(grp_key),
-                             font=("Helvetica", 11, "bold"), bg=BG)
-            grp_w.grid(row=row, column=0, columnspan=3, sticky="w", **pad)
-            self._grp_widgets[grp_key] = grp_w
-            row += 1
-            row = self._karten_grid(left, karten, row, self._res,
-                                    self._karten_name_widgets, pad)
+        grp_w = tk.Label(left, text=T("grp_kern"),
+                         font=("Helvetica", 11, "bold"), bg=BG)
+        grp_w.grid(row=row, column=0, columnspan=3, sticky="w", **pad)
+        self._grp_widgets["grp_kern"] = grp_w
+        row += 1
+        row = self._karten_grid(left, karten_links, row, self._res,
+                                self._karten_name_widgets, pad)
 
         self.lbl_verdict = tk.Label(left, text="", bg=BG,
                                     font=("Helvetica", 10),
@@ -2592,12 +2596,10 @@ class App(tk.Tk):
         self._mtf_label_widgets = {}
 
         tab_attrs = [
-            ("_tab_strehl",       "tab_strehl"),
-            ("_tab_oeff",         "tab_oeff"),
-            ("_tab_deff_D",       "tab_deff_D"),
-            ("_tab_beugung",      "tab_beugung"),
-            ("_tab_mtf",          "tab_mtf"),
+            ("_tab_grund",        "tab_grund"),
+            ("_tab_kennwerte",    "tab_kennwerte"),
             ("_tab_wahrnehmung",  "tab_wahrnehmung"),
+            ("_tab_mtf",          "tab_mtf"),
             ("_tab_blende",       "tab_blende"),
             ("_tab_foucault",     "tab_foucault"),
             ("_tab_vmax",         "tab_vmax"),
@@ -2606,10 +2608,62 @@ class App(tk.Tk):
             ("_tab_vergleich",    "tab_vergleich"),
         ]
         self._tab_keys = [k for _, k in tab_attrs]
+        # v7.1.0: Gruppen (oberste Reiter); Gruppen mit mehreren Diagrammen
+        # bekommen ein eigenes Unter-Notebook.
+        self._tab_gruppen = [
+            ("grp_t_grund",     ["tab_grund", "tab_kennwerte"]),
+            ("grp_t_bild",      ["tab_wahrnehmung", "tab_mtf", "tab_blende"]),
+            ("grp_t_messen",    ["tab_foucault"]),
+            ("grp_t_grenzen",   ["tab_vmax"]),   # tab_vmax_D teilt sich den Tab (rechte Hälfte)
+            ("grp_t_bauen",     ["tab_fangspiegel"]),
+            ("grp_t_vergleich", ["tab_vergleich"]),
+        ]
+        self._tab_nb = {}      # tab_key -> (Notebook, Frame)
+        self._grp_nb = []      # pro Gruppe: (Gruppen-Frame, Unter-Notebook | None)
+        for gkey, keys in self._tab_gruppen:
+            if len(keys) > 1:
+                gfrm = tk.Frame(self._nb, bg=BG)
+                sub = ttk.Notebook(gfrm)
+                sub.pack(fill="both", expand=True)
+                sub.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+                self._nb.add(gfrm, text=T(gkey))
+            else:
+                gfrm, sub = tk.Frame(self._nb, bg=BG), None
+                self._nb.add(gfrm, text=T(gkey))
+            self._grp_nb.append((gfrm, sub))
         for attr, tab_key in tab_attrs:
-            frm = tk.Frame(self._nb, bg=BG)
-            self._nb.add(frm, text=T(tab_key))
-            if attr == "_tab_mtf":
+            gi = next(i for i, (_, ks) in enumerate(self._tab_gruppen)
+                      if tab_key in ks or (tab_key == "tab_vmax_D" and "tab_vmax" in ks))
+            gfrm, sub = self._grp_nb[gi]
+            if sub is not None:
+                frm = tk.Frame(sub, bg=BG)
+                sub.add(frm, text=T(tab_key))
+                self._tab_nb[tab_key] = (sub, frm)
+            else:
+                frm = gfrm
+                self._tab_nb[tab_key] = (self._nb, frm)
+            if attr == "_tab_vmax":
+                _l = tk.Frame(frm, bg=BG); _l.pack(side="top", fill="both", expand=True)
+                _r = tk.Frame(frm, bg=BG); _r.pack(side="top", fill="both", expand=True)
+                self._vmax_cols = (_l, _r)
+                frm = _l
+            elif attr == "_tab_vmax_D":
+                frm = self._vmax_cols[1]
+            if attr == "_tab_grund":
+                self._baue_grundlagen(frm)
+            elif attr == "_tab_kennwerte":
+                kr = 0
+                for grp_key, karten in self._karten_rest:
+                    grp_w = tk.Label(frm, text=T(grp_key),
+                                     font=("Helvetica", 11, "bold"), bg=BG)
+                    grp_w.grid(row=kr, column=0, columnspan=4, sticky="w", **pad)
+                    self._grp_widgets[grp_key] = grp_w
+                    kr += 1
+                    kr = self._karten_grid(frm, karten, kr, self._res,
+                                           self._karten_name_widgets, pad)
+                for c in range(4):
+                    frm.columnconfigure(c, weight=1, uniform="kw")
+            elif attr == "_tab_mtf":
                 btn_frame = tk.Frame(frm, bg=BG)
                 btn_frame.pack(side="top", fill="x", padx=8, pady=(6, 0))
                 self._mtf_modus = tk.StringVar(value="klassisch")
@@ -2851,7 +2905,7 @@ class App(tk.Tk):
                          font=("Helvetica", 9)).pack(side="left", padx=(2, 4))
 
                 # ── Diagramm ──────────────────────────────────────────────
-                fig, ax = plt.subplots(figsize=(8.0, 4.8), dpi=96)
+                fig, ax = plt.subplots(figsize=(8.0, 3.4), dpi=96)
                 fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
                 canvas = FigureCanvasTkAgg(fig, master=frm)
                 canvas.get_tk_widget().pack(fill="both", expand=True)
@@ -2880,7 +2934,7 @@ class App(tk.Tk):
                          font=("Helvetica", 9)).pack(side="left", padx=(2, 4))
 
                 # ── Diagramm ──────────────────────────────────────────────
-                fig, ax = plt.subplots(figsize=(8.0, 4.8), dpi=96)
+                fig, ax = plt.subplots(figsize=(8.0, 3.4), dpi=96)
                 fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
                 canvas = FigureCanvasTkAgg(fig, master=frm)
                 canvas.get_tk_widget().pack(fill="both", expand=True)
@@ -2993,6 +3047,77 @@ class App(tk.Tk):
                 canvas.get_tk_widget().pack(fill="both", expand=True)
                 setattr(self, attr, (fig, ax, canvas))
 
+    def _baue_grundlagen(self, frm):
+        """Tab "Grundlagen" (v7.1.0): die vier klassischen Diagramme als 2×2-
+        Übersicht in einer Figur; Klick auf ein Diagramm vergrößert es, ein
+        weiterer Klick (oder Rechtsklick) stellt die Übersicht wieder her."""
+        tk.Label(frm, text="Klick auf ein Diagramm = vergrößern / zurück",
+                 bg=BG, fg="#888", font=("Helvetica", 8, "italic")
+                 ).pack(side="top", anchor="w", padx=8, pady=(4, 0))
+        fig = plt.figure(figsize=(9.5, 6.4), dpi=96)
+        fig.patch.set_facecolor(BG)
+        gs = fig.add_gridspec(2, 2)
+        axes = [fig.add_subplot(gs[i // 2, i % 2]) for i in range(4)]
+        for a in axes:
+            a.set_facecolor(BG)
+        canvas = FigureCanvasTkAgg(fig, master=frm)
+        canvas.get_tk_widget().pack(fill="both", expand=True)
+        self._tab_strehl  = (fig, axes[0], canvas)
+        self._tab_oeff    = (fig, axes[1], canvas)
+        self._tab_deff_D  = (fig, axes[2], canvas)
+        self._tab_beugung = (fig, axes[3], canvas)
+        self._grund = dict(fig=fig, axes=axes, canvas=canvas, gs=gs, zoom=None)
+        canvas.mpl_connect("button_press_event", self._grund_klick)
+
+    def _grund_fonts(self):
+        """Übersicht (2×2): Schriften verkleinern; vergrößerte Ansicht: normal."""
+        g = self._grund
+        fak = 1.0 if g["zoom"] is not None else 0.62
+        axs = list(g["axes"])
+        tw = getattr(self, "_oeff_twin", None)
+        if tw is not None:
+            axs.append(tw)
+        for a in axs:
+            arts = [a.title, a.xaxis.label, a.yaxis.label] + list(a.texts)
+            leg = a.get_legend()
+            if leg is not None:
+                arts += list(leg.get_texts())
+            for t in arts:
+                if not hasattr(t, "_fs0"):
+                    t._fs0 = t.get_fontsize()
+                t.set_fontsize(max(t._fs0 * fak, 5))
+            if not hasattr(a, "_ls0"):
+                a._ls0 = plt.rcParams["xtick.labelsize"]
+                a._ls0 = 10.0 if not isinstance(a._ls0, (int, float)) else a._ls0
+            a.tick_params(labelsize=a._ls0 * (1.0 if fak == 1.0 else 0.7))
+
+    def _grund_klick(self, ev):
+        g = self._grund
+        if ev.inaxes is None and g["zoom"] is None:
+            return
+        fig, axes, gs = g["fig"], g["axes"], g["gs"]
+        if g["zoom"] is not None:            # zurück zur Übersicht
+            g["zoom"] = None
+            for i, a in enumerate(axes):
+                a.set_subplotspec(gs[i // 2, i % 2]); a.set_visible(True)
+            tw = getattr(self, "_oeff_twin", None)
+            if tw is not None:
+                tw.set_visible(True)
+        else:
+            if ev.inaxes not in axes:
+                return
+            k = axes.index(ev.inaxes)
+            g["zoom"] = k
+            for i, a in enumerate(axes):
+                a.set_visible(i == k)
+            tw = getattr(self, "_oeff_twin", None)
+            if tw is not None:
+                tw.set_visible(k == 1)
+            axes[k].set_subplotspec(fig.add_gridspec(1, 1)[0, 0])
+        self._grund_fonts()
+        fig.tight_layout()
+        g["canvas"].draw_idle()
+
     def _karten_grid(self, parent, karten, start_row, store, name_widgets, pad):
         is_odd_last = len(karten) % 2 == 1
         for j, (str_key, attr) in enumerate(karten):
@@ -3091,13 +3216,28 @@ class App(tk.Tk):
     def _aktiver_tab(self) -> str:
         """Gibt den Tab-Key des aktuell sichtbaren Tabs zurück."""
         try:
-            selected = self._nb.select()
-            if not selected:
+            sel = self._nb.select()
+            if not sel:
                 return self._tab_keys[0]
-            idx = self._nb.index(selected)
-            return self._tab_keys[idx]
+            gi = self._nb.index(sel)
+            keys = self._tab_gruppen[gi][1]
+            sub = self._grp_nb[gi][1]
+            if sub is None:
+                return keys[0]
+            return keys[sub.index(sub.select())]
         except Exception:
             return self._tab_keys[0] if self._tab_keys else ""
+
+    def _tab_waehlen(self, key: str):
+        """Wählt einen Tab per Key (Gruppe + Unter-Reiter)."""
+        for gi, (_, keys) in enumerate(self._tab_gruppen):
+            if key in keys:
+                self._nb.select(gi)
+                sub = self._grp_nb[gi][1]
+                if sub is not None:
+                    sub.select(keys.index(key))
+                self.update_idletasks()
+                return
 
     def _diagramm_fuer_tab(self, tab_key: str, r: dict):
         """Zeichnet genau das Diagramm für tab_key."""
@@ -3107,15 +3247,15 @@ class App(tk.Tk):
         Deff_k_slide= r["Deff_k_slide"]
         D_bl        = r["D_bl"]
         r_real      = r["r_real"]
-        if tab_key == "tab_strehl":
+        if tab_key == "tab_grund":
             self._diagramm_strehl(D, f, lam, r_real["N"], S_real, S_slide)
-        elif tab_key == "tab_oeff":
             self._diagramm_oeffnung(D, f, lam, r_real["N"], r_real["Deff_k"],
                                     S_sph=S_real, Dk_slide=Deff_k_slide)
-        elif tab_key == "tab_deff_D":
             self._diagramm_deff_D(D, r_real["N"], S_slide)
-        elif tab_key == "tab_beugung":
             self._diagramm_beugung(D, f)
+            self._grund_fonts()
+            self._grund["fig"].tight_layout()
+            self._grund["canvas"].draw_idle()
         elif tab_key == "tab_mtf":
             self._diagramm_mtf(D, f, lam, S_slide)
         elif tab_key == "tab_wahrnehmung":
@@ -3132,6 +3272,7 @@ class App(tk.Tk):
                     self._foucault_aktualisieren()
         elif tab_key == "tab_vmax":
             self._diagramm_vmax(D, f, S_slide)
+            self._diagramm_vmax_D()
         elif tab_key == "tab_vmax_D":
             self._diagramm_vmax_D()
         elif tab_key == "tab_fangspiegel":
@@ -3473,7 +3614,8 @@ class App(tk.Tk):
                 lbl.config(text="sichtbares Licht" if 380 <= lam <= 700 else "außerhalb VIS")
             elif key == "sl_strehl":
                 lbl.config(text=f"→ S={S_slide:.3f}  "
-                                 f"({'Paraboloid' if S_slide >= 0.9999 else 'Sphäre'})")
+                                 f"({'Paraboloid' if S_slide >= 0.9999 else 'Sphäre'})"
+                                 f"   0 = Kugel, 100 = Parabel")
             elif key == "sl_blende":
                 lbl.config(text=f"f/{f/D_bl:.1f}")
 
@@ -3525,7 +3667,7 @@ class App(tk.Tk):
         self.lbl_vkrit.config(
             text=f"⚡ Real: V_krit={Vk['Vk_sph']:.0f}×  →  "
                  f"Verbessert (S={S_slide:.2f}): V_krit={Vk_slide['Vk_sph']:.0f}×  |  "
-                 f"Paraboloid: V_krit={Vk['Vk_para']:.0f}×  |  V_max={Vk['Vmax']:.0f}×",
+                 f"Paraboloid: V_krit={'unbegrenzt' if Vk['Vk_para'] >= 1e8 else format(Vk['Vk_para'], '.0f') + '×'}  |  V_max={Vk['Vmax']:.0f}×",
             fg="#534AB7")
 
         def _qcolor(q):
@@ -3540,10 +3682,8 @@ class App(tk.Tk):
         # das sichtbare Tab — Rest wird beim Tab-Wechsel nachgeholt.
         active = self._aktiver_tab()
         alle_tab_keys = [k for _, k in [
-            ("_tab_strehl",      "tab_strehl"),
-            ("_tab_oeff",        "tab_oeff"),
-            ("_tab_deff_D",      "tab_deff_D"),
-            ("_tab_beugung",     "tab_beugung"),
+            ("_tab_grund",       "tab_grund"),
+            ("_tab_kennwerte",   "tab_kennwerte"),
             ("_tab_mtf",         "tab_mtf"),
             ("_tab_wahrnehmung", "tab_wahrnehmung"),
             ("_tab_blende",      "tab_blende"),
@@ -3987,8 +4127,9 @@ class App(tk.Tk):
                             Ds_akt=None, S_sph=None, Dk_slide=None, Ds_slide=None):
         fig, ax, canvas = self._tab_oeff
         ax.cla()
-        for ax2_old in fig.get_axes()[1:]:
-            fig.delaxes(ax2_old)
+        _tw = getattr(self, "_oeff_twin", None)
+        if _tw is not None and _tw in fig.axes:
+            fig.delaxes(_tw)
 
         ns, _, deff_ks, aufl_verluste, _ = kurven_N(D, lam)
         r_akt   = berechne(D, f, lam)
@@ -4015,6 +4156,7 @@ class App(tk.Tk):
         ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
 
         ax2 = ax.twinx()
+        self._oeff_twin = ax2
         ax2.set_facecolor("none")
         ax2.fill_between(ns, aufl_verluste, 0, color=COR, alpha=0.08)
         ax2.plot(ns, aufl_verluste, color=COR, lw=2,

@@ -1,10 +1,13 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.0.0-beta (2026-10-26)
-Entspricht newton_spiegel_rechner.py v7.0.0-beta
+Streamlit-Version v7.1.0 (2026-10-30)
+Entspricht newton_spiegel_rechner.py v7.1.0
 
 Änderungshistorie (jüngste zuerst):
+  v7.1.0 (2026-10-30)  Oberfläche neu geordnet: Tab-Gruppen (Grundlagen / Bildqualität / Messen / Grenzen (Max. Vergrößerung + Vmax vs. Ø/Seeing in einem Tab) / Bauen /
+                        Vergleich), Grundlagen als 2×2-Übersicht (Ansicht umschaltbar), oben nur Kernwerte (volle
+                        Tabelle im Unter-Reiter „Kennwerte“); Paraboloid-V_krit als ∞. Rechenkerne unverändert.
   v7.0.0-beta (2026-10-29) Fangspiegel-Tab: Blende gegenüber dem OAZ (Gittertubus/Hutring) aus Hutring-Ø, Okular-f, AFOV und OAZ-Rohr (Innen-Ø, Länge) als Blendenrohr, Blende um den Hutring gebogen, Skizze (Draufsicht) mit Maßen und Strahlengang.
   v7.0.0-beta (2026-10-29) Vergleich: Augenpupille (Abblendung bei Austrittspupille > Augenpupille, mit Refokus),
                         Option „Spiegel sphärisch (aus D, f/D)“; Fehler behoben: Q_abs-Integrationsgitter war bei
@@ -43,7 +46,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.0.0-beta (2026-10-29)"
+VERSION = "7.1.0 (2026-10-30)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -3739,35 +3742,39 @@ def main():
     rows += _row("Aufl.verlust",         f"{avp:.1f}%  (Blur {r_real['d_blur_as']:.1f}\")")
     rows += _row("Verlust bei 150x",     f"{rv['verlust']:.1f} mm")
     rows += _row("V_krit / Vmax",
-                 f"{Vk['Vk_sph']:.0f}x &#8594; {Vk_slide['Vk_sph']:.0f}x  | Para: {Vk['Vk_para']:.0f}x  | Vmax: {Vk['Vmax']:.0f}x",
+                 f"{Vk['Vk_sph']:.0f}x &#8594; {Vk_slide['Vk_sph']:.0f}x  | Para: {'&#8734;' if Vk['Vk_para'] >= 1e8 else format(Vk['Vk_para'], '.0f') + 'x'}  | Vmax: {Vk['Vmax']:.0f}x",
                  "#534AB7")
     rows += _hdr("Q_perc (CSF-gewichtet)")
     for lbl_q, q in [("Q bei  30x", Qp_80), ("Q bei  80x", Qp_200),
                      ("Q bei 160x", Qp_350), ("Q bei 150x", Qp_V)]:
         rows += _row(lbl_q, f"{q:.3f}", _qc(q))
 
-    st.markdown(
-        f"<table style='border-collapse:collapse;width:100%;margin-bottom:4px'>{rows}</table>",
-        unsafe_allow_html=True)
+    _kenn_html = f"<table style='border-collapse:collapse;width:100%;margin-bottom:4px'>{rows}</table>"
 
-    st.markdown("---")
+    # v7.1.0: nur Kernwerte oben, die vollständige Tabelle liegt im Tab
+    # "Grundlagen → Kennwerte"
+    _k1, _k2, _k3, _k4 = st.columns(4)
+    _k1.metric("Strehl exakt", f"{S_real:.3f}")
+    _k2.metric("V_krit (MTF×CSF >10 %)", _vk_ex_text(Vk_exakt))
+    _k3.metric("D_eff Kontrast", f"{r_real['Deff_k']:.0f} mm")
+    _k4.metric("Q_perc bei 150×", f"{Qp_V:.3f}")
 
     # ── Diagramm-Tabs ────────────────────────────────────────────────────────
-    tabs = st.tabs([
-        "Strehl vs. f/D",
-        "Eff. Öffnung vs. f/D",
-        "D_eff vs. Öffnung",
-        "Beugungsgrenze",
-        "MTF",
-        "Wahrnehmung",
-        "Blende",
-        "Foucault",
-        "Max. Vergrößerung",
-        "Vmax vs. Ø/Seeing",
-        "Fangspiegel",
-        "Vergleich (Beta)",
-        "ℹ️ Dokumentation",
-    ])
+    # v7.1.0: Gruppen wie im Desktop; die alten Indizes tabs[0..12] bleiben
+    # erhalten (zeigen jetzt auf die Container der Gruppen / Unter-Reiter).
+    _top = st.tabs(["Grundlagen", "Bildqualität", "Messen", "Grenzen", "Bauen",
+                    "Vergleich (Beta)", "ℹ️ Dokumentation"])
+    with _top[0]:
+        _sub_g = st.tabs(["Diagramme", "Kennwerte"])
+    with _top[1]:
+        _sub_b = st.tabs(["Wahrnehmung", "MTF", "Blende"])
+    tabs = [_sub_g[0], None, None, None,          # 0: Grundlagen-Diagramme (1–3 unbenutzt)
+            _sub_b[1], _sub_b[0], _sub_b[2],      # 4 MTF, 5 Wahrnehmung, 6 Blende
+            _top[2],                              # 7 Foucault
+            _top[3], _top[3],                     # 8, 9 (beide in „Grenzen“)
+            _top[4], _top[5], _top[6]]            # 10 Fangspiegel, 11 Vergleich, 12 Doku
+    with _sub_g[1]:
+        st.markdown(_kenn_html, unsafe_allow_html=True)
 
     # ── Lazy Tab-Rendering: Figure als PNG-Bytes im session_state ─────────────
     # Figures werden nur neu gezeichnet wenn sich die relevanten Parameter
@@ -3795,16 +3802,24 @@ def main():
     _hb = _h + (D_blend,)                  # Hash mit Blende
 
     with tabs[0]:
-        _show_cached("fig_strehl",   lambda: plot_strehl(D, f, lam, S_slide),   _h)
-
-    with tabs[1]:
-        _show_cached("fig_oeffnung", lambda: plot_oeffnung(D, f, lam, S_slide), _h)
-
-    with tabs[2]:
-        _show_cached("fig_deff_D",   lambda: plot_deff_D(D, N, S_slide),        _h)
-
-    with tabs[3]:
-        _show_cached("fig_beugung",  lambda: plot_beugung(D, f),                                        (D, f))
+        _ans = st.radio("Ansicht", ["Übersicht (2×2)", "Strehl vs. f/D",
+                                    "Eff. Öffnung vs. f/D", "D_eff vs. Öffnung",
+                                    "Beugungsgrenze"], horizontal=True, key="grund_ansicht")
+        _g = {"Strehl vs. f/D":       lambda: _show_cached("fig_strehl",   lambda: plot_strehl(D, f, lam, S_slide),   _h),
+              "Eff. Öffnung vs. f/D": lambda: _show_cached("fig_oeffnung", lambda: plot_oeffnung(D, f, lam, S_slide), _h),
+              "D_eff vs. Öffnung":    lambda: _show_cached("fig_deff_D",   lambda: plot_deff_D(D, N, S_slide),        _h),
+              "Beugungsgrenze":       lambda: _show_cached("fig_beugung",  lambda: plot_beugung(D, f),                (D, f))}
+        if _ans == "Übersicht (2×2)":
+            _ga, _gb = st.columns(2)
+            with _ga:
+                _g["Strehl vs. f/D"]()
+                _g["D_eff vs. Öffnung"]()
+            with _gb:
+                _g["Eff. Öffnung vs. f/D"]()
+                _g["Beugungsgrenze"]()
+            st.caption("Ansicht oben umschalten = einzelnes Diagramm groß.")
+        else:
+            _g[_ans]()
 
     with tabs[4]:
         c1, c2 = st.columns(2)
@@ -4100,6 +4115,7 @@ def main():
                      _h + (objekt_v, L0_v, seeing_v, D_auge_v, L_schw_v))
 
     with tabs[9]:
+        st.markdown("---")
         # ── Vmax vs. Öffnung für verschiedene Seeing-Werte (perfekte Optik) ──
         st.markdown(
             "Fundamentale Grenze auch bei perfekter Politur (S=1): Beugung + Seeing, "
