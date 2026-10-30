@@ -1393,6 +1393,13 @@ def perceived_quality(D_mm: float, f_mm: float, lam_nm: float,
     return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf)
 
 
+def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float, V: float,
+                            n_pts: int = 120) -> float:
+    """Q_perc(V) für einen Spiegel mit vorgegebenem Strehl S (Schieber)."""
+    freqs_as, fc, mp, msa, _, S_ = mtf_kurven_von_S(D_mm, S, lam_nm, n_pts)
+    return _perceived_quality_kern(freqs_as, fc, mp, msa, S_, V, D_mm, True)
+
+
 def perceived_quality_exakt(D_mm: float, f_mm: float, lam_nm: float,
                              V: float, n_pts: int = 200) -> float:
     """Q_vis exakt: MTF×CSF-Integral ohne Dämpfungsfunktion w(V).
@@ -3187,6 +3194,8 @@ class App(tk.Tk):
             Qp_200       = perceived_quality(D, f, lam, 80.0)
             Qp_350       = perceived_quality(D, f, lam, 160.0)
             Qp_V         = perceived_quality(D, f, lam, 150.0)
+            Qp_s         = tuple(perceived_quality_von_S(D, S_slide, lam, v)
+                                 for v in (30.0, 80.0, 160.0, 150.0))
 
             if self._compute_cancel:
                 return
@@ -3197,7 +3206,8 @@ class App(tk.Tk):
                        rv=rv, Vk_naeh=Vk_naeh, Vk_blur=Vk_blur,
                        Vk_exakt=Vk_exakt, Vk_halb=Vk_halb,
                        Vk_exakt_s=Vk_exakt_s,
-                       Qp_80=Qp_80, Qp_200=Qp_200, Qp_350=Qp_350, Qp_V=Qp_V)
+                       Qp_80=Qp_80, Qp_200=Qp_200, Qp_350=Qp_350, Qp_V=Qp_V,
+                       Qp_s=Qp_s)
             self.after(0, lambda r=res: self._aktualisieren(r))
         except Exception as exc:
             import traceback
@@ -3601,6 +3611,7 @@ class App(tk.Tk):
         Vk_halb     = res["Vk_halb"]
         Vk_exakt_s  = res["Vk_exakt_s"]
         Qp_80, Qp_200, Qp_350, Qp_V = res["Qp_80"], res["Qp_200"], res["Qp_350"], res["Qp_V"]
+        Qs_80, Qs_200, Qs_350, Qs_V = res["Qp_s"]
         self._last_params = res
         # ── Info-Labels neben den Eingabefeldern ──────────────────────────
         r = r_real
@@ -3614,7 +3625,7 @@ class App(tk.Tk):
                 lbl.config(text="sichtbares Licht" if 380 <= lam <= 700 else "außerhalb VIS")
             elif key == "sl_strehl":
                 lbl.config(text=f"→ S={S_slide:.3f}  "
-                                 f"({'Paraboloid' if S_slide >= 0.9999 else 'Sphäre'})"
+                                 f"({'Paraboloid' if S_slide >= 0.9999 else 'Sphäre' if S_slide <= S_real + 1e-6 else 'verbessert'})"
                                  f"   0 = Kugel, 100 = Parabel")
             elif key == "sl_blende":
                 lbl.config(text=f"f/{f/D_bl:.1f}")
@@ -3641,7 +3652,7 @@ class App(tk.Tk):
         rv2["rWrms"].config( text=f"{r['Wrms']:.5f} λ")
         rv2["rS"].config(    text=f"{S_real:.4f}  →  {S_slide:.4f}")
         rv2["rS_exakt"].config(
-            text=f"{S_real:.4f}  (Δ vs. Mar. {S_real - S_mar:+.4f})", fg=_col_ex)
+            text=f"{S_real:.4f}  →  {S_slide:.4f}", fg=_col_ex)
         rv2["rDeff_k"].config(
             text=f"{r['Deff_k']:.1f} → {Deff_k_slide:.1f} mm")
         rv2["rVkrit_naeh"].config(
@@ -3662,7 +3673,9 @@ class App(tk.Tk):
             text=f"{rv['verlust']:.1f} mm",
             fg="#c62828" if rv["verlust"] > 5 else "#333")
 
-        text, farbe = beurteilung(S_real)
+        text, farbe = beurteilung(S_slide)
+        if S_slide > S_real + 1e-6:
+            text = f"Mit Verbesserung (S={S_slide:.2f}):  {text}"
         self.lbl_verdict.config(text=text, fg=farbe)
         self.lbl_vkrit.config(
             text=f"⚡ Real: V_krit={Vk['Vk_sph']:.0f}×  →  "
@@ -3672,10 +3685,10 @@ class App(tk.Tk):
 
         def _qcolor(q):
             return "#2e7d32" if q >= 0.90 else "#e65100" if q >= 0.70 else "#c62828"
-        rv2["rQp80"].config( text=f"{Qp_80:.3f}",  fg=_qcolor(Qp_80))
-        rv2["rQp200"].config(text=f"{Qp_200:.3f}", fg=_qcolor(Qp_200))
-        rv2["rQp350"].config(text=f"{Qp_350:.3f}", fg=_qcolor(Qp_350))
-        rv2["rQpV"].config(  text=f"{Qp_V:.3f}  (bei 150×)", fg=_qcolor(Qp_V))
+        rv2["rQp80"].config( text=f"{Qp_80:.3f}  →  {Qs_80:.3f}",  fg=_qcolor(Qs_80))
+        rv2["rQp200"].config(text=f"{Qp_200:.3f}  →  {Qs_200:.3f}", fg=_qcolor(Qs_200))
+        rv2["rQp350"].config(text=f"{Qp_350:.3f}  →  {Qs_350:.3f}", fg=_qcolor(Qs_350))
+        rv2["rQpV"].config(  text=f"{Qp_V:.3f}  →  {Qs_V:.3f}  (bei 150×)", fg=_qcolor(Qs_V))
 
         # ── Diagramme ──────────────────────────────────────────────────────
         # Beim ersten Durchlauf (startup) alle Tabs zeichnen, danach nur

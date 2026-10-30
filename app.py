@@ -1355,6 +1355,13 @@ def perceived_quality(D_mm: float, f_mm: float, lam_nm: float,
     return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf)
 
 
+def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float, V: float,
+                            n_pts: int = 120) -> float:
+    """Q_perc(V) für einen Spiegel mit vorgegebenem Strehl S (Schieber)."""
+    freqs_as, fc, mp, msa, _, S_ = mtf_kurven_von_S(D_mm, S, lam_nm, n_pts)
+    return _perceived_quality_kern(freqs_as, fc, mp, msa, S_, V, D_mm, True)
+
+
 def perceived_quality_exakt(D_mm: float, f_mm: float, lam_nm: float,
                              V: float, n_pts: int = 200) -> float:
     """Q_vis exakt: MTF×CSF-Integral ohne Dämpfungsfunktion w(V).
@@ -3690,8 +3697,12 @@ def main():
     Qp_200     = perceived_quality(D, f, lam, 80.0)
     Qp_350     = perceived_quality(D, f, lam, 160.0)
     Qp_V       = perceived_quality(D, f, lam, 150.0)
+    Qs_80, Qs_200, Qs_350, Qs_V = (perceived_quality_von_S(D, S_slide, lam, v)
+                                   for v in (30.0, 80.0, 160.0, 150.0))
 
-    verdict_text, verdict_color = beurteilung(S_real)
+    verdict_text, verdict_color = beurteilung(S_slide)
+    if S_slide > S_real + 1e-6:
+        verdict_text = f"Mit Verbesserung (S={S_slide:.2f}):  {verdict_text}"
 
     # ── Kennzahlen-Übersicht (kompakt) ──────────────────────────────────────
     def _qc(q):
@@ -3730,7 +3741,7 @@ def main():
     rows += _row("W_RMS",                f"{r_real['Wrms']:.5f} &#955;")
     rows += _row("Strehl Marechal",      f"{S_mar:.4f} &#8594; {S_slide:.4f}")
     rows += _row("Strehl exakt",
-                 f"{S_real:.4f}  (&#916; Mar. {delta_s:+.4f})", s_col)
+                 f"{S_real:.4f} &#8594; {S_slide:.4f}  (&#916; Mar. {delta_s:+.4f})", s_col)
     rows += _row("D_eff Kontrast",       f"{r_real['Deff_k']:.1f} &#8594; {Deff_k_sl:.1f} mm")
     rows += _hdr("Vergr&#246;&#223;erung")
     rows += _row("V&#189;  D&#183;0.7&#183;&#8730;S",
@@ -3745,19 +3756,27 @@ def main():
                  f"{Vk['Vk_sph']:.0f}x &#8594; {Vk_slide['Vk_sph']:.0f}x  | Para: {'&#8734;' if Vk['Vk_para'] >= 1e8 else format(Vk['Vk_para'], '.0f') + 'x'}  | Vmax: {Vk['Vmax']:.0f}x",
                  "#534AB7")
     rows += _hdr("Q_perc (CSF-gewichtet)")
-    for lbl_q, q in [("Q bei  30x", Qp_80), ("Q bei  80x", Qp_200),
-                     ("Q bei 160x", Qp_350), ("Q bei 150x", Qp_V)]:
-        rows += _row(lbl_q, f"{q:.3f}", _qc(q))
+    for lbl_q, q, qs in [("Q bei  30x", Qp_80, Qs_80), ("Q bei  80x", Qp_200, Qs_200),
+                         ("Q bei 160x", Qp_350, Qs_350), ("Q bei 150x", Qp_V, Qs_V)]:
+        rows += _row(lbl_q, f"{q:.3f} &#8594; {qs:.3f}", _qc(qs))
 
     _kenn_html = f"<table style='border-collapse:collapse;width:100%;margin-bottom:4px'>{rows}</table>"
 
     # v7.1.0: nur Kernwerte oben, die vollständige Tabelle liegt im Tab
     # "Grundlagen → Kennwerte"
     _k1, _k2, _k3, _k4 = st.columns(4)
-    _k1.metric("Strehl exakt", f"{S_real:.3f}")
-    _k2.metric("V_krit (MTF×CSF >10 %)", _vk_ex_text(Vk_exakt))
-    _k3.metric("D_eff Kontrast", f"{r_real['Deff_k']:.0f} mm")
-    _k4.metric("Q_perc bei 150×", f"{Qp_V:.3f}")
+    _k1.metric("Strehl exakt", f"{S_slide:.3f}",
+               delta=f"Sphäre {S_real:.3f}" if S_slide > S_real + 1e-6 else None,
+               delta_color="off")
+    _k2.metric("V_krit (MTF×CSF >10 %)", _vk_ex_text(Vk_exakt_s),
+               delta=f"Sphäre {_vk_ex_text(Vk_exakt)}" if S_slide > S_real + 1e-6 else None,
+               delta_color="off")
+    _k3.metric("D_eff Kontrast", f"{Deff_k_sl:.0f} mm",
+               delta=f"Sphäre {r_real['Deff_k']:.0f} mm" if S_slide > S_real + 1e-6 else None,
+               delta_color="off")
+    _k4.metric("Q_perc bei 150×", f"{Qs_V:.3f}",
+               delta=f"Sphäre {Qp_V:.3f}" if S_slide > S_real + 1e-6 else None,
+               delta_color="off")
 
     # ── Diagramm-Tabs ────────────────────────────────────────────────────────
     # v7.1.0: Gruppen wie im Desktop; die alten Indizes tabs[0..12] bleiben
