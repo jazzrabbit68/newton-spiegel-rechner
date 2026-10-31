@@ -1,7 +1,10 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.1.0 (2026-10-30)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.2.0 (2026-10-31)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.2.0 (2026-10-31)  Wahrnehmung: zusätzliche Q_vis-Kurven MIT Abblenden durch die Augenpupille (Eingabe d_p, Voreinstellung
+                        3 mm, 0 = aus; Abblendgrenze V = D/d_p markiert, Cursor- und Tabellenwerte); Kennwerte, V_krit, Q_perc und
+                        die bisherigen Kurven unverändert (volle Öffnung). Doku: documentation_v7_2.html
   v7.1.0 (2026-10-30)  Oberfläche neu geordnet: Tabs in Gruppen (Grundlagen / Bildqualität / Messen / Grenzen (Max. Vergrößerung + Vmax vs. Ø/Seeing in einem Tab) /
                         Bauen / Vergleich), Grundlagen als 2×2-Übersicht (Klick vergrößert), linke Spalte nur
                         Kernwerte (Rest im Unter-Reiter „Kennwerte“); Paraboloid-V_krit als ∞; Schieber
@@ -1970,6 +1973,37 @@ def qabs(D_mm, S, d_fang_mm, V, ref_D=200.0, ref_S=1.0, ref_d=0.0,
             max(qabs_zaehler(ref_D, ref_S, ref_d, V, lam_nm, seeing, None, d_pupil), 1e-12))
 
 
+def _wf_kugel(Wb: float, lam_nm: float = 550.0) -> dict:
+    """Wellenfront der Kugel am besten Fokus als Eingabe für qabs(wf=...)."""
+    rho = np.linspace(0.0, 1.0, 600)
+    return dict(rho=rho, W=4.0 * Wb * (rho ** 4 - rho ** 2), lam=lam_nm)
+
+
+def qvis_pupille_kurve(D_mm: float, S, V_arr, d_pupil: float,
+                       lam_nm: float = 550.0, wf=None) -> np.ndarray:
+    """Q_vis(V) MIT Abblenden durch die Augenpupille (v7.2.0).
+
+    Relativ zu einem idealen Spiegel gleicher Öffnung, der von derselben
+    Pupille abgeblendet wird (Paraboloid = 1).  Ist die Austrittspupille D/V
+    größer als d_pupil, nutzt das Auge nur die Mittelzone ρ_s = V·d_p/D; die
+    Aberration wird nur über diese Teilöffnung gerechnet (mit Refokus).
+    wf: Wellenfront der Kugel (dict) oder None -> S-Modell (Kugelwellenfront
+    zu S, wie beim Schieber).  Ohne Seeing, ohne Fangspiegel.
+    Auswertung auf einem groben V-Gitter (verdichtet um V = D/d_p), dazwischen
+    linear interpoliert."""
+    V_arr = np.asarray(V_arr, dtype=float)
+    if d_pupil <= 0:
+        return np.full_like(V_arr, np.nan)
+    v0, v1 = float(V_arr.min()), float(V_arr.max())
+    gitter = list(np.linspace(v0, v1, 40))
+    vs = D_mm / d_pupil
+    gitter += [v for v in np.linspace(0.75 * vs, 1.45 * vs, 22) if v0 <= v <= v1]
+    gitter = np.unique(np.round(gitter, 3))
+    q = np.array([qabs(D_mm, S, 0.0, float(v), D_mm, 1.0, 0.0, lam_nm, 0.0,
+                       d_pupil=d_pupil, wf=wf) for v in gitter])
+    return np.interp(V_arr, gitter, q)
+
+
 def qabs_karte(Ds, Ss, ratio_N, V, ref, lam_nm=550.0, seeing=0.0,
                buet=50.0, tubus=0.0, bild=10.0, d_pupil=0.0) -> np.ndarray:
     """Q_abs auf einem D×S-Gitter; Fangspiegel aus D und f=ratio_N·D."""
@@ -2286,7 +2320,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.1.0 (2026-10-30)"
+VERSION  = "7.2.0 (2026-10-31)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -2737,6 +2771,16 @@ class App(tk.Tk):
                 self._wn_fang_hint.pack(side="left", padx=(2, 0))
                 e_fs.bind("<Return>",   self._wahrnehmung_neu)
                 e_fs.bind("<FocusOut>", self._wahrnehmung_neu)
+                tk.Label(wn2, text="Augenpupille d_p =", bg=BG, fg="#ef6c00",
+                         font=("Helvetica", 9, "bold")).pack(side="left", padx=(16, 0))
+                self._wn_pup_var = tk.StringVar(value="3")
+                e_pp = tk.Entry(wn2, textvariable=self._wn_pup_var, width=5,
+                                font=("Helvetica", 9))
+                e_pp.pack(side="left", padx=(3, 0))
+                tk.Label(wn2, text="mm  (0 = aus; Mond 2–3, Planet 3–5, Deep-Sky 6–7)",
+                         bg=BG, fg="#666", font=("Helvetica", 9)).pack(side="left", padx=(2, 0))
+                e_pp.bind("<Return>",   self._wahrnehmung_neu)
+                e_pp.bind("<FocusOut>", self._wahrnehmung_neu)
                 for _e in (e_v,):
                     _e.bind("<Return>",   self._wahrnehmung_neu)
                     _e.bind("<FocusOut>", self._wahrnehmung_neu)
@@ -4427,6 +4471,14 @@ class App(tk.Tk):
         self._wn_V, self._wn_fang = float(V), float(d)   # d: Fangspiegel-Ø [mm], 0 = aus
         self._wn_V_var.set(str(V))
         self._wn_fang_var.set(str(d))
+        try:
+            p = float(str(self._wn_pup_var.get()).strip().replace(",", "."))
+            if p < 0:
+                raise ValueError
+        except (tk.TclError, ValueError):
+            p = float(getattr(self, "_wn_pup", 3.0))
+        self._wn_pup = p                                  # Augenpupille [mm], 0 = aus
+        self._wn_pup_var.set(f"{p:g}")
         return V
 
     def _wahrnehmung_readout(self, D, f, lam, S_slide, S_real):
@@ -4459,6 +4511,17 @@ class App(tk.Tk):
             q_fs = float(qvis_kurve_mit_fangspiegel(D, S_u, d_fs, lam, V)[0])
             zeilen.append(f"Schieber + Fangspiegel  d={d_fs:.0f} mm (ε={min(d_fs/D,0.95):.2f}):   "
                           f"Q_vis = {q_fs:.4f}   (Näherung)")
+        d_pp = getattr(self, "_wn_pup", 0.0)
+        if d_pp > 0:
+            _, _, Wb_k, _, _ = _wellenfronten(D, f, lam)
+            q_pk = float(qvis_pupille_kurve(D, 1.0, [V], d_pp, lam, wf=_wf_kugel(Wb_k, lam))[0])
+            txt = f"Mit Augenpupille {d_pp:g} mm (Austrittspupille {D/V:.1f} mm" + \
+                  (", Auge blendet ab" if D / V > d_pp else ", volle Öffnung") + \
+                  f"):   Sphäre Q_vis = {q_pk:.4f}"
+            if S_slide is not None and S_real is not None and S_slide > S_real + 0.01:
+                q_ps = float(qvis_pupille_kurve(D, S_slide, [V], d_pp, lam)[0])
+                txt += f"   Schieber Q_vis = {q_ps:.4f}"
+            zeilen.append(txt)
         zeilen.append("Paraboloid:   Q_vis = 1.0000")
         self._wn_readout.config(text="\n".join(zeilen))
 
@@ -4532,6 +4595,13 @@ class App(tk.Tk):
 
         strehl_label = f"Sphäre f/{f/D:.1f}  S={S_exakt:.3f} (exakt)"
 
+        # v7.2.0: Kurven MIT Abblenden durch die Augenpupille (zusätzlich)
+        d_pup = getattr(self, "_wn_pup", 0.0) or 0.0
+        if d_pup > 0:
+            Qp_sph = qvis_pupille_kurve(D, 1.0, V_arr, d_pup, lam, wf=_wf_kugel(Wb, lam))
+            if has_slide:
+                Qp_slide = qvis_pupille_kurve(D, S_slide, V_arr, d_pup, lam)
+
         ax.fill_between(V_arr, Qe_sph, Qn_sph,
                         color="#534AB7", alpha=0.12, label="Abweichung exakt ↔ Näherung")
         ax.fill_between(V_arr, Qe_sph, Qe_para,
@@ -4548,6 +4618,18 @@ class App(tk.Tk):
                     label=f"Schieber exakt  S={S_ex_s:.3f}")
             ax.plot(V_arr, Qn_slide, color=ACC, lw=1.2, ls="--", alpha=0.7,
                     label=f"Schieber Näherung  S={S_ex_s:.3f}")
+
+        if d_pup > 0:
+            ax.plot(V_arr, Qp_sph, color=COR, lw=2.4, ls="-.",
+                    label=f"Sphäre MIT Augenpupille {d_pup:g} mm  (exakt)")
+            if has_slide:
+                ax.plot(V_arr, Qp_slide, color=ACC, lw=2.2, ls="-.",
+                        label=f"Schieber MIT Augenpupille {d_pup:g} mm  (exakt)")
+            V_stop = D / d_pup
+            if V_min_plot <= V_stop <= V_max_plot:
+                ax.axvline(V_stop, color="#ef6c00", lw=1.2, ls="-.", alpha=0.8)
+                ax.text(V_stop + 2, 0.03, f"Abblendgrenze D/d_p = {V_stop:.0f}×",
+                        fontsize=7, color="#ef6c00", rotation=90, va="bottom", alpha=0.9)
 
         ax.axhline(S_exakt, color=COR, lw=1.0, ls=":", alpha=0.75)
         ax.text(V_max_plot * 0.98, S_exakt + 0.012,
@@ -4590,6 +4672,10 @@ class App(tk.Tk):
             if d_fs > 0:
                 pts.append((float(qvis_kurve_mit_fangspiegel(D, S_fs, d_fs, lam, V_cur)[0]),
                             "#6a1b9a", "Schieber+FS {q:.3f}"))
+            if d_pup > 0:
+                pts.append((float(qvis_pupille_kurve(D, 1.0, [V_cur], d_pup, lam,
+                                                     wf=_wf_kugel(Wb, lam))[0]),
+                            COR, "Sphäre+Pupille {q:.3f}"))
             # Beschriftungen von oben nach unten, mit Mindestabstand (Punkte
             # liegen oft dicht beieinander, z.B. Parabol 1.000 / Schieber 0.983)
             axh_pt = fig.get_size_inches()[1] * 72.0 * 0.72      # grobe Achsenhöhe [pt]
@@ -4627,7 +4713,7 @@ class App(tk.Tk):
             + (f"  |  Cursor V={V_cur:.0f}×" if V_cur is not None else ""),
             fontsize=9)
         ax.legend(fontsize=8, loc="lower right",
-                  title="— exakt (MTF×CSF)   - - Näherung Q̃(V)",
+                  title="— exakt (MTF×CSF)   - - Näherung Q̃(V)   -· mit Augenpupille",
                   title_fontsize=7)
         self._ax_fmt(ax); fig.tight_layout(); canvas.draw_idle()
 

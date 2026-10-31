@@ -1,10 +1,13 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.1.0 (2026-10-30)
-Entspricht newton_spiegel_rechner.py v7.1.0
+Streamlit-Version v7.2.0 (2026-10-31)
+Entspricht newton_spiegel_rechner.py v7.2.0
 
 Änderungshistorie (jüngste zuerst):
+  v7.2.0 (2026-10-31)  Wahrnehmung: zusätzliche Q_vis-Kurven MIT Abblenden durch die Augenpupille (Eingabe d_p, Voreinstellung
+                        3 mm, 0 = aus; Abblendgrenze V = D/d_p markiert, Cursor- und Tabellenwerte); Kennwerte, V_krit, Q_perc und
+                        die bisherigen Kurven unverändert (volle Öffnung). Doku: documentation_v7_2.html
   v7.1.0 (2026-10-30)  Oberfläche neu geordnet: Tab-Gruppen (Grundlagen / Bildqualität / Messen / Grenzen (Max. Vergrößerung + Vmax vs. Ø/Seeing in einem Tab) / Bauen /
                         Vergleich), Grundlagen als 2×2-Übersicht (Ansicht umschaltbar), oben nur Kernwerte (volle
                         Tabelle im Unter-Reiter „Kennwerte“); Paraboloid-V_krit als ∞. Rechenkerne unverändert.
@@ -46,7 +49,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.1.0 (2026-10-30)"
+VERSION = "7.2.0 (2026-10-31)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -1933,6 +1936,37 @@ def qabs(D_mm, S, d_fang_mm, V, ref_D=200.0, ref_S=1.0, ref_d=0.0,
             max(qabs_zaehler(ref_D, ref_S, ref_d, V, lam_nm, seeing, None, d_pupil), 1e-12))
 
 
+def _wf_kugel(Wb: float, lam_nm: float = 550.0) -> dict:
+    """Wellenfront der Kugel am besten Fokus als Eingabe für qabs(wf=...)."""
+    rho = np.linspace(0.0, 1.0, 600)
+    return dict(rho=rho, W=4.0 * Wb * (rho ** 4 - rho ** 2), lam=lam_nm)
+
+
+def qvis_pupille_kurve(D_mm: float, S, V_arr, d_pupil: float,
+                       lam_nm: float = 550.0, wf=None) -> np.ndarray:
+    """Q_vis(V) MIT Abblenden durch die Augenpupille (v7.2.0).
+
+    Relativ zu einem idealen Spiegel gleicher Öffnung, der von derselben
+    Pupille abgeblendet wird (Paraboloid = 1).  Ist die Austrittspupille D/V
+    größer als d_pupil, nutzt das Auge nur die Mittelzone ρ_s = V·d_p/D; die
+    Aberration wird nur über diese Teilöffnung gerechnet (mit Refokus).
+    wf: Wellenfront der Kugel (dict) oder None -> S-Modell (Kugelwellenfront
+    zu S, wie beim Schieber).  Ohne Seeing, ohne Fangspiegel.
+    Auswertung auf einem groben V-Gitter (verdichtet um V = D/d_p), dazwischen
+    linear interpoliert."""
+    V_arr = np.asarray(V_arr, dtype=float)
+    if d_pupil <= 0:
+        return np.full_like(V_arr, np.nan)
+    v0, v1 = float(V_arr.min()), float(V_arr.max())
+    gitter = list(np.linspace(v0, v1, 40))
+    vs = D_mm / d_pupil
+    gitter += [v for v in np.linspace(0.75 * vs, 1.45 * vs, 22) if v0 <= v <= v1]
+    gitter = np.unique(np.round(gitter, 3))
+    q = np.array([qabs(D_mm, S, 0.0, float(v), D_mm, 1.0, 0.0, lam_nm, 0.0,
+                       d_pupil=d_pupil, wf=wf) for v in gitter])
+    return np.interp(V_arr, gitter, q)
+
+
 def qabs_karte(Ds, Ss, ratio_N, V, ref, lam_nm=550.0, seeing=0.0,
                buet=50.0, tubus=0.0, bild=10.0, d_pupil=0.0) -> np.ndarray:
     """Q_abs auf einem D×S-Gitter; Fangspiegel aus D und f=ratio_N·D."""
@@ -2787,6 +2821,13 @@ class _Diagramme:
 
         strehl_label = f"Sphäre f/{f/D:.1f}  S={S_exakt:.3f} (exakt)"
 
+        # v7.2.0: Kurven MIT Abblenden durch die Augenpupille (zusätzlich)
+        d_pup = getattr(self, "_wn_pup", 0.0) or 0.0
+        if d_pup > 0:
+            Qp_sph = qvis_pupille_kurve(D, 1.0, V_arr, d_pup, lam, wf=_wf_kugel(Wb, lam))
+            if has_slide:
+                Qp_slide = qvis_pupille_kurve(D, S_slide, V_arr, d_pup, lam)
+
         ax.fill_between(V_arr, Qe_sph, Qn_sph,
                         color="#534AB7", alpha=0.12, label="Abweichung exakt ↔ Näherung")
         ax.fill_between(V_arr, Qe_sph, Qe_para,
@@ -2803,6 +2844,18 @@ class _Diagramme:
                     label=f"Schieber exakt  S={S_ex_s:.3f}")
             ax.plot(V_arr, Qn_slide, color=ACC, lw=1.2, ls="--", alpha=0.7,
                     label=f"Schieber Näherung  S={S_ex_s:.3f}")
+
+        if d_pup > 0:
+            ax.plot(V_arr, Qp_sph, color=COR, lw=2.4, ls="-.",
+                    label=f"Sphäre MIT Augenpupille {d_pup:g} mm  (exakt)")
+            if has_slide:
+                ax.plot(V_arr, Qp_slide, color=ACC, lw=2.2, ls="-.",
+                        label=f"Schieber MIT Augenpupille {d_pup:g} mm  (exakt)")
+            V_stop = D / d_pup
+            if V_min_plot <= V_stop <= V_max_plot:
+                ax.axvline(V_stop, color="#ef6c00", lw=1.2, ls="-.", alpha=0.8)
+                ax.text(V_stop + 2, 0.03, f"Abblendgrenze D/d_p = {V_stop:.0f}×",
+                        fontsize=7, color="#ef6c00", rotation=90, va="bottom", alpha=0.9)
 
         ax.axhline(S_exakt, color=COR, lw=1.0, ls=":", alpha=0.75)
         ax.text(V_max_plot * 0.98, S_exakt + 0.012,
@@ -2845,6 +2898,10 @@ class _Diagramme:
             if d_fs > 0:
                 pts.append((float(qvis_kurve_mit_fangspiegel(D, S_fs, d_fs, lam, V_cur)[0]),
                             "#6a1b9a", "Schieber+FS {q:.3f}"))
+            if d_pup > 0:
+                pts.append((float(qvis_pupille_kurve(D, 1.0, [V_cur], d_pup, lam,
+                                                     wf=_wf_kugel(Wb, lam))[0]),
+                            COR, "Sphäre+Pupille {q:.3f}"))
             # Beschriftungen von oben nach unten, mit Mindestabstand (Punkte
             # liegen oft dicht beieinander, z.B. Parabol 1.000 / Schieber 0.983)
             axh_pt = fig.get_size_inches()[1] * 72.0 * 0.72      # grobe Achsenhöhe [pt]
@@ -2882,7 +2939,7 @@ class _Diagramme:
             + (f"  |  Cursor V={V_cur:.0f}×" if V_cur is not None else ""),
             fontsize=9)
         ax.legend(fontsize=8, loc="lower right",
-                  title="— exakt (MTF×CSF)   - - Näherung Q̃(V)",
+                  title="— exakt (MTF×CSF)   - - Näherung Q̃(V)   -· mit Augenpupille",
                   title_fontsize=7)
         self._ax_fmt(ax); fig.tight_layout(); canvas.draw_idle()
 
@@ -3581,11 +3638,12 @@ def plot_mtf(D, f, lam, S_slide, paraxial=False, objekte="planeten",
     return fig
 
 
-def plot_wahrnehmung(D, f, lam, S_slide, S_real, V_cur=None, d_fang=0.0):
+def plot_wahrnehmung(D, f, lam, S_slide, S_real, V_cur=None, d_fang=0.0, d_pup=0.0):
     fig, ax = _neue_figur((8, 5))
     d = _Diagramme(); d._tab_wahrnehmung = (fig, ax, _FakeCanvas())
     d._wn_V = V_cur
     d._wn_fang = d_fang
+    d._wn_pup = d_pup
     d._diagramm_wahrnehmung(D, f, lam, S_slide=S_slide, S_real=S_real)
     return fig
 
@@ -3864,7 +3922,13 @@ def main():
     with tabs[5]:
         # ── Ablesen: exakte Q_vis-Werte bei gewählter Vergrößerung ───────────
         # Spiegel = Regler in der Seitenleiste (Öffnung, Brennweite, Strehl-Schieber)
-        wc1, wc2 = st.columns([3, 1.3])
+        wc1, wc2, wc3 = st.columns([3, 1.3, 1.3])
+        d_pup = wc3.number_input(
+            "Augenpupille d_p [mm]  (0 = aus)", min_value=0.0, max_value=9.0,
+            value=3.0, step=0.5, key="wn_pup",
+            help="Zusätzliche Kurven MIT Abblenden durch die Augenpupille: Ist die "
+                 "Austrittspupille D/V größer als d_p, nutzt das Auge nur die Mitte "
+                 "des Spiegels. Richtwerte: Mond 2–3 mm, Planeten 3–5 mm, Deep-Sky 6–7 mm.")
         d_fs = wc2.number_input(
             "Fangspiegel Ø d [mm]  (0 = aus)", min_value=0, max_value=int(D * 0.9),
             value=0, step=5, key="wn_fang",
@@ -3895,12 +3959,22 @@ def main():
             _q_fs = float(qvis_kurve_mit_fangspiegel(D, _S_u, d_fs, lam, V_cur)[0])
             _zeilen.append(f"| Schieber + Fangspiegel d={d_fs:.0f} mm (ε={min(d_fs/D, 0.95):.2f}) "
                            f"| **{_q_fs:.4f}** | – | {(1-_q_fs)*100:.1f} % | – | – |")
+        if d_pup > 0:
+            _q_pk = float(qvis_pupille_kurve(D, 1.0, [V_cur], d_pup, lam,
+                                             wf=_wf_kugel(_wellenfronten(D, f, lam)[2], lam))[0])
+            _blend = "Auge blendet ab" if D / V_cur > d_pup else "volle Öffnung"
+            _zeilen.append(f"| Sphäre MIT Augenpupille {d_pup:g} mm (Austrittspupille {D/V_cur:.1f} mm, {_blend}) "
+                           f"| **{_q_pk:.4f}** | – | {(1-_q_pk)*100:.1f} % | – | – |")
+            if S_slide > S_real + 0.01:
+                _q_ps = float(qvis_pupille_kurve(D, S_slide, [V_cur], d_pup, lam)[0])
+                _zeilen.append(f"| Schieber MIT Augenpupille {d_pup:g} mm | **{_q_ps:.4f}** | – "
+                               f"| {(1-_q_ps)*100:.1f} % | – | – |")
         _zeilen.append("| Paraboloid | **1.0000** | – | 0.0 % | – | – |")
         st.markdown(f"**V = {V_cur}×** (λ = {lam:.0f} nm)\n\n" + "\n".join(_zeilen))
 
         _show_cached("fig_wahrnehmung", lambda: plot_wahrnehmung(D, f, lam,
-                     S_slide, S_real, V_cur=V_cur, d_fang=d_fs),
-                     _h + (V_cur, d_fs))
+                     S_slide, S_real, V_cur=V_cur, d_fang=d_fs, d_pup=d_pup),
+                     _h + (V_cur, d_fs, d_pup))
 
     with tabs[6]:
         _show_cached("fig_blende", lambda: plot_blende(D, f, lam, D_blend), _hb)
@@ -4253,6 +4327,8 @@ def main():
         # Doku-HTML aus Datei lesen (liegt neben app.py) oder eingebettet anzeigen
         import os, pathlib
         _doc_candidates = [
+            pathlib.Path(__file__).parent / "documentation_v7_2.html",
+            pathlib.Path("documentation_v7_2.html"),
             pathlib.Path(__file__).parent / "documentation_v7_1.html",
             pathlib.Path("documentation_v7_1.html"),
             pathlib.Path(__file__).parent / "documentation_v6_1.html",
@@ -4279,7 +4355,7 @@ def main():
                 unsafe_allow_html=True)
         else:
             st.info(
-                "Dokumentationsdatei **documentation_v7_1.html** nicht gefunden. "
+                "Dokumentationsdatei **documentation_v7_2.html** nicht gefunden. "
                 "Bitte die Datei ins gleiche Verzeichnis wie app.py legen.",
                 icon="ℹ️")
             st.markdown("""
