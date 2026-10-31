@@ -1,10 +1,13 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.2.3 (2026-10-31)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.2.4 (2026-10-31)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.2.4 (2026-10-31)  Web: Ansichtswahl als Knöpfe in der Seitenleiste (wie Desktop), nur die gewählte Ansicht wird gezeichnet (Eingaben bleiben beim
+                        Wechsel erhalten); Kernwerte/Beurteilung nur noch in "Kennwerte"; Blendeneingabe nur im Tab "Blende" (Web) bzw. neu
+                        als Eingabefeld im Tab "Blende" (Desktop).
   v7.2.3 (2026-10-31)  MTF-Tab: Kurve für den verbesserten Spiegel (Strehl-Schieber) ergänzt – wurde bisher von der Foucault-Kurve verdrängt;
                         Foucault-Kurve getrennt davon; relative Kurve entfernt.
-  v7.2.3 (2026-10-31)  Schieber: Eingabe ist jetzt direkt der Ziel-Strehl in % (statt "Verbesserung" 0-100 %); Werte bis zum Strehl der Kugel
+  v7.2.2 (2026-10-31)  Schieber: Eingabe ist jetzt direkt der Ziel-Strehl in % (statt "Verbesserung" 0-100 %); Werte bis zum Strehl der Kugel
                         (Voreinstellung 0) = Kugel, 100 = Paraboloid. Berechnen-Knopf unter den Eingabefeldern, linke Spalte schmaler.
                         ACHTUNG: gleicher Zahlenwert im Schieber bedeutet jetzt etwas anderes als in v7.2.1 (z. B. 50 = Strehl 0,50).
   v7.2.1 (2026-10-31)  Fehler: Schieber 0 zeigte bei tiefem Strehl (Wb > 0,9, S nicht monoton) eine andere Kurve/V_krit/Q_perc als die Kugel
@@ -2346,7 +2349,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.2.3 (2026-10-31)"
+VERSION  = "7.2.4 (2026-10-31)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -2839,6 +2842,16 @@ class App(tk.Tk):
                 canvas.mpl_connect("button_press_event", _wn_klick)
                 setattr(self, attr, (fig, ax, canvas))
             elif attr == "_tab_blende":
+                # v7.2.4: Blendeneingabe (Abblenden des Spiegels) direkt in diesem Tab
+                _bf = tk.Frame(frm, bg=BG); _bf.pack(side="top", fill="x", padx=8, pady=(6, 0))
+                tk.Label(_bf, text="Blende D =", bg=BG, fg="#1565c0",
+                         font=("Helvetica", 9, "bold")).pack(side="left")
+                _eb = tk.Entry(_bf, textvariable=self.var_blende, width=7,
+                               font=("Helvetica", 10), justify="right", relief="solid", bd=1)
+                _eb.pack(side="left", padx=(4, 2))
+                _eb.bind("<Return>", self._param_changed); _eb.bind("<KP_Enter>", self._param_changed)
+                tk.Label(_bf, text="mm   (Enter; max. Öffnung − 10 mm)", bg=BG, fg="#666",
+                         font=("Helvetica", 8)).pack(side="left", padx=(2, 0))
                 fig, (ax, ax2) = plt.subplots(2, 1, figsize=(8.0, 7.0), dpi=96)
                 fig.patch.set_facecolor(BG)
                 ax.set_facecolor(BG); ax2.set_facecolor(BG)
@@ -3231,6 +3244,11 @@ class App(tk.Tk):
 
     def _param_changed(self, _=None):
         """Werte klemmen und Neuberechnung starten (nur auf Enter)."""
+        try:                                   # Blende (Tab "Blende"): 50 mm ... 600 mm
+            _b = self.var_blende.get()
+            self.var_blende.set(min(max(_b, 50.0), 600.0))
+        except tk.TclError:
+            self.var_blende.set(150.0)
         for key, (var, mn, mx) in self._param_vars.items():
             try:
                 v = var.get()

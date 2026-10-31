@@ -1,13 +1,16 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.2.3 (2026-10-31)
-Entspricht newton_spiegel_rechner.py v7.2.3
+Streamlit-Version v7.2.4 (2026-10-31)
+Entspricht newton_spiegel_rechner.py v7.2.4
 
 Änderungshistorie (jüngste zuerst):
+  v7.2.4 (2026-10-31)  Web: Ansichtswahl als Knöpfe in der Seitenleiste (wie Desktop), nur die gewählte Ansicht wird gezeichnet (Eingaben bleiben beim
+                        Wechsel erhalten); Kernwerte/Beurteilung nur noch in "Kennwerte"; Blendeneingabe nur im Tab "Blende" (Web) bzw. neu
+                        als Eingabefeld im Tab "Blende" (Desktop).
   v7.2.3 (2026-10-31)  MTF-Tab: Kurve für den verbesserten Spiegel (Strehl-Schieber) ergänzt – wurde bisher von der Foucault-Kurve verdrängt;
                         Foucault-Kurve getrennt davon; relative Kurve entfernt.
-  v7.2.3 (2026-10-31)  Schieber: Eingabe ist jetzt direkt der Ziel-Strehl in % (statt "Verbesserung" 0-100 %); Werte bis zum Strehl der Kugel
+  v7.2.2 (2026-10-31)  Schieber: Eingabe ist jetzt direkt der Ziel-Strehl in % (statt "Verbesserung" 0-100 %); Werte bis zum Strehl der Kugel
                         (Voreinstellung 0) = Kugel, 100 = Paraboloid. Berechnen-Knopf unter den Eingabefeldern, linke Spalte schmaler.
                         ACHTUNG: gleicher Zahlenwert im Schieber bedeutet jetzt etwas anderes als in v7.2.1 (z. B. 50 = Strehl 0,50).
   v7.2.1 (2026-10-31)  Fehler: Schieber 0 zeigte bei tiefem Strehl (Wb > 0,9, S nicht monoton) eine andere Kurve/V_krit/Q_perc als die Kugel
@@ -59,7 +62,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.2.3 (2026-10-31)"
+VERSION = "7.2.4 (2026-10-31)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -3722,6 +3725,17 @@ def main():
         layout="wide",
     )
 
+    # v7.2.4: Ansichten werden nur noch bei Auswahl gerendert (Knöpfe in der Seitenleiste).
+    # Streamlit verwirft den Zustand von Widgets, die in einem Lauf nicht gezeichnet werden;
+    # deshalb alle bestehenden Werte jedes Mal neu zuweisen (Foucault-Eingaben usw. bleiben erhalten).
+    for _k in list(st.session_state.keys()):
+        if _k == "nav" or str(_k).startswith(("navbtn_", "$$")):
+            continue
+        try:
+            st.session_state[_k] = st.session_state[_k]
+        except Exception:
+            pass
+
     st.title(f"🔭 Newton-Spiegel: Kontrast- und Schärfeverlust  v{VERSION}")
     st.caption("Sphärischer Hauptspiegel — Wellenfrontfehler, Strehl, MTF, CSF-Wahrnehmung, Foucault, sinnvolle Maximalvergrößerung")
 
@@ -3744,10 +3758,25 @@ def main():
              "gilt die Kugel.")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Abblendung")
-    D_blend_default = max(50, D // 2)
-    D_blend = st.sidebar.slider("Blende D [mm]", min_value=50, max_value=D,
-                                 value=min(D_blend_default, D), step=5)
+    st.sidebar.subheader("Ansicht")
+    _NAV = [("Grundlagen", [("grund", "Diagramme"), ("kenn", "Kennwerte")]),
+            ("Bildqualität", [("wahr", "Wahrnehmung"), ("mtf", "MTF"), ("blende", "Blende")]),
+            ("", [("messen", "Messen (Foucault)"), ("grenzen", "Grenzen"), ("bauen", "Bauen"),
+                  ("vergleich", "Vergleich (Beta)"), ("doku", "ℹ️ Dokumentation")])]
+    if "nav" not in st.session_state:
+        st.session_state["nav"] = "grund"
+
+    def _set_nav(k):
+        st.session_state["nav"] = k
+
+    for _gname, _items in _NAV:
+        if _gname:
+            st.sidebar.caption(_gname)
+        for _k, _lbl in _items:
+            st.sidebar.button(_lbl, key=f"navbtn_{_k}", use_container_width=True,
+                              type="primary" if st.session_state["nav"] == _k else "secondary",
+                              on_click=_set_nav, args=(_k,))
+    _nav = st.session_state["nav"]
 
     # ── Rechnung ─────────────────────────────────────────────────────────────
     r_real     = berechne(D, f, lam)
@@ -3792,11 +3821,10 @@ def main():
 
     s_col = "#2e7d32" if S_real >= 0.95 else "#e65100" if S_real >= 0.80 else "#c62828"
 
-    st.markdown(
+    _verdict_html = (
         f"<div style='background:{verdict_color};color:white;padding:5px 10px;"
         f"border-radius:5px;font-size:0.82em;font-weight:bold;margin-bottom:5px'>"
-        f"{verdict_text}</div>",
-        unsafe_allow_html=True)
+        f"{verdict_text}</div>")
 
     def _row(lbl, val, color="#222"):
         return (f"<tr>"
@@ -3836,37 +3864,23 @@ def main():
 
     _kenn_html = f"<table style='border-collapse:collapse;width:100%;margin-bottom:4px'>{rows}</table>"
 
-    # v7.1.0: nur Kernwerte oben, die vollständige Tabelle liegt im Tab
-    # "Grundlagen → Kennwerte"
-    _k1, _k2, _k3, _k4 = st.columns(4)
-    _k1.metric("Strehl exakt", f"{S_slide:.3f}",
-               delta=f"Sphäre {S_real:.3f}" if S_slide > S_real + 1e-6 else None,
-               delta_color="off")
-    _k2.metric("V_krit (MTF×CSF >10 %)", _vk_ex_text(Vk_exakt_s),
-               delta=f"Sphäre {_vk_ex_text(Vk_exakt)}" if S_slide > S_real + 1e-6 else None,
-               delta_color="off")
-    _k3.metric("D_eff Kontrast", f"{Deff_k_sl:.0f} mm",
-               delta=f"Sphäre {r_real['Deff_k']:.0f} mm" if S_slide > S_real + 1e-6 else None,
-               delta_color="off")
-    _k4.metric("Q_perc bei 150×", f"{Qs_V:.3f}",
-               delta=f"Sphäre {Qp_V:.3f}" if S_slide > S_real + 1e-6 else None,
-               delta_color="off")
+    # v7.2.4: Kernwerte, Beurteilung und Tabelle erscheinen nur in der Ansicht "Kennwerte".
+    if _nav == "kenn":
+        st.markdown(_verdict_html, unsafe_allow_html=True)
+        _k1, _k2, _k3, _k4 = st.columns(4)
+        _k1.metric("Strehl exakt", f"{S_slide:.3f}",
+                   delta=f"Sphäre {S_real:.3f}" if S_slide > S_real + 1e-6 else None,
+                   delta_color="off")
+        _k2.metric("V_krit (MTF×CSF >10 %)", _vk_ex_text(Vk_exakt_s),
+                   delta=f"Sphäre {_vk_ex_text(Vk_exakt)}" if S_slide > S_real + 1e-6 else None,
+                   delta_color="off")
+        _k3.metric("D_eff Kontrast", f"{Deff_k_sl:.0f} mm",
+                   delta=f"Sphäre {r_real['Deff_k']:.0f} mm" if S_slide > S_real + 1e-6 else None,
+                   delta_color="off")
+        _k4.metric("Q_perc bei 150×", f"{Qs_V:.3f}",
+                   delta=f"Sphäre {Qp_V:.3f}" if S_slide > S_real + 1e-6 else None,
+                   delta_color="off")
 
-    # ── Diagramm-Tabs ────────────────────────────────────────────────────────
-    # v7.1.0: Gruppen wie im Desktop; die alten Indizes tabs[0..12] bleiben
-    # erhalten (zeigen jetzt auf die Container der Gruppen / Unter-Reiter).
-    _top = st.tabs(["Grundlagen", "Bildqualität", "Messen", "Grenzen", "Bauen",
-                    "Vergleich (Beta)", "ℹ️ Dokumentation"])
-    with _top[0]:
-        _sub_g = st.tabs(["Diagramme", "Kennwerte"])
-    with _top[1]:
-        _sub_b = st.tabs(["Wahrnehmung", "MTF", "Blende"])
-    tabs = [_sub_g[0], None, None, None,          # 0: Grundlagen-Diagramme (1–3 unbenutzt)
-            _sub_b[1], _sub_b[0], _sub_b[2],      # 4 MTF, 5 Wahrnehmung, 6 Blende
-            _top[2],                              # 7 Foucault
-            _top[3], _top[3],                     # 8, 9 (beide in „Grenzen“)
-            _top[4], _top[5], _top[6]]            # 10 Fangspiegel, 11 Vergleich, 12 Doku
-    with _sub_g[1]:
         st.markdown(_kenn_html, unsafe_allow_html=True)
 
     # ── Lazy Tab-Rendering: Figure als PNG-Bytes im session_state ─────────────
@@ -3892,9 +3906,8 @@ def main():
         st.image(st.session_state[key], use_container_width=True)
 
     _h = (D, f, lam, round(S_slide, 4))   # Basis-Hash ohne Blende/MTF-Optionen
-    _hb = _h + (D_blend,)                  # Hash mit Blende
 
-    with tabs[0]:
+    if _nav == "grund":
         _ans = st.radio("Ansicht", ["Übersicht (2×2)", "Strehl vs. f/D",
                                     "Eff. Öffnung vs. f/D", "D_eff vs. Öffnung",
                                     "Beugungsgrenze"], horizontal=True, key="grund_ansicht")
@@ -3914,15 +3927,15 @@ def main():
         else:
             _g[_ans]()
 
-    with tabs[4]:
+    if _nav == "mtf":
         c1, c2 = st.columns(2)
         with c1:
             fokus_mode = st.radio("Fokusebene:",
                                   ["Best Focus  (ρ⁴−ρ²)", "Paraxialer Fokus  (ρ⁴)"],
-                                  horizontal=True)
+                                  horizontal=True, key="mtf_fokus")
         with c2:
             objekte_mode = st.radio("Objekte:", ["Planeten", "Deep-Sky (M42)", "Alle"],
-                                    horizontal=True)
+                                    horizontal=True, key="mtf_objekte")
         paraxial  = "Paraxial" in fokus_mode
         objekte_k = {"Planeten": "planeten", "Deep-Sky (M42)": "deepsky", "Alle": "alle"}[objekte_mode]
         # Vergleichskurve: zuletzt im Foucault-Tab gemessene Wellenfront (falls
@@ -3935,7 +3948,7 @@ def main():
                      kz_fc=_kz_fc, D_fc=_D_fc),
                      _h + (paraxial, objekte_k, _fc_key))
 
-    with tabs[5]:
+    if _nav == "wahr":
         # ── Ablesen: exakte Q_vis-Werte bei gewählter Vergrößerung ───────────
         # Spiegel = Regler in der Seitenleiste (Öffnung, Brennweite, Strehl-Schieber)
         wc1, wc2, wc3 = st.columns([3, 1.3, 1.3])
@@ -3992,20 +4005,25 @@ def main():
                      S_slide, S_real, V_cur=V_cur, d_fang=d_fs, d_pup=d_pup),
                      _h + (V_cur, d_fs, d_pup))
 
-    with tabs[6]:
-        _show_cached("fig_blende", lambda: plot_blende(D, f, lam, D_blend), _hb)
+    if _nav == "blende":
+        # v7.2.4: Blendeneingabe nur hier (vorher verwirrend in der Seitenleiste)
+        if st.session_state.get("blende_D", 0) > D:
+            st.session_state["blende_D"] = D
+        D_blend = st.number_input("Blende D [mm]  (Abblenden des Spiegels)", min_value=50, max_value=int(D),
+                                  value=int(min(max(50, D // 2), D)), step=5, key="blende_D")
+        _show_cached("fig_blende", lambda: plot_blende(D, f, lam, D_blend), _h + (D_blend,))
 
-    with tabs[7]:
+    if _nav == "messen":
         # Foucault-Tab
         st.subheader("Foucault-Auswertung")
         lam_fc = 550.0   # fix
         fc1, fc2 = st.columns([1, 3])
         with fc1:
-            n_zonen = st.radio("Zonen:", [4, 6, 8], horizontal=True, index=0)
+            n_zonen = st.radio("Zonen:", [4, 6, 8], horizontal=True, index=0, key="fc_n_zonen")
             use_direct = st.radio(
                 "Auswertungs-Modus:",
                 ["Polynom-Fit  (glatte Fläche)", "Hybrid  (Zonenfehler)"],
-                index=0, horizontal=False,
+                index=0, horizontal=False, key="fc_modus",
                 help="Polynom-Fit: glatte Fläche aus geraden ρ-Potenzen — dämpft "
                      "Messrauschen, mittelt aber lokale Zonenfehler weg.\n"
                      "Hybrid: Polynom + stückweise konstante Zonenresiduen — erfasst "
@@ -4014,7 +4032,7 @@ def main():
             use_direct = use_direct.startswith("Hybrid")
             grad_label = st.radio(
                 "Polynomgrad:", ["BIC (auto)", "Fest (n//2)"],
-                index=0, horizontal=True,
+                index=0, horizontal=True, key="fc_grad",
                 help="BIC wählt den Grad automatisch (kann bei rauschigen Daten sehr "
                      "niedrig ausfallen). Fest koppelt den Grad an die Zonenzahl.")
             grad_modus = "fest" if grad_label.startswith("Fest") else "bic"
@@ -4192,7 +4210,7 @@ def main():
          except Exception as _ex:
             st.error(f"Foucault-Berechnungsfehler: {_ex}")
 
-    with tabs[8]:
+    if _nav == "grenzen":
         # ── Sinnvolle Maximalvergrößerung (Helligkeit / Seeing / Spiegel) ───
         st.markdown(
             "Gegenprobe zur „2×D“-Faustregel: Netzhaut-Flächenhelligkeit L(V) sowie die "
@@ -4223,7 +4241,7 @@ def main():
                                        D_auge_v, L_schw_v),
                      _h + (objekt_v, L0_v, seeing_v, D_auge_v, L_schw_v))
 
-    with tabs[9]:
+    if _nav == "grenzen":
         st.markdown("---")
         # ── Vmax vs. Öffnung für verschiedene Seeing-Werte (perfekte Optik) ──
         st.markdown(
@@ -4240,7 +4258,7 @@ def main():
                      lambda: plot_vmax_D(seeings_txt, Dmin_v, Dmax_v),
                      (seeings_txt, Dmin_v, Dmax_v))
 
-    with tabs[10]:
+    if _nav == "bauen":
         st.markdown(
             "Mindest-Ø nach Strahlkegel-Geometrie:  **d = (Tubusradius + Okularauszug) · D/f + Bildfeld**.")
         fc1, fc2, fc3, fc4 = st.columns(4)
@@ -4275,7 +4293,7 @@ def main():
                      lambda: plot_fangspiegel(D, f, lam, S_fs, S_fs_txt, r_fs, V_fs),
                      (D, f, lam, S_fs, buet_v, tubus_v, bild_v, V_fs, hut_v, fe_v, afov_v, oazd_v, oazl_v))
 
-    with tabs[11]:
+    if _nav == "vergleich":
         st.markdown("**Beta:** absoluter Vergleich zweier Spiegel gegen einen festen Referenzspiegel "
                     "(Q_abs). Fangspiegel automatisch aus D und f/D.")
         # v7.2.1: Spiegel 1 = Hauptspiegel (Seitenleiste, S = Schieberwert), f/D vom Hauptspiegel;
@@ -4348,7 +4366,7 @@ def main():
         st.markdown("  \n".join(st.session_state["vg_txt"]))
         st.image(st.session_state["vg_png"])
 
-    with tabs[12]:
+    if _nav == "doku":
         # Doku-HTML aus Datei lesen (liegt neben app.py) oder eingebettet anzeigen
         import os, pathlib
         _doc_candidates = [
