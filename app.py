@@ -1,10 +1,11 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.2.6 (2026-10-31)
-Entspricht newton_spiegel_rechner.py v7.2.6
+Streamlit-Version v7.2.7 (2026-10-31)
+Entspricht newton_spiegel_rechner.py v7.2.7
 
 Änderungshistorie (jüngste zuerst):
+  v7.2.7 (2026-10-31)  Web: Öffnung bis 500 mm, Brennweite bis 3000 mm; Vergleich-Tab kompakter (Kopfzeile als Caption, Eingaben 2×4, Optionen in einer Zeile).
   v7.2.6 (2026-10-31)  Web: Wahrnehmung ohne Wertetabelle/V-Zeile, Foucault-Auswahl in einer Zeile (ohne λ), Bauen ohne Q_vis-/Kontrast-Zeile.
   v7.2.5 (2026-10-31)  Web: kompaktere Seitenleiste (ohne Überschrift "Strehl-Schieber"/"Ansicht" und ohne λ-Angabe, engere Abstände) und
                         einzeiliger Kopf statt großem Titel.
@@ -65,7 +66,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.2.6 (2026-10-31)"
+VERSION = "7.2.7 (2026-10-31)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -3754,8 +3755,8 @@ def main():
     # ── Sidebar: Teleskop-Parameter ──────────────────────────────────────────
     st.sidebar.subheader("Teleskop-Parameter")
 
-    D   = st.sidebar.slider("Öffnung D [mm]",    min_value=50,  max_value=600,  value=200, step=5)
-    f   = st.sidebar.slider("Brennweite f [mm]", min_value=200, max_value=6000, value=1000, step=50)
+    D   = st.sidebar.slider("Öffnung D [mm]",    min_value=50,  max_value=500,  value=200, step=5)
+    f   = st.sidebar.slider("Brennweite f [mm]", min_value=200, max_value=3000, value=1000, step=50)
     lam = 550.0  # fix, λ=550nm
 
     N = f / D
@@ -4275,8 +4276,6 @@ def main():
                      (D, f, lam, S_fs, buet_v, tubus_v, bild_v, V_fs, hut_v, fe_v, afov_v, oazd_v, oazl_v))
 
     if _nav == "vergleich":
-        st.markdown("**Beta:** absoluter Vergleich zweier Spiegel gegen einen festen Referenzspiegel "
-                    "(Q_abs). Fangspiegel automatisch aus D und f/D.")
         # v7.2.1: Spiegel 1 = Hauptspiegel (Seitenleiste, S = Schieberwert), f/D vom Hauptspiegel;
         # nur der Vergleichsspiegel 2 wird hier eingegeben.
         vD1 = float(D)
@@ -4287,31 +4286,33 @@ def main():
             vS1 = float(_strehl_exakt(_Wb1))
         vS1 = min(max(vS1, 0.05), 1.0)
         vN = f / D
-        st.info(f"**Spiegel 1 = Hauptspiegel:** D = {vD1:.0f} mm, f/D = {vN:.2f}, S = {vS1:.3f}"
-                f"{' (Schieber)' if S_slide is not None else ''}  ·  Spiegel 2 hat dasselbe f/D.")
-        c3, c4, _c5 = st.columns([1, 1, 3])
-        vD2 = c3.number_input("Vergleichsspiegel 2: D [mm]", 50, 1500, 200, 10, key="vg_D2")
-        vS2 = c4.number_input("Vergleichsspiegel 2: S", 0.05, 1.0, 1.00, 0.01, format="%.2f", key="vg_S2")
-        d1c, d2c, d3c, d4c, d5c, d6c = st.columns(6)
-        vV  = d1c.number_input("V [×]", 10, 1000, 200, 10, key="vg_V")
-        vSe = d2c.number_input("Seeing [″] (0 = aus)", 0.0, 6.0, 1.5, 0.1, key="vg_see")
-        vRD = d3c.number_input("Referenz: idealer D [mm]", 50, 1500, 200, 10, key="vg_refD")
-        vBu = d4c.number_input("Okularauszug [mm]", 0, 300, 50, 5, key="vg_buet")
-        vBi = d5c.number_input("Bildfeld [mm]", 0, 60, 10, 1, key="vg_bild")
-        vPu = d6c.number_input("Augenpupille [mm] (0 = aus)", 0.0, 9.0, 0.0, 0.5, key="vg_pupille",
-                               help="Ist die Austrittspupille D/V größer als die Augenpupille, nutzt das Auge nur "
-                                    "die Teilöffnung V·Pupille (blendet das Teleskop ab). Mond 2–3 mm, Planeten "
-                                    "3–5 mm, Deep-Sky 6–7 mm.")
+        st.caption(f"**Beta · Q_abs-Vergleich.** Spiegel 1 = Hauptspiegel: D = {vD1:.0f} mm, f/D = {vN:.2f}, "
+                   f"S = {vS1:.3f}{' (Schieber)' if S_slide is not None else ''}; Spiegel 2 hat dasselbe f/D; "
+                   f"Fangspiegel automatisch.")
+        r1 = st.columns(4)
+        vD2 = r1[0].number_input("Spiegel 2: D [mm]", 50, 1500, 200, 10, key="vg_D2")
+        vS2 = r1[1].number_input("Spiegel 2: S", 0.05, 1.0, 1.00, 0.01, format="%.2f", key="vg_S2")
+        vV  = r1[2].number_input("V [×]", 10, 1000, 200, 10, key="vg_V")
+        vSe = r1[3].number_input("Seeing [″] (0 = aus)", 0.0, 6.0, 1.5, 0.1, key="vg_see")
+        r2 = st.columns(4)
+        vRD = r2[0].number_input("Referenz: idealer D [mm]", 50, 1500, 200, 10, key="vg_refD")
+        vBu = r2[1].number_input("Okularauszug [mm]", 0, 300, 50, 5, key="vg_buet")
+        vBi = r2[2].number_input("Bildfeld [mm]", 0, 60, 10, 1, key="vg_bild")
+        vPu = r2[3].number_input("Augenpupille [mm] (0 = aus)", 0.0, 9.0, 0.0, 0.5, key="vg_pupille",
+                                 help="Ist die Austrittspupille D/V größer als die Augenpupille, nutzt das Auge nur "
+                                      "die Teilöffnung V·Pupille (blendet das Teleskop ab). Mond 2–3 mm, Planeten "
+                                      "3–5 mm, Deep-Sky 6–7 mm.")
         _kz = st.session_state.get("fc_last_kz")
         _Df = st.session_state.get("fc_last_D")
-        w1c, w2c = st.columns(2)
-        use_w1 = w1c.checkbox("Spiegel 1 aus Foucault-Test (Wellenfront)", key="vg_wf1")
-        use_w2 = w2c.checkbox("Spiegel 2 aus Foucault-Test (Wellenfront)", key="vg_wf2")
-        s1c, s2c = st.columns(2)
-        sph1 = s1c.checkbox("Spiegel 1 sphärisch (aus D, f/D)", key="vg_sph1")
-        sph2 = s2c.checkbox("Spiegel 2 sphärisch (aus D, f/D)", key="vg_sph2")
-        v_auge = st.checkbox("Bild mit Augen-Filter bei V (Barten-Tiefpass)", value=True, key="vg_auge")
-        v_mass = st.checkbox("Augenmaßstab (Planet wächst mit V)", value=True, key="vg_mass")
+        ck = st.columns(6)
+        use_w1 = ck[0].checkbox("Sp. 1 Foucault", key="vg_wf1", help="Spiegel 1 aus Foucault-Test (Wellenfront)")
+        use_w2 = ck[1].checkbox("Sp. 2 Foucault", key="vg_wf2", help="Spiegel 2 aus Foucault-Test (Wellenfront)")
+        sph1 = ck[2].checkbox("Sp. 1 sphärisch", key="vg_sph1", help="Spiegel 1 sphärisch (aus D, f/D)")
+        sph2 = ck[3].checkbox("Sp. 2 sphärisch", key="vg_sph2", help="Spiegel 2 sphärisch (aus D, f/D)")
+        v_auge = ck[4].checkbox("Augen-Filter", value=True, key="vg_auge",
+                                help="Bild mit Augen-Filter bei V (Barten-Tiefpass)")
+        v_mass = ck[5].checkbox("Augenmaßstab", value=True, key="vg_mass",
+                                help="Planet wächst mit V")
         _notiz = []
         _wf = {}
         if (use_w1 or use_w2) and (_kz is None or _Df is None):
