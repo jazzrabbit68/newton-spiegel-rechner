@@ -1,7 +1,17 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.2.0 (2026-10-31)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.2.3 (2026-10-31)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.2.3 (2026-10-31)  MTF-Tab: Kurve für den verbesserten Spiegel (Strehl-Schieber) ergänzt – wurde bisher von der Foucault-Kurve verdrängt;
+                        Foucault-Kurve getrennt davon; relative Kurve entfernt.
+  v7.2.3 (2026-10-31)  Schieber: Eingabe ist jetzt direkt der Ziel-Strehl in % (statt "Verbesserung" 0-100 %); Werte bis zum Strehl der Kugel
+                        (Voreinstellung 0) = Kugel, 100 = Paraboloid. Berechnen-Knopf unter den Eingabefeldern, linke Spalte schmaler.
+                        ACHTUNG: gleicher Zahlenwert im Schieber bedeutet jetzt etwas anderes als in v7.2.1 (z. B. 50 = Strehl 0,50).
+  v7.2.1 (2026-10-31)  Fehler: Schieber 0 zeigte bei tiefem Strehl (Wb > 0,9, S nicht monoton) eine andere Kurve/V_krit/Q_perc als die Kugel
+                        (falscher Ast der S->Wb-Inversion); jetzt gilt bei Schieber 0 die echte Kugel-Wellenfront (_Wb_schieber).
+                        Oberfläche: Kernwerte/Beurteilung in Grundlagen > Kennwerte, Tab-Auswahl als Knöpfe unter den Parametern (nur Desktop)
+                        (schmale linke Spalte); Vergleich: Spiegel 1 = Hauptspiegel (D, f/D, S vom Schieber), nur Vergleichsspiegel 2
+                        wird eingegeben (Voreinstellung 200 mm, S=1). Okular-Kasten aus der Blenden-Skizze entfernt.
   v7.2.0 (2026-10-31)  Wahrnehmung: zusätzliche Q_vis-Kurven MIT Abblenden durch die Augenpupille (Eingabe d_p, Voreinstellung
                         3 mm, 0 = aus; Abblendgrenze V = D/d_p markiert, Cursor- und Tabellenwerte); Kennwerte, V_krit, Q_perc und
                         die bisherigen Kurven unverändert (volle Öffnung). Doku: documentation_v7_2.html
@@ -191,6 +201,17 @@ def _Wb_von_S(S: float, n: int = 60) -> float:
         else:
             hi = mid
     return (lo + hi) / 2.0
+
+
+def _Wb_schieber(D_mm: float, f_mm: float, lam_nm: float, S_slide: float) -> float:
+    """Wb für die Schieberstellung.  Ohne Verbesserung (S_slide = S der Kugel)
+    gilt die echte Kugel-Wellenfront; die Inversion _Wb_von_S würde bei tiefem
+    Strehl (Wb > 0,9, S nicht mehr monoton) auf einen falschen Ast fallen und
+    bei Schieber 0 eine andere Kurve liefern als die Kugel selbst."""
+    Wb_r = _wellenfronten(D_mm, f_mm, lam_nm)[2]
+    if S_slide <= _strehl_exakt(Wb_r) + 1e-6:
+        return Wb_r
+    return _Wb_von_S(S_slide)
 
 
 def v_krit_naeh(D_mm: float, Wb: float) -> float:
@@ -1403,6 +1424,14 @@ def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float, V: float,
     return _perceived_quality_kern(freqs_as, fc, mp, msa, S_, V, D_mm, True)
 
 
+def _qperc_schieber(D_mm, f_mm, lam_nm, S_slide, V):
+    """Q_perc für die Schieberstellung; ohne Verbesserung = echte Kugel."""
+    Wb_r = _wellenfronten(D_mm, f_mm, lam_nm)[2]
+    if S_slide <= _strehl_exakt(Wb_r) + 1e-6:
+        return perceived_quality(D_mm, f_mm, lam_nm, V)
+    return perceived_quality_von_S(D_mm, S_slide, lam_nm, V)
+
+
 def perceived_quality_exakt(D_mm: float, f_mm: float, lam_nm: float,
                              V: float, n_pts: int = 200) -> float:
     """Q_vis exakt: MTF×CSF-Integral ohne Dämpfungsfunktion w(V).
@@ -1765,9 +1794,6 @@ def fangspiegel_skizze(ax, D, f, r):
     for s in (-1, 1):
         ax.plot([u0, L], [s * rt, s * rt], color="#444", lw=2)
     ax.plot([L, L], [rt, rt + 0.0], color="#444")
-    ax.add_patch(Rectangle((u0 - 0.5 * L, -rf), 0.5 * L, 2 * rf, fc="#ddd", ec="#888",
-                           lw=1))
-    ax.text(u0 - 0.25 * L, rf + 0.04 * R, "Okular", ha="center", va="bottom", fontsize=7)
     ax.plot([0, 0], [-rf, rf], color="#d84315", lw=3)
     ax.text(0, rf + 0.04 * R, "Feldblende", ha="center", va="bottom", fontsize=7,
             color="#d84315")
@@ -1803,7 +1829,7 @@ def fangspiegel_skizze(ax, D, f, r):
     ax.plot([], [], color="#c62828", lw=1.4, label="steilste Sichtlinie (Feldblendenrand\n"
             "über OAZ-Rohrende) → Blende")
     ax.legend(fontsize=7, loc="upper left", framealpha=0.85)
-    ax.set_xlim(u0 - 0.6 * L, A + R * 1.45)
+    ax.set_xlim(u0 - 0.25 * L, A + R * 1.45)
     ax.set_ylim(-R * 1.18, R * 1.18)
     ax.axis("off")
 
@@ -2320,7 +2346,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.2.0 (2026-10-31)"
+VERSION  = "7.2.3 (2026-10-31)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -2339,7 +2365,7 @@ STRINGS = {
     "sl_D":      {"de": "Öffnung D",       "en": "Aperture D"},
     "sl_f":      {"de": "Brennweite f",    "en": "Focal length f"},
     "sl_lam":    {"de": "Wellenlänge λ",   "en": "Wavelength λ"},
-    "sl_strehl": {"de": "Verbesserung", "en": "Improvement"},
+    "sl_strehl": {"de": "Strehl", "en": "Strehl"},
     "sl_blende": {"de": "Blende D [mm]",   "en": "Stop D [mm]"},
     # Karten-Gruppen
     "grp_contrast": {"de": "Kontrast",
@@ -2461,6 +2487,7 @@ class App(tk.Tk):
         self._last_params     = None   # zuletzt berechnete Parameter
         self._dirty_tabs      = set()  # Tabs die beim nächsten Wechsel neu gezeichnet werden
         self._build_ui()
+        self._baue_navigation()
         # Tab-Wechsel: bei Bedarf das neue Tab nachzeichnen
         self._nb.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self._aktualisieren()
@@ -2503,6 +2530,10 @@ class App(tk.Tk):
             nbk.tab(frm, text=T(key))
         for gi, (gkey, keys) in enumerate(self._tab_gruppen):
             self._nb.tab(gi, text=T(gkey))
+        for k, (b, tk_) in getattr(self, "_nav_btns", {}).items():
+            b.config(text=T(tk_).strip())
+        for gk, h in getattr(self, "_nav_heads", {}).items():
+            h.config(text=T(gk).strip())
         # MTF-Beschriftungen
         for key, widget in self._mtf_label_widgets.items():
             widget.config(text=T(key))
@@ -2551,12 +2582,12 @@ class App(tk.Tk):
         param_defs = [
             ("sl_D",      self.var_D,        50,   500,  "mm",  14),
             ("sl_f",      self.var_f,        200,  4000, "mm",  14),
-            ("sl_strehl", self.var_strehl,   0,    100,  "%",   40),
+            ("sl_strehl", self.var_strehl,   0,    100,  "%",   14),
         ]
         self._param_labels = {}   # key → (lbl_val, unit)
         self._param_vars   = {}   # key → (var, mn, mx)
         for i, (key, var, mn, mx, unit, info_w) in enumerate(param_defs, 2):
-            lbl_name = tk.Label(left, text=T(key), bg=BG, width=16, anchor="w")
+            lbl_name = tk.Label(left, text=T(key), bg=BG, width=12, anchor="w")
             lbl_name.grid(row=i, column=0, sticky="w", **pad)
             self._param_name_widgets[key] = lbl_name
 
@@ -2584,14 +2615,12 @@ class App(tk.Tk):
 
         # Hinweis + Berechnen-Button
         hint_frm = tk.Frame(left, bg=BG)
-        hint_frm.grid(row=row, column=0, columnspan=3, sticky="w",
-                      padx=10, pady=(2, 6))
-        tk.Label(hint_frm, text="⏎  Wert eingeben und Enter drücken",
-                 bg=BG, fg="#888", font=("Helvetica", 8, "italic")).pack(side="left")
-        tk.Button(hint_frm, text="  Berechnen  ",
+        hint_frm.grid(row=row, column=0, columnspan=3, sticky="ew",
+                      padx=10, pady=(4, 2))
+        tk.Button(hint_frm, text="Berechnen  (Enter)",
                   command=self._param_changed,
                   font=("Helvetica", 9), bg=ACC, fg="white",
-                  relief="flat", padx=6, pady=2).pack(side="left", padx=(16, 0))
+                  relief="flat", padx=6, pady=2).pack(side="left")
         row += 1
 
         # ── Ergebniskarten ────────────────────────────────────────────────────
@@ -2611,28 +2640,16 @@ class App(tk.Tk):
             ("grp_qvis", [("rQp80", "rQp80"), ("rQp200", "rQp200"),
                           ("rQp350", "rQp350")]),
         ]
-        grp_w = tk.Label(left, text=T("grp_kern"),
-                         font=("Helvetica", 11, "bold"), bg=BG)
-        grp_w.grid(row=row, column=0, columnspan=3, sticky="w", **pad)
-        self._grp_widgets["grp_kern"] = grp_w
-        row += 1
-        row = self._karten_grid(left, karten_links, row, self._res,
-                                self._karten_name_widgets, pad)
-
-        self.lbl_verdict = tk.Label(left, text="", bg=BG,
-                                    font=("Helvetica", 10),
-                                    wraplength=400, justify="left")
-        self.lbl_verdict.grid(row=row, column=0, columnspan=3,
-                              sticky="w", padx=10, pady=(8, 2))
-        row += 1
-        self.lbl_vkrit = tk.Label(left, text="", bg=BG,
-                                   font=("Helvetica", 11, "bold"),
-                                   wraplength=400, justify="left")
-        self.lbl_vkrit.grid(row=row, column=0, columnspan=3,
-                             sticky="w", padx=10, pady=(0, 8))
+        # v7.2.1: Kernwerte + Urteil stehen jetzt oben im Tab Grundlagen > Kennwerte;
+        # links bleiben nur Parameter und die Tab-Knöpfe (s. _baue_navigation).
+        self._nav_row = row
+        self._nav_left = left
 
         # ── Diagramm-Tabs ─────────────────────────────────────────────────────
-        self._nb = ttk.Notebook(right)
+        _st = ttk.Style(self)
+        _st.layout("Tabless.TNotebook.Tab", [])          # Reiter ausblenden, Auswahl per Knopf links
+        _st.configure("Tabless.TNotebook", borderwidth=0, tabmargins=0)
+        self._nb = ttk.Notebook(right, style="Tabless.TNotebook")
         self._nb.pack(fill="both", expand=True)
         self._mtf_label_widgets = {}
 
@@ -2664,7 +2681,7 @@ class App(tk.Tk):
         for gkey, keys in self._tab_gruppen:
             if len(keys) > 1:
                 gfrm = tk.Frame(self._nb, bg=BG)
-                sub = ttk.Notebook(gfrm)
+                sub = ttk.Notebook(gfrm, style="Tabless.TNotebook")
                 sub.pack(fill="both", expand=True)
                 sub.bind("<<NotebookTabChanged>>", self._on_tab_changed)
                 self._nb.add(gfrm, text=T(gkey))
@@ -2694,6 +2711,25 @@ class App(tk.Tk):
                 self._baue_grundlagen(frm)
             elif attr == "_tab_kennwerte":
                 kr = 0
+                grp_w = tk.Label(frm, text=T("grp_kern"),
+                                 font=("Helvetica", 11, "bold"), bg=BG)
+                grp_w.grid(row=kr, column=0, columnspan=4, sticky="w", **pad)
+                self._grp_widgets["grp_kern"] = grp_w
+                kr += 1
+                kr = self._karten_grid(frm, karten_links, kr, self._res,
+                                       self._karten_name_widgets, pad)
+                self.lbl_verdict = tk.Label(frm, text="", bg=BG,
+                                            font=("Helvetica", 10),
+                                            wraplength=620, justify="left")
+                self.lbl_verdict.grid(row=kr, column=0, columnspan=4,
+                                      sticky="w", padx=10, pady=(8, 2))
+                kr += 1
+                self.lbl_vkrit = tk.Label(frm, text="", bg=BG,
+                                          font=("Helvetica", 11, "bold"),
+                                          wraplength=620, justify="left")
+                self.lbl_vkrit.grid(row=kr, column=0, columnspan=4,
+                                    sticky="w", padx=10, pady=(0, 8))
+                kr += 1
                 for grp_key, karten in self._karten_rest:
                     grp_w = tk.Label(frm, text=T(grp_key),
                                      font=("Helvetica", 11, "bold"), bg=BG)
@@ -3004,17 +3040,21 @@ class App(tk.Tk):
                         e.pack(side="left")
                         e.bind("<Return>",   self._vergleich_neu)
                         e.bind("<FocusOut>", self._vergleich_neu)
+                        if key in ("D1", "S1", "N"):      # v7.2.1: vom Hauptspiegel übernommen
+                            e.config(state="readonly")
                         tk.Label(fr, text=hint, bg=BG, fg="#666",
                                  font=("Helvetica", 8)).pack(side="left", padx=(2, 12))
-                _zeile([("Spiegel 1  D =", "D1", "200", "mm"), ("S =", "S1", "1.00", ""),
-                        ("Spiegel 2  D =", "D2", "300", "mm"), ("S =", "S2", "0.80", ""),
-                        ("f/D =", "N", "5", "(Fangspiegel automatisch)")])
+                _zeile([("Spiegel 1 (= Hauptspiegel)  D =", "D1", "200", "mm"), ("S =", "S1", "1.00", ""),
+                        ("f/D =", "N", "5", "(Hauptspiegel; gilt auch für Spiegel 2)")])
+                _zeile([("Spiegel 2 (Vergleich)  D =", "D2", "200", "mm"), ("S =", "S2", "1.00", "(Fangspiegel automatisch)")])
+
                 _zeile([("V =", "V", "200", "×"), ("Seeing", "seeing", "1.5", "″  (0 = aus)"),
                         ("Referenz: idealer", "refD", "200", "mm"),
                         ("Okularauszug", "buet", "50", "mm"),
                         ("Bildfeld", "bild", "10", "mm"),
                         ("Augenpupille", "pupille", "0", "mm (0 = aus; Mond 2–3, Planet 3–5, Deep-Sky 6–7)")])
                 fr_wf = tk.Frame(frm, bg=BG); fr_wf.pack(side="top", fill="x", padx=8, pady=(4, 0))
+                fr_wf2 = tk.Frame(frm, bg=BG); fr_wf2.pack(side="top", fill="x", padx=8, pady=(2, 0))
                 self._vg_wf1 = tk.BooleanVar(value=False)
                 self._vg_wf2 = tk.BooleanVar(value=False)
                 for _v, _t in [(self._vg_wf1, "Spiegel 1 aus Foucault-Test (Wellenfront)"),
@@ -3027,7 +3067,7 @@ class App(tk.Tk):
                 self._vg_sph2 = tk.BooleanVar(value=False)
                 for _v, _t in [(self._vg_sph1, "Spiegel 1 sphärisch (aus D, f/D)"),
                                (self._vg_sph2, "Spiegel 2 sphärisch (aus D, f/D)")]:
-                    tk.Checkbutton(fr_wf, text=_t, variable=_v, bg=BG, fg="#6a1b9a",
+                    tk.Checkbutton(fr_wf2, text=_t, variable=_v, bg=BG, fg="#6a1b9a",
                                    activebackground=BG, selectcolor=BG2,
                                    font=("Helvetica", 9, "bold"),
                                    command=self._vergleich_neu).pack(side="left", padx=(0, 14))
@@ -3037,7 +3077,7 @@ class App(tk.Tk):
                                font=("Helvetica", 9, "bold"),
                                command=self._vergleich_neu).pack(side="left", padx=(0, 14))
                 self._vg_mass = tk.BooleanVar(value=True)
-                tk.Checkbutton(fr_wf, text="Augenmaßstab (Planet wächst mit V)", variable=self._vg_mass,
+                tk.Checkbutton(fr_wf2, text="Augenmaßstab (Planet wächst mit V)", variable=self._vg_mass,
                                bg=BG, fg="#1565c0", activebackground=BG, selectcolor=BG2,
                                font=("Helvetica", 9, "bold"),
                                command=self._vergleich_neu).pack(side="left", padx=(0, 14))
@@ -3222,7 +3262,7 @@ class App(tk.Tk):
 
             r_real       = berechne(D, f, lam)
             S_real       = r_real["strehl"]
-            S_slide      = S_real + (S_pct / 100.0) * (1.0 - S_real)
+            S_slide      = S_pct / 100.0          # v7.2.2: Eingabe = Ziel-Strehl in %, <= Kugel gilt als Kugel
             S_slide      = min(max(S_slide, S_real), 1.0)
             Deff_k_slide = D * S_slide**0.25
             Vk           = v_kritisch(D, f, lam, EYE_RES)
@@ -3232,13 +3272,14 @@ class App(tk.Tk):
             Vk_blur      = v_krit_blur_direkt(D, f, EYE_RES)
             Vk_exakt     = v_krit_aus_qvis(D, f, lam, rel_schwelle=0.90)
             Vk_halb      = v_halb_exakt(D, f, lam)
-            Wb_s         = _Wb_von_S(S_slide)
+            Wb_s         = _Wb_schieber(D, f, lam, S_slide)
+            Vk_slide["Vk_sph"] = v_krit_naeh(D, Wb_s)
             Vk_exakt_s   = v_krit_aus_qvis_von_Wb(D, Wb_s, lam, rel_schwelle=0.90)
             Qp_80        = perceived_quality(D, f, lam, 30.0)
             Qp_200       = perceived_quality(D, f, lam, 80.0)
             Qp_350       = perceived_quality(D, f, lam, 160.0)
             Qp_V         = perceived_quality(D, f, lam, 150.0)
-            Qp_s         = tuple(perceived_quality_von_S(D, S_slide, lam, v)
+            Qp_s         = tuple(_qperc_schieber(D, f, lam, S_slide, v)
                                  for v in (30.0, 80.0, 160.0, 150.0))
 
             if self._compute_cancel:
@@ -3258,8 +3299,47 @@ class App(tk.Tk):
             msg = traceback.format_exc()
             self.after(0, lambda m=msg: self._zeige_fehler(m))
 
+    def _baue_navigation(self):
+        """v7.2.1: Tab-Auswahl als Knöpfe unter den Spiegel-Parametern
+        (die Reiter der Notebooks sind ausgeblendet)."""
+        left = self._nav_left
+        frm = tk.Frame(left, bg=BG)
+        frm.grid(row=self._nav_row, column=0, columnspan=3, sticky="ew",
+                 padx=10, pady=(10, 0))
+        self._nav_btns = {}      # tab_key -> (Button, Text-Key)
+        self._nav_heads = {}     # gruppen_key -> Label
+        for gkey, keys in self._tab_gruppen:
+            if len(keys) > 1:
+                h = tk.Label(frm, text=T(gkey).strip(), bg=BG, fg="#888",
+                             font=("Helvetica", 8, "bold"), anchor="w")
+                h.pack(fill="x", pady=(8, 0))
+                self._nav_heads[gkey] = h
+                for k in keys:
+                    self._nav_knopf(frm, k, k)
+            else:
+                self._nav_knopf(frm, keys[0], gkey)
+        self._nav_aktiv_markieren()
+
+    def _nav_knopf(self, parent, tab_key, text_key):
+        b = tk.Button(parent, text=T(text_key).strip(), anchor="w",
+                      font=("Helvetica", 10), relief="flat", bd=0,
+                      bg=BG2, activebackground="#d0d7e5", padx=10, pady=3,
+                      command=lambda k=tab_key: self._tab_waehlen(k))
+        b.pack(fill="x", pady=1)
+        self._nav_btns[tab_key] = (b, text_key)
+
+    def _nav_aktiv_markieren(self):
+        akt = self._aktiver_tab()
+        for k, (b, _) in self._nav_btns.items():
+            if k == akt:
+                b.config(bg=ACC, fg="white", activebackground=ACC, activeforeground="white")
+            else:
+                b.config(bg=BG2, fg="black", activebackground="#d0d7e5", activeforeground="black")
+
     def _on_tab_changed(self, _=None):
         """Zeichnet den neu sichtbaren Tab (immer, nicht nur wenn dirty)."""
+        if hasattr(self, "_nav_btns"):
+            self._nav_aktiv_markieren()
         if not self._last_params:
             return
         active = self._aktiver_tab()
@@ -3336,8 +3416,20 @@ class App(tk.Tk):
 
     def _vg_eingaben(self):
         """Eingaben des Vergleich-Tabs (Komma/Punkt, Fallback bei Fehler)."""
-        std = dict(D1=200, S1=1.0, D2=300, S2=0.8, N=5, V=200, seeing=1.5,
+        std = dict(D1=200, S1=1.0, D2=200, S2=1.0, N=5, V=200, seeing=1.5,
                    refD=200, buet=50, bild=10, pupille=0.0)
+        # v7.2.1: Spiegel 1 und f/D sind der Hauptspiegel (Parameter links, S = Schieberwert)
+        try:
+            _D = float(self.var_D.get()); _f = float(self.var_f.get())
+            _lp = getattr(self, "_last_params", None) or {}
+            _S = _lp.get("S_slide")
+            if _S is None:
+                _S = _strehl_exakt(_wellenfronten(_D, _f, 550.0)[2])
+            self._vg_vars["D1"].set(f"{_D:g}")
+            self._vg_vars["S1"].set(f"{float(_S):.4f}")
+            self._vg_vars["N"].set(f"{_f / _D:.4f}")
+        except Exception:
+            pass
         out = {}
         for k, v in self._vg_vars.items():
             try:
@@ -3350,7 +3442,7 @@ class App(tk.Tk):
             if k not in ("S1", "S2", "N", "seeing", "pupille"):
                 x = int(round(x))
             out[k] = x
-            v.set(f"{x:.2f}" if k in ("S1", "S2") else f"{x:g}")
+            v.set(f"{x:.2f}" if k in ("S1", "S2") else f"{x:.2f}" if k == "N" else f"{x:g}")
         return out
 
     def _vergleich_neu(self, *_):
@@ -3554,7 +3646,7 @@ class App(tk.Tk):
 
         V_hmin   = v_min_helligkeit(D, D_auge)
         V_seeM   = v_max_seeing(seeing)                 # Onset: Seeing allein
-        V_mirror = v_krit_naeh(D, _Wb_von_S(S_slide))    # Onset: Spiegel allein
+        V_mirror = v_krit_naeh(D, _Wb_schieber(D, f, 550.0, S_slide))    # Onset: Spiegel allein
         V_komb   = v_kombiniert_blur(V_seeM, V_mirror)   # Onset: beide zusammen
         V_komb_prakt = V_komb * 2.0                      # praktisch, s. Konvention V_max=2×V_krit
         V_hmax   = v_max_helligkeit(D, L0, D_auge, L_schwelle)
@@ -3668,9 +3760,9 @@ class App(tk.Tk):
             elif key == "sl_lam":
                 lbl.config(text="sichtbares Licht" if 380 <= lam <= 700 else "außerhalb VIS")
             elif key == "sl_strehl":
-                lbl.config(text=f"→ S={S_slide:.3f}  "
-                                 f"({'Paraboloid' if S_slide >= 0.9999 else 'Sphäre' if S_slide <= S_real + 1e-6 else 'verbessert'})"
-                                 f"   0 = Kugel, 100 = Parabel")
+                lbl.config(text=("= Kugel" if S_slide <= S_real + 1e-6
+                                 else "= Paraboloid" if S_slide >= 0.9999
+                                 else f"S = {S_slide:.3f}"))
             elif key == "sl_blende":
                 lbl.config(text=f"f/{f/D_bl:.1f}")
 
@@ -4391,34 +4483,21 @@ class App(tk.Tk):
                 label="Paraboloid  (Beugungsgrenze)")
         ax.plot(nu_k2, ms_k2,  color=COR, lw=2.2, ls="-",
                 label=f"Sphäre absolut  (S={strehl:.3f})")
-        ax.plot(nu_k2, msr_k2, color=ACC, lw=1.5, ls="--",
-                label="Sphäre relativ  (normiert gg. Paraboloid)")
 
-        # Vergleichskurve: bevorzugt die tatsaechlich am Foucault-Tab
-        # gemessene Wellenfront (aussagekraeftiger als ein Prozent-Schieber
-        # auf einen frei gewaehlten Ziel-Strehl). Faellt zurueck auf den
-        # alten S_slide-Mechanismus, falls noch keine Foucault-Messung fuer
-        # diese Oeffnung D vorliegt.  [07/2026]
+        # v7.2.3: Schieber-Kurve (verbesserter Spiegel) UND – falls für dieses D
+        # vorhanden – die Foucault-Messung als getrennte Kurven (relative Kurve entfällt).
         kz_fc = getattr(self, '_foucault_letzte_kz', None)
         D_fc  = getattr(self, '_foucault_letzte_D', None)
-        if kz_fc is not None and D_fc == D:
-            Wb_cmp    = kz_fc['Wb_fit']
-            S_cmp     = kz_fc['S_exakt']
-            cmp_label = f"Foucault gemessen  (S={S_cmp:.3f})"
-            cmp_ok    = S_cmp > strehl + 0.01
-        elif S_slide is not None and S_slide > strehl + 0.01:
-            Wb_cmp    = _Wb_von_S(S_slide)
-            cmp_label = f"Schieber absolut  (S={S_slide:.2f})"
-            cmp_ok    = True
-        else:
-            Wb_cmp = None
-            cmp_ok = False
-
-        if cmp_ok and Wb_cmp is not None:
-            msr_s_k = np.array([mtf_sph_rel(nu, Wb_cmp, paraxial=paraxial)
-                                 for nu in nu_k2])
-            ax.plot(nu_k2, mp_k2 * msr_s_k, color="#1a7abf", lw=1.8, ls="-.",
-                    label=cmp_label)
+        if S_slide is not None and S_slide > strehl + 0.002:
+            Wb_sl = _Wb_schieber(D, f, lam, S_slide)
+            msr_sl = np.array([mtf_sph_rel(nu, Wb_sl, paraxial=paraxial) for nu in nu_k2])
+            ax.plot(nu_k2, mp_k2 * msr_sl, color=ACC, lw=2.0, ls="--",
+                    label=f"Verbessert (Schieber)  S={S_slide:.3f}")
+        if kz_fc is not None and D_fc == D and kz_fc['S_exakt'] > strehl + 0.01:
+            msr_fc = np.array([mtf_sph_rel(nu, kz_fc['Wb_fit'], paraxial=paraxial)
+                               for nu in nu_k2])
+            ax.plot(nu_k2, mp_k2 * msr_fc, color="#1a7abf", lw=1.8, ls="-.",
+                    label=f"Foucault gemessen  (S={kz_fc['S_exakt']:.3f})")
 
         for label, d_as, col, *_ in all_details:
             nu_det = (1.0 / (2.0 * d_as)) / fc
@@ -4585,9 +4664,9 @@ class App(tk.Tk):
         Qn_para = Q_naeh(V_arr, 1.0, 1e-9)
 
         has_slide = (S_slide is not None and S_real is not None
-                     and S_slide > S_mar + 0.01)
+                     and S_slide > S_exakt + 0.002)
         if has_slide:
-            Wb_s      = _Wb_von_S(S_slide)
+            Wb_s      = _Wb_schieber(D, f, lam, S_slide)
             S_ex_s    = S_slide
             S_ex_s_ph = _strehl_exakt(Wb_s)
             Qe_slide  = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr)

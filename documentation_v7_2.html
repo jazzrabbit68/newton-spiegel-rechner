@@ -89,12 +89,12 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <h2>0. Aufbau der Oberfl&auml;che</h2>
 
-<p>Links stehen die Teleskop-Parameter (&Ouml;ffnung <span class="math">D</span>, Brennweite <span class="math">f</span>, Schieber &bdquo;Verbesserung&ldquo;) und die wichtigsten Kernwerte. Rechts liegen die Diagramme, in sechs Gruppen geordnet. Die Wellenl&auml;nge ist fest auf 550&nbsp;nm gesetzt.</p>
+<p>Links stehen die Teleskop-Parameter (&Ouml;ffnung <span class="math">D</span>, Brennweite <span class="math">f</span>, Strehl-Schieber) und darunter die Auswahlkn&ouml;pfe f&uuml;r die Ansichten (nach Gruppen geordnet; der gew&auml;hlte Knopf ist farbig hinterlegt). Rechts erscheint die gew&auml;hlte Ansicht. Die Kernwerte stehen oben im Unterreiter <em>Kennwerte</em> der Gruppe Grundlagen. Die Wellenl&auml;nge ist fest auf 550&nbsp;nm gesetzt.</p>
 
 <table>
   <thead><tr><th>Gruppe</th><th>Inhalt</th><th>Kapitel</th></tr></thead>
   <tbody>
-    <tr><td><strong>Grundlagen</strong></td><td>Unterreiter <em>Diagramme</em> (2&times;2-&Uuml;bersicht: Strehl vs. f/D, Eff. &Ouml;ffnung vs. f/D, &Ouml;ffnungsverlust vs. &Ouml;ffnung, Beugungsgrenze) und <em>Kennwerte</em> (vollst&auml;ndige Zahlentafel)</td><td>1&ndash;3, 8.1</td></tr>
+    <tr><td><strong>Grundlagen</strong></td><td>Unterreiter <em>Diagramme</em> (2&times;2-&Uuml;bersicht: Strehl vs. f/D, Eff. &Ouml;ffnung vs. f/D, &Ouml;ffnungsverlust vs. &Ouml;ffnung, Beugungsgrenze) und <em>Kennwerte</em> (Kernwerte mit Beurteilung und die vollst&auml;ndige Zahlentafel)</td><td>1&ndash;3, 8.1</td></tr>
     <tr><td><strong>Bildqualit&auml;t</strong></td><td>Unterreiter <em>Wahrnehmung</em> (Q<sub>vis</sub>(V)), <em>MTF</em>, <em>Blende</em> (Abblenden des Spiegels)</td><td>4, 5, 8.2</td></tr>
     <tr><td><strong>Messen</strong></td><td>Foucault-Auswertung</td><td>8.3</td></tr>
     <tr><td><strong>Grenzen</strong></td><td>Sinnvolle Maximalvergr&ouml;&szlig;erung; V<sub>max</sub> &uuml;ber &Ouml;ffnung und Seeing</td><td>8.4</td></tr>
@@ -106,8 +106,8 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <p>Im Desktop-Programm vergr&ouml;&szlig;ert ein Klick auf eines der vier Grundlagen-Diagramme dieses auf die volle Fl&auml;che, ein weiterer Klick (oder Rechtsklick) stellt die &Uuml;bersicht wieder her. In der Web-Version schaltet man die Ansicht &uuml;ber eine Auswahl oberhalb der Diagramme um.</p>
 
 <div class="callout">
-  <div class="callout-title">Schieber &bdquo;Verbesserung&ldquo; und Kernwerte</div>
-  Der Schieber (0&ndash;100&nbsp;%) simuliert Figurierungsfortschritt: 0&nbsp;% = reale Kugel, 100&nbsp;% = Paraboloid. Die Kernwerte zeigen den Wert der Kugel und den Wert mit Schieber nebeneinander (&bdquo;Kugel &rarr; Schieber&ldquo;). Wo ein einzelner Wert erscheint, ist es der Wert mit Schieber; die Beurteilungszeile wird ebenfalls mit dem Strehl des Schiebers gebildet.
+  <div class="callout-title">Strehl-Schieber und Kernwerte</div>
+  Das Feld <em>Strehl</em> (0&ndash;100&nbsp;%) nimmt den gew&uuml;nschten Ziel-Strehl direkt in Prozent und simuliert so Figurierungsfortschritt. Ein Wert bis zum Strehl der Kugel (Voreinstellung 0) gilt als reale Kugel, 100&nbsp;% = Paraboloid; daneben steht &bdquo;= Kugel&ldquo; bzw. der tats&auml;chliche Strehl. Kurz: 0 = Kugel, alles dar&uuml;ber ist der Strehl in Prozent. Die Kernwerte (Ansicht <em>Kennwerte</em>) zeigen den Wert der Kugel und den Wert mit Schieber nebeneinander (&bdquo;Kugel &rarr; Schieber&ldquo;). Wo ein einzelner Wert erscheint, ist es der Wert mit Schieber; die Beurteilungszeile wird ebenfalls mit dem Strehl des Schiebers gebildet.
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
@@ -311,7 +311,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <h2>6. Absoluter Vergleich verschiedener Spiegel (Q<sub>abs</sub>) <span class="badge-new">Beta</span></h2>
 
-<p>Q<sub>vis</sub> vergleicht einen Spiegel nur mit dem Ideal <em>gleicher</em> Gr&ouml;&szlig;e. Um zu beurteilen, ob ein gr&ouml;&szlig;erer, weniger perfekter Spiegel einem kleineren, perfekten &uuml;berlegen ist, ben&ouml;tigt man ein absolutes Ma&szlig;. Das leistet der Vergleich-Tab.</p>
+<p>Q<sub>vis</sub> vergleicht einen Spiegel nur mit dem Ideal <em>gleicher</em> Gr&ouml;&szlig;e. Um zu beurteilen, ob ein gr&ouml;&szlig;erer, weniger perfekter Spiegel einem kleineren, perfekten &uuml;berlegen ist, ben&ouml;tigt man ein absolutes Ma&szlig;. Das leistet der Vergleich-Tab. <strong>Spiegel&nbsp;1 ist immer der Hauptspiegel</strong> (D, f/D aus den Parametern links, S = Wert mit Schieber); eingegeben wird nur der <strong>Vergleichsspiegel&nbsp;2</strong> (Voreinstellung 200&nbsp;mm, S&nbsp;=&nbsp;1) &mdash; er hat dasselbe f/D wie der Hauptspiegel.</p>
 
 <h3>6.1 Definition</h3>
 <div class="math-block"><span class="math">Q<sub>abs</sub> = &int; MTF<sub>ges</sub>(&nu;<sub>ang</sub>) &middot; CSF(&nu;<sub>ang</sub>&middot;3600/V) d&nu;<sub>ang</sub> &nbsp;/&nbsp; [dasselbe Integral f&uuml;r den Referenzspiegel]</span></div>
@@ -415,7 +415,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <div class="diagram-box">
   <div class="diagram-title">MTF</div>
   <ul>
-    <li>Kontinuierliche MTF-Kurven &uuml;ber der normierten Ortsfrequenz &nu;: Paraboloid, Sph&auml;re absolut (&times; Strehl), Sph&auml;re relativ, optional Schieber- oder Foucault-Kurve. Obere Achse: Lp/mm in der Fokalebene.</li>
+    <li>Kontinuierliche MTF-Kurven &uuml;ber der normierten Ortsfrequenz &nu;: Paraboloid, Sph&auml;re absolut (&times; Strehl), dazu &mdash; falls vorhanden &mdash; die Kurve des verbesserten Spiegels (Strehl-Schieber) und die Foucault-Kurve als getrennte Kurven. Obere Achse: Lp/mm in der Fokalebene.</li>
     <li>Objektmarkierungen f&uuml;r Planetendetails oder Deep-Sky, per Auswahl umschaltbar.</li>
     <li>Fokusebene umschaltbar (Kapitel&nbsp;4.3).</li>
   </ul>
@@ -524,12 +524,12 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
   <tbody>
     <tr><td><strong>&Ouml;ffnung D</strong></td><td>50 &ndash; 600 mm</td><td>Hauptspiegeldurchmesser; beeinflusst alle Berechnungen.</td></tr>
     <tr><td><strong>Brennweite f</strong></td><td>200 &ndash; 6000 mm</td><td>Bestimmt N = f/D und damit den Wellenfrontfehler.</td></tr>
-    <tr><td><strong>Verbesserung</strong></td><td>0 &ndash; 100 %</td><td>0 % = reale Kugel, 100 % = Paraboloid; simuliert Figurierungsfortschritt und blendet Schieberkurven ein.</td></tr>
+    <tr><td><strong>Strehl (Schieber)</strong></td><td>0 &ndash; 100 %</td><td>Ziel-Strehl in Prozent; bis zum Strehl der Kugel (0) = reale Kugel, 100 % = Paraboloid; simuliert Figurierungsfortschritt und blendet Schieberkurven ein.</td></tr>
     <tr><td><strong>Blende D</strong> (Web: Seitenleiste)</td><td>50 mm &ndash; D</td><td>Abgeblendeter Durchmesser f&uuml;r den Blenden-Tab, Voreinstellung D/2.</td></tr>
     <tr><td><strong>Augenpupille d<sub>p</sub></strong></td><td>0 &ndash; 9 mm</td><td>Wahrnehmungs-Tab: zus&auml;tzliche Kurven mit Abblenden (Voreinstellung 3 mm, 0 = aus); im Vergleich-Tab eigenes Feld (Voreinstellung aus).</td></tr>
     <tr><td><strong>Vergr&ouml;&szlig;erung V</strong></td><td>ab 1&times;</td><td>Ablese-Cursor im Wahrnehmungs-Tab, Q-Wert im Fangspiegel-Tab, Vergleich.</td></tr>
     <tr><td><strong>Fangspiegel-Eingaben</strong></td><td>mm</td><td>Okularausz&uuml;g (Fokus &uuml;ber Tubus), Tubus-Au&szlig;en-&Oslash;, Bildfeld; f&uuml;r die Blende zus&auml;tzlich Hutring-&Oslash;, Okular-f und -AFOV, OAZ-Rohr Innen-&Oslash; und L&auml;nge.</td></tr>
-    <tr><td><strong>Vergleich-Eingaben</strong></td><td>&mdash;</td><td>D und S beider Spiegel, f/D, V, Seeing, Referenz-&Oslash;, Augenpupille, Optionen Foucault / sph&auml;risch / Planetenbild / Augenma&szlig;stab.</td></tr>
+    <tr><td><strong>Vergleich-Eingaben</strong></td><td>&mdash;</td><td>D und S des Vergleichsspiegels (Spiegel&nbsp;1 und f/D kommen vom Hauptspiegel), V, Seeing, Referenz-&Oslash;, Augenpupille, Optionen Foucault / sph&auml;risch / Planetenbild / Augenma&szlig;stab.</td></tr>
   </tbody>
 </table>
 
@@ -571,7 +571,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 </ul>
 
 <div class="footer-note">
-  Technische Gesamtdokumentation v7.2 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 7.2.0).
+  Technische Gesamtdokumentation v7.2 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 7.2.3).
 </div>
 
 </body>

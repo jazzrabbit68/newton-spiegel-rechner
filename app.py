@@ -1,10 +1,20 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.2.0 (2026-10-31)
-Entspricht newton_spiegel_rechner.py v7.2.0
+Streamlit-Version v7.2.3 (2026-10-31)
+Entspricht newton_spiegel_rechner.py v7.2.3
 
 Änderungshistorie (jüngste zuerst):
+  v7.2.3 (2026-10-31)  MTF-Tab: Kurve für den verbesserten Spiegel (Strehl-Schieber) ergänzt – wurde bisher von der Foucault-Kurve verdrängt;
+                        Foucault-Kurve getrennt davon; relative Kurve entfernt.
+  v7.2.3 (2026-10-31)  Schieber: Eingabe ist jetzt direkt der Ziel-Strehl in % (statt "Verbesserung" 0-100 %); Werte bis zum Strehl der Kugel
+                        (Voreinstellung 0) = Kugel, 100 = Paraboloid. Berechnen-Knopf unter den Eingabefeldern, linke Spalte schmaler.
+                        ACHTUNG: gleicher Zahlenwert im Schieber bedeutet jetzt etwas anderes als in v7.2.1 (z. B. 50 = Strehl 0,50).
+  v7.2.1 (2026-10-31)  Fehler: Schieber 0 zeigte bei tiefem Strehl (Wb > 0,9, S nicht monoton) eine andere Kurve/V_krit/Q_perc als die Kugel
+                        (falscher Ast der S->Wb-Inversion); jetzt gilt bei Schieber 0 die echte Kugel-Wellenfront (_Wb_schieber).
+                        Oberfläche: Kernwerte/Beurteilung in Grundlagen > Kennwerte, Tab-Auswahl als Knöpfe unter den Parametern (nur Desktop)
+                        (schmale linke Spalte); Vergleich: Spiegel 1 = Hauptspiegel (D, f/D, S vom Schieber), nur Vergleichsspiegel 2
+                        wird eingegeben (Voreinstellung 200 mm, S=1). Okular-Kasten aus der Blenden-Skizze entfernt.
   v7.2.0 (2026-10-31)  Wahrnehmung: zusätzliche Q_vis-Kurven MIT Abblenden durch die Augenpupille (Eingabe d_p, Voreinstellung
                         3 mm, 0 = aus; Abblendgrenze V = D/d_p markiert, Cursor- und Tabellenwerte); Kennwerte, V_krit, Q_perc und
                         die bisherigen Kurven unverändert (volle Öffnung). Doku: documentation_v7_2.html
@@ -49,7 +59,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.2.0 (2026-10-31)"
+VERSION = "7.2.3 (2026-10-31)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -153,6 +163,17 @@ def _Wb_von_S(S: float, n: int = 60) -> float:
         else:
             hi = mid
     return (lo + hi) / 2.0
+
+
+def _Wb_schieber(D_mm: float, f_mm: float, lam_nm: float, S_slide: float) -> float:
+    """Wb für die Schieberstellung.  Ohne Verbesserung (S_slide = S der Kugel)
+    gilt die echte Kugel-Wellenfront; die Inversion _Wb_von_S würde bei tiefem
+    Strehl (Wb > 0,9, S nicht mehr monoton) auf einen falschen Ast fallen und
+    bei Schieber 0 eine andere Kurve liefern als die Kugel selbst."""
+    Wb_r = _wellenfronten(D_mm, f_mm, lam_nm)[2]
+    if S_slide <= _strehl_exakt(Wb_r) + 1e-6:
+        return Wb_r
+    return _Wb_von_S(S_slide)
 
 
 def v_krit_naeh(D_mm: float, Wb: float) -> float:
@@ -1365,6 +1386,14 @@ def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float, V: float,
     return _perceived_quality_kern(freqs_as, fc, mp, msa, S_, V, D_mm, True)
 
 
+def _qperc_schieber(D_mm, f_mm, lam_nm, S_slide, V):
+    """Q_perc für die Schieberstellung; ohne Verbesserung = echte Kugel."""
+    Wb_r = _wellenfronten(D_mm, f_mm, lam_nm)[2]
+    if S_slide <= _strehl_exakt(Wb_r) + 1e-6:
+        return perceived_quality(D_mm, f_mm, lam_nm, V)
+    return perceived_quality_von_S(D_mm, S_slide, lam_nm, V)
+
+
 def perceived_quality_exakt(D_mm: float, f_mm: float, lam_nm: float,
                              V: float, n_pts: int = 200) -> float:
     """Q_vis exakt: MTF×CSF-Integral ohne Dämpfungsfunktion w(V).
@@ -1728,9 +1757,6 @@ def fangspiegel_skizze(ax, D, f, r):
     for s in (-1, 1):
         ax.plot([u0, L], [s * rt, s * rt], color="#444", lw=2)
     ax.plot([L, L], [rt, rt + 0.0], color="#444")
-    ax.add_patch(Rectangle((u0 - 0.5 * L, -rf), 0.5 * L, 2 * rf, fc="#ddd", ec="#888",
-                           lw=1))
-    ax.text(u0 - 0.25 * L, rf + 0.04 * R, "Okular", ha="center", va="bottom", fontsize=7)
     ax.plot([0, 0], [-rf, rf], color="#d84315", lw=3)
     ax.text(0, rf + 0.04 * R, "Feldblende", ha="center", va="bottom", fontsize=7,
             color="#d84315")
@@ -1766,7 +1792,7 @@ def fangspiegel_skizze(ax, D, f, r):
     ax.plot([], [], color="#c62828", lw=1.4, label="steilste Sichtlinie (Feldblendenrand\n"
             "über OAZ-Rohrende) → Blende")
     ax.legend(fontsize=7, loc="upper left", framealpha=0.85)
-    ax.set_xlim(u0 - 0.6 * L, A + R * 1.45)
+    ax.set_xlim(u0 - 0.25 * L, A + R * 1.45)
     ax.set_ylim(-R * 1.18, R * 1.18)
     ax.axis("off")
 
@@ -2700,34 +2726,21 @@ class _Diagramme:
                 label="Paraboloid  (Beugungsgrenze)")
         ax.plot(nu_k2, ms_k2,  color=COR, lw=2.2, ls="-",
                 label=f"Sphäre absolut  (S={strehl:.3f})")
-        ax.plot(nu_k2, msr_k2, color=ACC, lw=1.5, ls="--",
-                label="Sphäre relativ  (normiert gg. Paraboloid)")
 
-        # Vergleichskurve: bevorzugt die tatsaechlich am Foucault-Tab
-        # gemessene Wellenfront (aussagekraeftiger als ein Prozent-Schieber
-        # auf einen frei gewaehlten Ziel-Strehl). Faellt zurueck auf den
-        # alten S_slide-Mechanismus, falls noch keine Foucault-Messung fuer
-        # diese Oeffnung D vorliegt.  [07/2026]
+        # v7.2.3: Schieber-Kurve (verbesserter Spiegel) UND – falls für dieses D
+        # vorhanden – die Foucault-Messung als getrennte Kurven (relative Kurve entfällt).
         kz_fc = getattr(self, '_foucault_letzte_kz', None)
         D_fc  = getattr(self, '_foucault_letzte_D', None)
-        if kz_fc is not None and D_fc == D:
-            Wb_cmp    = kz_fc['Wb_fit']
-            S_cmp     = kz_fc['S_exakt']
-            cmp_label = f"Foucault gemessen  (S={S_cmp:.3f})"
-            cmp_ok    = S_cmp > strehl + 0.01
-        elif S_slide is not None and S_slide > strehl + 0.01:
-            Wb_cmp    = _Wb_von_S(S_slide)
-            cmp_label = f"Schieber absolut  (S={S_slide:.2f})"
-            cmp_ok    = True
-        else:
-            Wb_cmp = None
-            cmp_ok = False
-
-        if cmp_ok and Wb_cmp is not None:
-            msr_s_k = np.array([mtf_sph_rel(nu, Wb_cmp, paraxial=paraxial)
-                                 for nu in nu_k2])
-            ax.plot(nu_k2, mp_k2 * msr_s_k, color="#1a7abf", lw=1.8, ls="-.",
-                    label=cmp_label)
+        if S_slide is not None and S_slide > strehl + 0.002:
+            Wb_sl = _Wb_schieber(D, f, lam, S_slide)
+            msr_sl = np.array([mtf_sph_rel(nu, Wb_sl, paraxial=paraxial) for nu in nu_k2])
+            ax.plot(nu_k2, mp_k2 * msr_sl, color=ACC, lw=2.0, ls="--",
+                    label=f"Verbessert (Schieber)  S={S_slide:.3f}")
+        if kz_fc is not None and D_fc == D and kz_fc['S_exakt'] > strehl + 0.01:
+            msr_fc = np.array([mtf_sph_rel(nu, kz_fc['Wb_fit'], paraxial=paraxial)
+                               for nu in nu_k2])
+            ax.plot(nu_k2, mp_k2 * msr_fc, color="#1a7abf", lw=1.8, ls="-.",
+                    label=f"Foucault gemessen  (S={kz_fc['S_exakt']:.3f})")
 
         for label, d_as, col, *_ in all_details:
             nu_det = (1.0 / (2.0 * d_as)) / fc
@@ -2811,9 +2824,9 @@ class _Diagramme:
         Qn_para = Q_naeh(V_arr, 1.0, 1e-9)
 
         has_slide = (S_slide is not None and S_real is not None
-                     and S_slide > S_mar + 0.01)
+                     and S_slide > S_exakt + 0.002)
         if has_slide:
-            Wb_s      = _Wb_von_S(S_slide)
+            Wb_s      = _Wb_schieber(D, f, lam, S_slide)
             S_ex_s    = S_slide
             S_ex_s_ph = _strehl_exakt(Wb_s)
             Qe_slide  = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr)
@@ -3466,7 +3479,7 @@ class _Diagramme:
 
         V_hmin   = v_min_helligkeit(D, D_auge)
         V_seeM   = v_max_seeing(seeing)                 # Onset: Seeing allein
-        V_mirror = v_krit_naeh(D, _Wb_von_S(S_slide))    # Onset: Spiegel allein
+        V_mirror = v_krit_naeh(D, _Wb_schieber(D, f, 550.0, S_slide))    # Onset: Spiegel allein
         V_komb   = v_kombiniert_blur(V_seeM, V_mirror)   # Onset: beide zusammen
         V_komb_prakt = V_komb * 2.0                      # praktisch, s. Konvention V_max=2×V_krit
         V_hmax   = v_max_helligkeit(D, L0, D_auge, L_schwelle)
@@ -3723,10 +3736,12 @@ def main():
     st.sidebar.markdown(f"**f/D = {N:.2f}  |  λ = 550 nm (fix)**")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Strehl-Schieber (Verbesserung)")
+    st.sidebar.subheader("Strehl-Schieber")
     S_pct = st.sidebar.slider(
-        "Relative Verbesserung zu Paraboloid [%]", 0, 100, 0,
-        help="0% = reale Sphäre, 100% = Paraboloid. Simuliert Figurierungsfortschritt.")
+        "Strehl [%]", 0, 100, 0,
+        help="0 = reale Kugel; alles darüber ist der Ziel-Strehl in Prozent (simuliert "
+             "Figurierungsfortschritt), 100 = Paraboloid. Liegt der Wert unter dem Strehl der Kugel, "
+             "gilt die Kugel.")
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Abblendung")
@@ -3738,24 +3753,25 @@ def main():
     r_real     = berechne(D, f, lam)
     S_real     = r_real["strehl"]
     S_mar      = r_real["strehl_marechal"]
-    S_slide    = S_real + (S_pct / 100.0) * (1.0 - S_real)
+    S_slide    = S_pct / 100.0                    # v7.2.2: Eingabe = Ziel-Strehl in %
     S_slide    = min(max(S_slide, S_real), 1.0)
     Deff_k_sl  = D * S_slide**0.25
     Vk         = v_kritisch(D, f, lam, EYE_RES)
     Vk_slide   = v_kritisch_strehl(D, S_slide)
+    Vk_slide["Vk_sph"] = v_krit_naeh(D, _Wb_schieber(D, f, lam, S_slide))
     rv         = berechne_vergr(D, f, lam, 150.0, EYE_RES)
     Vk_naeh    = Vk["Vk_sph"]
     Vk_naeh_s  = Vk_slide["Vk_sph"]
     Vk_blur    = v_krit_blur_direkt(D, f, EYE_RES)
     Vk_exakt   = v_krit_aus_qvis(D, f, lam, rel_schwelle=0.90)
-    Wb_s       = _Wb_von_S(S_slide)
+    Wb_s       = _Wb_schieber(D, f, lam, S_slide)
     Vk_exakt_s = v_krit_aus_qvis_von_Wb(D, Wb_s, lam, rel_schwelle=0.90)
     Vk_halb    = v_halb_exakt(D, f, lam)
     Qp_80      = perceived_quality(D, f, lam, 30.0)
     Qp_200     = perceived_quality(D, f, lam, 80.0)
     Qp_350     = perceived_quality(D, f, lam, 160.0)
     Qp_V       = perceived_quality(D, f, lam, 150.0)
-    Qs_80, Qs_200, Qs_350, Qs_V = (perceived_quality_von_S(D, S_slide, lam, v)
+    Qs_80, Qs_200, Qs_350, Qs_V = (_qperc_schieber(D, f, lam, S_slide, v)
                                    for v in (30.0, 80.0, 160.0, 150.0))
 
     verdict_text, verdict_color = beurteilung(S_slide)
@@ -4262,12 +4278,21 @@ def main():
     with tabs[11]:
         st.markdown("**Beta:** absoluter Vergleich zweier Spiegel gegen einen festen Referenzspiegel "
                     "(Q_abs). Fangspiegel automatisch aus D und f/D.")
-        c1, c2, c3, c4, c5 = st.columns(5)
-        vD1 = c1.number_input("Spiegel 1: D [mm]", 50, 1500, 200, 10, key="vg_D1")
-        vS1 = c2.number_input("Spiegel 1: S", 0.05, 1.0, 1.0, 0.01, format="%.2f", key="vg_S1")
-        vD2 = c3.number_input("Spiegel 2: D [mm]", 50, 1500, 300, 10, key="vg_D2")
-        vS2 = c4.number_input("Spiegel 2: S", 0.05, 1.0, 0.80, 0.01, format="%.2f", key="vg_S2")
-        vN  = c5.number_input("f/D", 3.0, 12.0, 5.0, 0.5, key="vg_N")
+        # v7.2.1: Spiegel 1 = Hauptspiegel (Seitenleiste, S = Schieberwert), f/D vom Hauptspiegel;
+        # nur der Vergleichsspiegel 2 wird hier eingegeben.
+        vD1 = float(D)
+        if S_slide is not None:
+            vS1 = float(S_slide)
+        else:
+            _, _, _Wb1, _, _ = _wellenfronten(D, f, lam)
+            vS1 = float(_strehl_exakt(_Wb1))
+        vS1 = min(max(vS1, 0.05), 1.0)
+        vN = f / D
+        st.info(f"**Spiegel 1 = Hauptspiegel:** D = {vD1:.0f} mm, f/D = {vN:.2f}, S = {vS1:.3f}"
+                f"{' (Schieber)' if S_slide is not None else ''}  ·  Spiegel 2 hat dasselbe f/D.")
+        c3, c4, _c5 = st.columns([1, 1, 3])
+        vD2 = c3.number_input("Vergleichsspiegel 2: D [mm]", 50, 1500, 200, 10, key="vg_D2")
+        vS2 = c4.number_input("Vergleichsspiegel 2: S", 0.05, 1.0, 1.00, 0.01, format="%.2f", key="vg_S2")
         d1c, d2c, d3c, d4c, d5c, d6c = st.columns(6)
         vV  = d1c.number_input("V [×]", 10, 1000, 200, 10, key="vg_V")
         vSe = d2c.number_input("Seeing [″] (0 = aus)", 0.0, 6.0, 1.5, 0.1, key="vg_see")
