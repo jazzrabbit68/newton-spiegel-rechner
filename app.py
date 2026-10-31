@@ -4253,6 +4253,8 @@ def main():
         # Doku-HTML aus Datei lesen (liegt neben app.py) oder eingebettet anzeigen
         import os, pathlib
         _doc_candidates = [
+            pathlib.Path(__file__).parent / "documentation_v7_1.html",
+            pathlib.Path("documentation_v7_1.html"),
             pathlib.Path(__file__).parent / "documentation_v6_1.html",
             pathlib.Path("documentation_v6_1.html"),
         ]
@@ -4277,7 +4279,7 @@ def main():
                 unsafe_allow_html=True)
         else:
             st.info(
-                "Dokumentationsdatei **documentation_v6_1.html** nicht gefunden. "
+                "Dokumentationsdatei **documentation_v7_1.html** nicht gefunden. "
                 "Bitte die Datei ins gleiche Verzeichnis wie app.py legen.",
                 icon="ℹ️")
             st.markdown("""
