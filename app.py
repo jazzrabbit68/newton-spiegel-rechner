@@ -1,10 +1,12 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.2.4 (2026-10-31)
-Entspricht newton_spiegel_rechner.py v7.2.4
+Streamlit-Version v7.2.5 (2026-10-31)
+Entspricht newton_spiegel_rechner.py v7.2.5
 
 Änderungshistorie (jüngste zuerst):
+  v7.2.5 (2026-10-31)  Web: kompaktere Seitenleiste (ohne Überschrift "Strehl-Schieber"/"Ansicht" und ohne λ-Angabe, engere Abstände) und
+                        einzeiliger Kopf statt großem Titel.
   v7.2.4 (2026-10-31)  Web: Ansichtswahl als Knöpfe in der Seitenleiste (wie Desktop), nur die gewählte Ansicht wird gezeichnet (Eingaben bleiben beim
                         Wechsel erhalten); Kernwerte/Beurteilung nur noch in "Kennwerte"; Blendeneingabe nur im Tab "Blende" (Web) bzw. neu
                         als Eingabefeld im Tab "Blende" (Desktop).
@@ -62,7 +64,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.2.4 (2026-10-31)"
+VERSION = "7.2.5 (2026-10-31)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -3736,21 +3738,28 @@ def main():
         except Exception:
             pass
 
-    st.title(f"🔭 Newton-Spiegel: Kontrast- und Schärfeverlust  v{VERSION}")
-    st.caption("Sphärischer Hauptspiegel — Wellenfrontfehler, Strehl, MTF, CSF-Wahrnehmung, Foucault, sinnvolle Maximalvergrößerung")
+    # v7.2.5: kompakter Kopf (eine kleine Zeile) und engere Seitenleiste
+    st.markdown(
+        """<style>
+        .block-container {padding-top: 3rem; padding-bottom: 1rem;}
+        section[data-testid="stSidebar"] .block-container {padding-top: 1rem;}
+        section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {gap: 0.35rem;}
+        section[data-testid="stSidebar"] button {min-height: 1.9rem; padding-top: 0.1rem; padding-bottom: 0.1rem;}
+        </style>""", unsafe_allow_html=True)
+    st.markdown(f"**🔭 Newton-Spiegel** <span style='color:#888;font-size:0.85em'>"
+                f"Kontrast- und Schärfeverlust sphärischer Hauptspiegel · v{VERSION}</span>",
+                unsafe_allow_html=True)
 
     # ── Sidebar: Teleskop-Parameter ──────────────────────────────────────────
-    st.sidebar.header("Teleskop-Parameter")
+    st.sidebar.subheader("Teleskop-Parameter")
 
     D   = st.sidebar.slider("Öffnung D [mm]",    min_value=50,  max_value=600,  value=200, step=5)
     f   = st.sidebar.slider("Brennweite f [mm]", min_value=200, max_value=6000, value=1000, step=50)
     lam = 550.0  # fix, λ=550nm
 
     N = f / D
-    st.sidebar.markdown(f"**f/D = {N:.2f}  |  λ = 550 nm (fix)**")
+    st.sidebar.markdown(f"**f/D = {N:.2f}**")
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Strehl-Schieber")
     S_pct = st.sidebar.slider(
         "Strehl [%]", 0, 100, 0,
         help="0 = reale Kugel; alles darüber ist der Ziel-Strehl in Prozent (simuliert "
@@ -3758,7 +3767,6 @@ def main():
              "gilt die Kugel.")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Ansicht")
     _NAV = [("Grundlagen", [("grund", "Diagramme"), ("kenn", "Kennwerte")]),
             ("Bildqualität", [("wahr", "Wahrnehmung"), ("mtf", "MTF"), ("blende", "Blende")]),
             ("", [("messen", "Messen (Foucault)"), ("grenzen", "Grenzen"), ("bauen", "Bauen"),
