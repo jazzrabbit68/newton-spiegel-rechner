@@ -1,7 +1,10 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.2.4 (2026-10-31)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.2.6 (2026-10-31)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.2.6 (2026-10-31)  Web: Wahrnehmung ohne Wertetabelle/V-Zeile, Foucault-Auswahl in einer Zeile (ohne λ), Bauen ohne Q_vis-/Kontrast-Zeile.
+  v7.2.5 (2026-10-31)  Web: kompaktere Seitenleiste (ohne Überschrift "Strehl-Schieber"/"Ansicht" und ohne λ-Angabe, engere Abstände) und
+                        einzeiliger Kopf statt großem Titel.
   v7.2.4 (2026-10-31)  Web: Ansichtswahl als Knöpfe in der Seitenleiste (wie Desktop), nur die gewählte Ansicht wird gezeichnet (Eingaben bleiben beim
                         Wechsel erhalten); Kernwerte/Beurteilung nur noch in "Kennwerte"; Blendeneingabe nur im Tab "Blende" (Web) bzw. neu
                         als Eingabefeld im Tab "Blende" (Desktop).
@@ -2349,7 +2352,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.2.4 (2026-10-31)"
+VERSION  = "7.2.6 (2026-10-31)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────

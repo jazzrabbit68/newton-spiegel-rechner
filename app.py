@@ -1,10 +1,11 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.2.5 (2026-10-31)
-Entspricht newton_spiegel_rechner.py v7.2.5
+Streamlit-Version v7.2.6 (2026-10-31)
+Entspricht newton_spiegel_rechner.py v7.2.6
 
 Änderungshistorie (jüngste zuerst):
+  v7.2.6 (2026-10-31)  Web: Wahrnehmung ohne Wertetabelle/V-Zeile, Foucault-Auswahl in einer Zeile (ohne λ), Bauen ohne Q_vis-/Kontrast-Zeile.
   v7.2.5 (2026-10-31)  Web: kompaktere Seitenleiste (ohne Überschrift "Strehl-Schieber"/"Ansicht" und ohne λ-Angabe, engere Abstände) und
                         einzeiliger Kopf statt großem Titel.
   v7.2.4 (2026-10-31)  Web: Ansichtswahl als Knöpfe in der Seitenleiste (wie Desktop), nur die gewählte Ansicht wird gezeichnet (Eingaben bleiben beim
@@ -64,7 +65,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.2.5 (2026-10-31)"
+VERSION = "7.2.6 (2026-10-31)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -3977,37 +3978,6 @@ def main():
                           help="Senkrechte Linie im Diagramm; die exakten Q_vis-Werte "
                                "stehen darunter und als Punkte im Diagramm. Der Spiegel "
                                "ergibt sich aus Öffnung, Brennweite und Strehl-Schieber.")
-        _vt = lambda v: ("≥ 600×" if v >= 599.5 else "≤ 30×" if v <= 30.5 else f"{v:.0f}×")
-        _vk = lambda v: ("∞" if v >= 1e8 else f"{v:.0f}×")
-        _q_sph = perceived_quality_exakt(D, f, lam, V_cur)
-        _S_sph = _strehl_exakt(_wellenfronten(D, f, lam)[2])
-        _zeilen = [
-            "| Spiegel | Q_vis exakt | Q̃ Näherung | Verlust ggü. Parabol | Q ≥ 0.90 bis | V_krit |",
-            "|---|---|---|---|---|---|",
-            f"| Sphäre  D={D} mm, f/{f/D:.1f}, S={_S_sph:.3f} "
-            f"| **{_q_sph:.4f}** | – | {(1-_q_sph)*100:.1f} % | – | – |",
-        ]
-        if S_slide > S_real + 0.01:
-            _es = qvis_einzelrechner(D, S_slide, V_cur, lam)
-            _zeilen.append(f"| Schieber  S={S_slide:.3f} | **{_es['Q']:.4f}** | {_es['Q_naeh']:.4f} "
-                           f"| {_es['verlust']:.1f} % | {_vt(_es['V_q90'])} | {_vk(_es['V_krit'])} |")
-        if d_fs > 0:
-            _S_u = S_slide
-            _q_fs = float(qvis_kurve_mit_fangspiegel(D, _S_u, d_fs, lam, V_cur)[0])
-            _zeilen.append(f"| Schieber + Fangspiegel d={d_fs:.0f} mm (ε={min(d_fs/D, 0.95):.2f}) "
-                           f"| **{_q_fs:.4f}** | – | {(1-_q_fs)*100:.1f} % | – | – |")
-        if d_pup > 0:
-            _q_pk = float(qvis_pupille_kurve(D, 1.0, [V_cur], d_pup, lam,
-                                             wf=_wf_kugel(_wellenfronten(D, f, lam)[2], lam))[0])
-            _blend = "Auge blendet ab" if D / V_cur > d_pup else "volle Öffnung"
-            _zeilen.append(f"| Sphäre MIT Augenpupille {d_pup:g} mm (Austrittspupille {D/V_cur:.1f} mm, {_blend}) "
-                           f"| **{_q_pk:.4f}** | – | {(1-_q_pk)*100:.1f} % | – | – |")
-            if S_slide > S_real + 0.01:
-                _q_ps = float(qvis_pupille_kurve(D, S_slide, [V_cur], d_pup, lam)[0])
-                _zeilen.append(f"| Schieber MIT Augenpupille {d_pup:g} mm | **{_q_ps:.4f}** | – "
-                               f"| {(1-_q_ps)*100:.1f} % | – | – |")
-        _zeilen.append("| Paraboloid | **1.0000** | – | 0.0 % | – | – |")
-        st.markdown(f"**V = {V_cur}×** (λ = {lam:.0f} nm)\n\n" + "\n".join(_zeilen))
 
         _show_cached("fig_wahrnehmung", lambda: plot_wahrnehmung(D, f, lam,
                      S_slide, S_real, V_cur=V_cur, d_fang=d_fs, d_pup=d_pup),
@@ -4025,26 +3995,27 @@ def main():
         # Foucault-Tab
         st.subheader("Foucault-Auswertung")
         lam_fc = 550.0   # fix
-        fc1, fc2 = st.columns([1, 3])
+        fc1, fc2, fc3 = st.columns([1.1, 2.6, 1.8])      # v7.2.6: alle Auswahlpunkte in einer Zeile
         with fc1:
             n_zonen = st.radio("Zonen:", [4, 6, 8], horizontal=True, index=0, key="fc_n_zonen")
+        with fc2:
             use_direct = st.radio(
                 "Auswertungs-Modus:",
                 ["Polynom-Fit  (glatte Fläche)", "Hybrid  (Zonenfehler)"],
-                index=0, horizontal=False, key="fc_modus",
+                index=0, horizontal=True, key="fc_modus",
                 help="Polynom-Fit: glatte Fläche aus geraden ρ-Potenzen — dämpft "
                      "Messrauschen, mittelt aber lokale Zonenfehler weg.\n"
                      "Hybrid: Polynom + stückweise konstante Zonenresiduen — erfasst "
                      "Ringfehler. Braucht mindestens 6 Zonen; empfohlen, wenn das "
                      "Fit-Residuum > 0.010 λ ist.")
             use_direct = use_direct.startswith("Hybrid")
+        with fc3:
             grad_label = st.radio(
                 "Polynomgrad:", ["BIC (auto)", "Fest (n//2)"],
                 index=0, horizontal=True, key="fc_grad",
                 help="BIC wählt den Grad automatisch (kann bei rauschigen Daten sehr "
                      "niedrig ausfallen). Fest koppelt den Grad an die Zonenzahl.")
             grad_modus = "fest" if grad_label.startswith("Fest") else "bic"
-            st.caption(f"λ = {lam_fc:.0f} nm (fix)")
 
         R       = D / 2.0
         r_zon   = foucault_zonen(D, n_zonen)
@@ -4296,7 +4267,9 @@ def main():
             S_fs, S_fs_txt = _strehl_exakt(_Wb_s), "Sphäre"
         r_fs = fangspiegel_rechner(D, f, buet_v, tubus_v, bild_v, S_fs, V_fs, lam,
                                    hut_v, fe_v, afov_v, oazd_v, oazl_v)
-        st.markdown(fangspiegel_text(D, f, S_fs, S_fs_txt, r_fs, V_fs).replace("\n", "  \n"))
+        _fs_zeilen = [z for z in fangspiegel_text(D, f, S_fs, S_fs_txt, r_fs, V_fs).split("\n")
+                      if not z.startswith(("Q_vis bei", "Effektiver Kontrast"))]    # v7.2.6: schlanker
+        st.markdown("  \n".join(_fs_zeilen))
         _show_cached("fig_fangspiegel",
                      lambda: plot_fangspiegel(D, f, lam, S_fs, S_fs_txt, r_fs, V_fs),
                      (D, f, lam, S_fs, buet_v, tubus_v, bild_v, V_fs, hut_v, fe_v, afov_v, oazd_v, oazl_v))
