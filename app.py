@@ -1,10 +1,15 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.2.7 (2026-10-31)
-Entspricht newton_spiegel_rechner.py v7.2.7
+Streamlit-Version v7.3.0 (2026-10-31)
+Entspricht newton_spiegel_rechner.py v7.3.0
 
 Änderungshistorie (jüngste zuerst):
+  v7.3.0 (2026-10-31)  KERNWERTE GEÄNDERT (externe Prüfung): (1) Q_perc (Kennwerte "Q bei 30x/80x/160x/150x", Kernwert "Q_perc bei Slider-Vergr.") enthielt
+                        den Strehl doppelt (msa = msr*mp*S, die MTF ist aber schon auf MTF(0)=1 normiert) -> Werte waren zu niedrig; z. B. 200/1000
+                        bei 150x: 0,035 -> 0,153 (Q_vis exakt 0,138). (2) Foucault: Zonenfläche/Hybrid-Ringe nutzten die Zonenmitten statt der echten
+                        gleichflächigen Zonengrenzen (Auswirkung klein, S ~0,002). (3) Vergleich: S2 >= 0,10; Spiegel 1 mit S < 0,09 nutzt die
+                        sphärische Wellenfront (S->Wb-Inversion erreicht S < 0,082 nicht). (4) Web: Ersatz-Kurzreferenz ohne veraltete Formeln.
   v7.2.7 (2026-10-31)  Web: Öffnung bis 500 mm, Brennweite bis 3000 mm; Vergleich-Tab kompakter (Kopfzeile als Caption, Eingaben 2×4, Optionen in einer Zeile).
   v7.2.6 (2026-10-31)  Web: Wahrnehmung ohne Wertetabelle/V-Zeile, Foucault-Auswahl in einer Zeile (ohne λ), Bauen ohne Q_vis-/Kontrast-Zeile.
   v7.2.5 (2026-10-31)  Web: kompaktere Seitenleiste (ohne Überschrift "Strehl-Schieber"/"Ansicht" und ohne λ-Angabe, engere Abstände) und
@@ -66,7 +71,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.2.7 (2026-10-31)"
+VERSION = "7.3.0 (2026-10-31)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -280,7 +285,7 @@ def _mtf_arrays(Wb: float, S: float, fc: float, n_pts: int):
     freqs_as   = freqs_norm * fc
     mp  = np.array([mtf_para(f)        for f in freqs_norm])
     msr = np.array([mtf_sph_rel(f, Wb) for f in freqs_norm])
-    msa = msr * mp * S
+    msa = msr * mp      # v7.3.0: KEIN zusätzlicher Faktor S (der Strehl steckt bereits in msr; MTF(0)=1)
     return freqs_as, mp, msa, msr
 
 
@@ -1028,8 +1033,9 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
     rho_f = np.linspace(0.0, 1.0, 2000)
 
     # Flaechengewichte der Zonen (Kreisringflaechen, normiert)
-    r_inner    = np.concatenate([[0.0], r_zonen[:-1]])
-    r_outer    = r_zonen.copy()
+    # v7.3.0: echte Zonengrenzen (gleichflächig), nicht die Zonenmitten
+    r_outer    = foucault_zonengrenzen(D_mm, len(r_zonen))
+    r_inner    = np.concatenate([[0.0], r_outer[:-1]])
     zone_areas = r_outer**2 - r_inner**2
     zone_areas = zone_areas / zone_areas.sum()
 
@@ -1051,8 +1057,9 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
 
     if use_direct:
         # Hybrid: Polynom (BIC-Grad) + stückweise konstante Residuen je Ringzone
-        rho_inner_z = np.concatenate([[0.0], rho_z[:-1]])
-        for ri, ro, res in zip(rho_inner_z, rho_z, residuen):
+        rho_aussen  = r_outer / R
+        rho_inner_z = np.concatenate([[0.0], rho_aussen[:-1]])
+        for ri, ro, res in zip(rho_inner_z, rho_aussen, residuen):
             mask = (rho_f >= ri) & (rho_f <= ro)
             W_f[mask] += res
 
@@ -4291,7 +4298,7 @@ def main():
                    f"Fangspiegel automatisch.")
         r1 = st.columns(4)
         vD2 = r1[0].number_input("Spiegel 2: D [mm]", 50, 1500, 200, 10, key="vg_D2")
-        vS2 = r1[1].number_input("Spiegel 2: S", 0.05, 1.0, 1.00, 0.01, format="%.2f", key="vg_S2")
+        vS2 = r1[1].number_input("Spiegel 2: S", 0.10, 1.0, 1.00, 0.01, format="%.2f", key="vg_S2")
         vV  = r1[2].number_input("V [×]", 10, 1000, 200, 10, key="vg_V")
         vSe = r1[3].number_input("Seeing [″] (0 = aus)", 0.0, 6.0, 1.5, 0.1, key="vg_see")
         r2 = st.columns(4)
@@ -4315,6 +4322,9 @@ def main():
                                 help="Planet wächst mit V")
         _notiz = []
         _wf = {}
+        if vS1 < 0.09 and not sph1:      # S -> Wb-Inversion erreicht S < 0,082 nicht (S nicht monoton)
+            sph1 = True
+            _notiz.append("Spiegel 1: Strehl < 0,09 – es wird die sphärische Wellenfront aus D und f/D verwendet.")
         if (use_w1 or use_w2) and (_kz is None or _Df is None):
             _notiz.append("Keine Foucault-Daten vorhanden — erst im Foucault-Tab Messwerte eingeben.")
         elif use_w1 or use_w2:
@@ -4394,8 +4404,8 @@ def main():
 | Strehl Maréchal | exp(−(2π·W_rms)²) |
 | Strehl exakt | Pupillenintegral |
 | D_eff Kontrast | D · S^0.25 |
-| V_krit | D · 0.7 · √S |
-| Foucault W_i | ΔF·r²/(8·f²·λ) |
+| V_krit (Näherung) | D / (13 · W_b) |
+| Foucault | Zonen-ΔF → Wellenfront (kumulative Neigungsintegration) |
 | Parabel-Soll δl | r²/(4f), rel. Zone 1 |
 """)
 
