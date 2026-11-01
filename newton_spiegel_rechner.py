@@ -3,7 +3,7 @@ Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.1
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
   v7.3.1 (2026-11-01)  Keine Kernwerte geändert. Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
-                        Bauen (Foucault-Test, Fangspiegel, Blende). MTF-Tab: Umschalter "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
+                        Bauen (Foucault-Test, Fangspiegel, Blende). V_krit (MTF×CSF) und "Q≥0,90 bis" werden auf 2·D begrenzt und als "> 2·D×" angezeigt (vorher 600×). Grenzen und Blende: beide Diagramme nebeneinander (Desktop+Web); Blende: Texte außerhalb des Diagramms entfernt; CSF korrekt als Mannos/Sakrison 1974 zitiert. MTF-Tab: Objektauswahl (Planeten/Deep-Sky/Alle) blendet die Detail-Markierungen jetzt wirklich ein/aus; Umschalter "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
                         Funktionen und Reste alter Versionen entfernt (berechne_von_S, _mtf_arrays_klassisch, kurven_N/_vergr/_blende u.a.).
   v7.3.0 (2026-10-31)  KERNWERTE GEÄNDERT (externe Prüfung): (1) Q_perc (Kennwerte "Q bei 30x/80x/160x/150x", Kernwert "Q_perc bei Slider-Vergr.") enthielt
                         den Strehl doppelt (msa = msr*mp*S, die MTF ist aber schon auf MTF(0)=1 normiert) -> Werte waren zu niedrig; z. B. 200/1000
@@ -96,8 +96,8 @@ Formeln:
          → W(ρ) = Wp·(ρ⁴−ρ²) = 4·Wb·(ρ⁴−ρ²); konsistent mit Sacek §4.7)
 
   Wahrnehmung:
-    CSF nach Barten (1999):
-      csf(f) = 2.6·(0.0192 + 0.114·f)·exp(−(0.114·f)^1.1)   [Barten 1999]
+    CSF nach Mannos & Sakrison (1974):
+      csf(f) = 2.6·(0.0192 + 0.114·f)·exp(−(0.114·f)^1.1)   [Mannos/Sakrison 1974]
     Q_vis = ∫(MTF_sph · MTF_para · CSF) dν / ∫(MTF_para · CSF) dν
     Q̃(V) = S + (1−S)·(1−w(V))   [eigene Näherungsformel]
       mit w(V) = 1 / (1 + (V_krit/V)²)
@@ -107,6 +107,8 @@ Quellen:
              https://www.telescope-optics.net  (laufend aktualisiert)
   [Suiter]   H.R. Suiter, "Star Testing Astronomical Telescopes",
              2nd ed., Willmann-Bell (2009)
+  [Mannos]   J.L. Mannos, D.J. Sakrison, "The effects of a visual fidelity criterion on the encoding of
+             images", IEEE Trans. Inf. Theory 20(4), 525-536 (1974)  — CSF-Formel
   [Barten]   P.G.J. Barten, "Contrast Sensitivity of the Human Eye and Its Effects
              on Image Quality", SPIE Press (1999), ISBN 978-0-8194-3296-4
 
@@ -464,7 +466,7 @@ def v_kritisch_strehl(D_mm: float, strehl: float) -> dict:
 
 def v_krit_aus_qvis(D_mm: float, f_mm: float, lam_nm: float,
                     rel_schwelle: float = 0.90,
-                    V_min: float = 30.0, V_max: float = 600.0,
+                    V_min: float = 30.0, V_max: float = None,
                     n_pts: int = 60) -> float:
     """V_krit aus MTF×CSF-Integral: Vergrößerung ab der Q_vis < rel_schwelle · Q_para.
 
@@ -472,6 +474,8 @@ def v_krit_aus_qvis(D_mm: float, f_mm: float, lam_nm: float,
     als ein gleichgroßer Paraboloid bei derselben Vergrößerung.
     Gibt V_max zurück wenn der Verlust überall unter der Schwelle bleibt.
     """
+    if V_max is None:          # v7.3.1: praktische Obergrenze 2·D [mm] (hier endet jede sinnvolle Vergrößerung)
+        V_max = max(2.0 * D_mm, 2.0 * V_min)
     _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
     f_para  = D_mm * 50.0   # praktisch aberrationsfreier Paraboloid
     _, _, Wb_p, _, _ = _wellenfronten(D_mm, f_para, lam_nm)
@@ -505,9 +509,11 @@ def v_krit_aus_qvis(D_mm: float, f_mm: float, lam_nm: float,
 
 def v_krit_aus_qvis_von_Wb(D_mm: float, Wb: float, lam_nm: float,
                             rel_schwelle: float = 0.90,
-                            V_min: float = 30.0, V_max: float = 600.0,
+                            V_min: float = 30.0, V_max: float = None,
                             n_pts: int = 60) -> float:
     """Wie v_krit_aus_qvis(), aber direkt aus Wb — für Schieber-Wert."""
+    if V_max is None:          # v7.3.1: praktische Obergrenze 2·D [mm] (hier endet jede sinnvolle Vergrößerung)
+        V_max = max(2.0 * D_mm, 2.0 * V_min)
     fc     = D_mm / (lam_nm * 1e-6 * 206265)
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
     nu     = np.linspace(0.0, 1.0, n_pts)
@@ -1312,10 +1318,10 @@ def mtf_eye(f_cpd: float) -> float:
 
 
 def csf(f_cpd: float) -> float:
-    """Contrast Sensitivity Function nach Barten (1999).
+    """Contrast Sensitivity Function nach Mannos & Sakrison (1974).
 
     csf(f) = 2.6·(0.0192 + 0.114·f)·exp(−(0.114·f)^1.1)
-    Gültig für photopisches Sehen bei mittlerer Leuchtdichte.  [Barten 1999]
+    Gültig für photopisches Sehen bei mittlerer Leuchtdichte.  [Mannos/Sakrison 1974]
     """
     f = max(f_cpd, 1e-6)
     return 2.6 * (0.0192 + 0.114 * f) * np.exp(-((0.114 * f) ** 1.1))
@@ -1326,7 +1332,7 @@ _L_REF = 100.0   # cd/m²  — mittlere photopische Leuchtdichte
 
 
 def csf_lum(f_cpd: float, L: float) -> float:
-    """Luminanzabhängige CSF nach Barten (1999) — vereinfachte Skalierung.
+    """Luminanzabhängige CSF (angelehnt an Barten 1999) — vereinfachte Skalierung.
 
     Bei niedriger Leuchtdichte L [cd/m²]:
       - Amplitude sinkt ∝ √(L/L_ref)
@@ -1524,7 +1530,7 @@ def qvis_einzelrechner(D_mm: float, S: float, V: float,
         verlust   Wahrnehmungsverlust ggü. Paraboloid [%]  = (1−Q)·100
         V_krit    10%-Kontrastverlust-Schwelle (Näherung D/(13·Wb)), 1e9 = ∞
         V_q90     Vergrößerung, ab der Q_vis exakt unter 0,90 fällt
-                  (auf 30…600× begrenzt; 600.0 heißt „≥ 600×“, 30.0 „≤ 30×“)
+                  (auf 30…2·D× begrenzt; 2·D heißt „> 2·D×“, 30.0 „≤ 30×“)
     """
     S  = min(max(float(S), 1e-6), 1.0)
     Wb = _Wb_von_S(S)
@@ -1536,7 +1542,7 @@ def qvis_einzelrechner(D_mm: float, S: float, V: float,
     return dict(D=D_mm, S=S, V=V, lam=lam_nm, Wb=Wb, Q=Q, Q_naeh=Q_n,
                 verlust=(1.0 - Q) * 100.0,
                 V_krit=v_krit_naeh(D_mm, Wb),
-                V_q90=(600.0 if Wb <= 1e-9 else
+                V_q90=(max(2.0 * D_mm, 60.0) if Wb <= 1e-9 else
                        v_krit_aus_qvis_von_Wb(D_mm, Wb, lam_nm, 0.90)))
 
 
@@ -2045,7 +2051,7 @@ def planet_objekt(n=384, px_arcsec=0.1, seed=7):
 
 
 def augen_filter(f_cyc_arcsec, V: float):
-    """Augen-Tiefpass bei Vergrößerung V (v7.0.0-beta): Barten-CSF normiert auf ihr
+    """Augen-Tiefpass bei Vergrößerung V (v7.0.0-beta): CSF (Mannos/Sakrison) normiert auf ihr
     Maximum, nur oberhalb des Maximums wirksam (darunter 1, damit Scheibe/Bänder
     nicht als Kantenbild erscheinen).  f im Himmel [cyc/″] → Auge [cyc/°] = f·3600/V."""
     fe = np.maximum(np.asarray(f_cyc_arcsec, float) * 3600.0 / max(V, 1e-9), 1e-6)
@@ -2631,8 +2637,8 @@ class App(tk.Tk):
                 frm = gfrm
                 self._tab_nb[tab_key] = (self._nb, frm)
             if attr == "_tab_vmax":
-                _l = tk.Frame(frm, bg=BG); _l.pack(side="top", fill="both", expand=True)
-                _r = tk.Frame(frm, bg=BG); _r.pack(side="top", fill="both", expand=True)
+                _l = tk.Frame(frm, bg=BG); _l.pack(side="left", fill="both", expand=True)   # v7.3.1: nebeneinander
+                _r = tk.Frame(frm, bg=BG); _r.pack(side="left", fill="both", expand=True)
                 self._vmax_cols = (_l, _r)
                 frm = _l
             elif attr == "_tab_vmax_D":
@@ -2784,7 +2790,7 @@ class App(tk.Tk):
                 _eb.bind("<Return>", self._param_changed); _eb.bind("<KP_Enter>", self._param_changed)
                 tk.Label(_bf, text="mm   (Enter; max. Öffnung − 10 mm)", bg=BG, fg="#666",
                          font=("Helvetica", 8)).pack(side="left", padx=(2, 0))
-                fig, (ax, ax2) = plt.subplots(2, 1, figsize=(8.0, 7.0), dpi=96)
+                fig, (ax, ax2) = plt.subplots(1, 2, figsize=(12.0, 4.6), dpi=96)   # v7.3.1: nebeneinander
                 fig.patch.set_facecolor(BG)
                 ax.set_facecolor(BG); ax2.set_facecolor(BG)
                 canvas = FigureCanvasTkAgg(fig, master=frm)
@@ -3549,8 +3555,7 @@ class App(tk.Tk):
 
         ax.set_xlabel("Öffnung D [mm]", fontsize=9)
         ax.set_ylabel("V_max praktisch  [×]  (perfekte Optik, S=1)", fontsize=9)
-        ax.set_title("Sinnvolle Maximalvergrößerung vs. Öffnung — "
-                     "Beugung + Seeing, perfekte Optik",
+        ax.set_title("V_max vs. Öffnung — Beugung + Seeing (S=1)",
                      fontsize=9, fontweight="bold")
         ax.legend(fontsize=8, loc="upper left")
         ax.grid(True, alpha=0.25)
@@ -3731,7 +3736,10 @@ class App(tk.Tk):
         col_ex     = "#2e7d32" if abs(delta_ex) < 30 else "#e65100"
         avp        = r["aufl_verlust_pct"]
 
+        _Vcap = max(2.0 * D, 60.0)           # v7.3.1: Obergrenze 2·D – darüber keine sinnvolle Vergrößerung
         def _vk_ex_text(Ve):
+            if Ve >= _Vcap - 0.5:
+                return f"> {_Vcap:.0f}×"
             return f"{Ve:.0f}×" if Ve > 30.5 else "< 30×"
 
         rv2["rN"].config(    text=f"f/{r['N']:.2f}")
@@ -4456,7 +4464,11 @@ class App(tk.Tk):
             ax.plot(nu_k2, mp_k2 * msr_fc, color="#1a7abf", lw=1.8, ls="-.",
                     label=f"Foucault gemessen  (S={kz_fc['S_exakt']:.3f})")
 
-        for label, d_as, col, *_ in all_details:
+        _obj = getattr(self, '_mtf_objekte', None)
+        _obj = _obj.get() if _obj is not None else "alle"
+        for label, d_as, col, kat in all_details:
+            if _obj != "alle" and kat not in (_obj, "beide"):
+                continue                      # v7.3.1: Objektauswahl (Planeten / Deep-Sky / Alle) wirkt jetzt
             nu_det = (1.0 / (2.0 * d_as)) / fc
             if nu_det >= 1.0:
                 continue
@@ -4522,8 +4534,9 @@ class App(tk.Tk):
         Hauptregler (Öffnung, Brennweite, Strehl-Schieber)."""
         V = self._wn_V
 
+        _Vcap = max(2.0 * D, 60.0)
         def _vtxt(v):
-            return "≥ 600×" if v >= 599.5 else "≤ 30×" if v <= 30.5 else f"{v:.0f}×"
+            return f"> {_Vcap:.0f}×" if v >= _Vcap - 0.5 else "≤ 30×" if v <= 30.5 else f"{v:.0f}×"
         def _vk(v):
             return "∞" if v >= 1e8 else f"{v:.0f}×"
         q_sph = perceived_quality_exakt(D, f, lam, V)
@@ -5067,6 +5080,15 @@ class App(tk.Tk):
         ax2.legend(fontsize=7, loc="upper right", ncol=2)
         self._ax_fmt(ax2)
 
+        # v7.3.1: Texte außerhalb des sichtbaren Bereichs (z.B. Q-Linien-Beschriftung, "Abblenden lohnt sich")
+        # nicht zeichnen – sie standen sonst frei neben/unter dem Diagramm.
+        for _a in (ax, ax2):
+            _y0, _y1 = sorted(_a.get_ylim()); _x0, _x1 = sorted(_a.get_xlim())
+            for _t in list(_a.texts):
+                if type(_t).__name__ == "Text" and _t.get_transform() == _a.transData:
+                    _x, _y = _t.get_position()
+                    if not (_x0 <= _x <= _x1 and _y0 <= _y <= _y1):
+                        _t.remove()
         fig.tight_layout(); canvas.draw_idle()
 
 

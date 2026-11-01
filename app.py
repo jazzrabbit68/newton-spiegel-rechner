@@ -6,7 +6,7 @@ Entspricht newton_spiegel_rechner.py v7.3.1
 
 Änderungshistorie (jüngste zuerst):
   v7.3.1 (2026-11-01)  Keine Kernwerte geändert. Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
-                        Bauen (Foucault-Test, Fangspiegel, Blende). MTF-Tab: Checkbox "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
+                        Bauen (Foucault-Test, Fangspiegel, Blende). V_krit (MTF×CSF) wird auf 2·D begrenzt und als "> 2·D x" angezeigt (vorher 600x). Grenzen und Blende: beide Diagramme nebeneinander (Desktop+Web); Blende: Texte außerhalb des Diagramms entfernt; CSF korrekt als Mannos/Sakrison 1974 zitiert. MTF-Tab: Objektauswahl (Planeten/Deep-Sky/Alle) blendet die Detail-Markierungen jetzt wirklich ein/aus; Checkbox "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
                         Funktionen und Reste alter Versionen entfernt.
   v7.3.0 (2026-10-31)  KERNWERTE GEÄNDERT (externe Prüfung): (1) Q_perc (Kennwerte "Q bei 30x/80x/160x/150x", Kernwert "Q_perc bei Slider-Vergr.") enthielt
                         den Strehl doppelt (msa = msr*mp*S, die MTF ist aber schon auf MTF(0)=1 normiert) -> Werte waren zu niedrig; z. B. 200/1000
@@ -426,7 +426,7 @@ def v_kritisch_strehl(D_mm: float, strehl: float) -> dict:
 
 def v_krit_aus_qvis(D_mm: float, f_mm: float, lam_nm: float,
                     rel_schwelle: float = 0.90,
-                    V_min: float = 30.0, V_max: float = 600.0,
+                    V_min: float = 30.0, V_max: float = None,
                     n_pts: int = 60) -> float:
     """V_krit aus MTF×CSF-Integral: Vergrößerung ab der Q_vis < rel_schwelle · Q_para.
 
@@ -434,6 +434,8 @@ def v_krit_aus_qvis(D_mm: float, f_mm: float, lam_nm: float,
     als ein gleichgroßer Paraboloid bei derselben Vergrößerung.
     Gibt V_max zurück wenn der Verlust überall unter der Schwelle bleibt.
     """
+    if V_max is None:          # v7.3.1: praktische Obergrenze 2·D [mm] (hier endet jede sinnvolle Vergrößerung)
+        V_max = max(2.0 * D_mm, 2.0 * V_min)
     _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
     f_para  = D_mm * 50.0   # praktisch aberrationsfreier Paraboloid
     _, _, Wb_p, _, _ = _wellenfronten(D_mm, f_para, lam_nm)
@@ -467,9 +469,11 @@ def v_krit_aus_qvis(D_mm: float, f_mm: float, lam_nm: float,
 
 def v_krit_aus_qvis_von_Wb(D_mm: float, Wb: float, lam_nm: float,
                             rel_schwelle: float = 0.90,
-                            V_min: float = 30.0, V_max: float = 600.0,
+                            V_min: float = 30.0, V_max: float = None,
                             n_pts: int = 60) -> float:
     """Wie v_krit_aus_qvis(), aber direkt aus Wb — für Schieber-Wert."""
+    if V_max is None:          # v7.3.1: praktische Obergrenze 2·D [mm] (hier endet jede sinnvolle Vergrößerung)
+        V_max = max(2.0 * D_mm, 2.0 * V_min)
     fc     = D_mm / (lam_nm * 1e-6 * 206265)
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
     nu     = np.linspace(0.0, 1.0, n_pts)
@@ -1274,10 +1278,10 @@ def mtf_eye(f_cpd: float) -> float:
 
 
 def csf(f_cpd: float) -> float:
-    """Contrast Sensitivity Function nach Barten (1999).
+    """Contrast Sensitivity Function nach Mannos & Sakrison (1974).
 
     csf(f) = 2.6·(0.0192 + 0.114·f)·exp(−(0.114·f)^1.1)
-    Gültig für photopisches Sehen bei mittlerer Leuchtdichte.  [Barten 1999]
+    Gültig für photopisches Sehen bei mittlerer Leuchtdichte.  [Mannos/Sakrison 1974]
     """
     f = max(f_cpd, 1e-6)
     return 2.6 * (0.0192 + 0.114 * f) * np.exp(-((0.114 * f) ** 1.1))
@@ -1288,7 +1292,7 @@ _L_REF = 100.0   # cd/m²  — mittlere photopische Leuchtdichte
 
 
 def csf_lum(f_cpd: float, L: float) -> float:
-    """Luminanzabhängige CSF nach Barten (1999) — vereinfachte Skalierung.
+    """Luminanzabhängige CSF (angelehnt an Barten 1999) — vereinfachte Skalierung.
 
     Bei niedriger Leuchtdichte L [cd/m²]:
       - Amplitude sinkt ∝ √(L/L_ref)
@@ -1974,7 +1978,7 @@ def planet_objekt(n=384, px_arcsec=0.1, seed=7):
 
 
 def augen_filter(f_cyc_arcsec, V: float):
-    """Augen-Tiefpass bei Vergrößerung V (v7.0.0-beta): Barten-CSF normiert auf ihr
+    """Augen-Tiefpass bei Vergrößerung V (v7.0.0-beta): CSF (Mannos/Sakrison) normiert auf ihr
     Maximum, nur oberhalb des Maximums wirksam (darunter 1, damit Scheibe/Bänder
     nicht als Kantenbild erscheinen).  f im Himmel [cyc/″] → Auge [cyc/°] = f·3600/V."""
     fe = np.maximum(np.asarray(f_cyc_arcsec, float) * 3600.0 / max(V, 1e-9), 1e-6)
@@ -2643,7 +2647,11 @@ class _Diagramme:
             ax.plot(nu_k2, mp_k2 * msr_fc, color="#1a7abf", lw=1.8, ls="-.",
                     label=f"Foucault gemessen  (S={kz_fc['S_exakt']:.3f})")
 
-        for label, d_as, col, *_ in all_details:
+        _obj = getattr(self, '_mtf_objekte', None)
+        _obj = _obj.get() if _obj is not None else "alle"
+        for label, d_as, col, kat in all_details:
+            if _obj != "alle" and kat not in (_obj, "beide"):
+                continue                      # v7.3.1: Objektauswahl (Planeten / Deep-Sky / Alle) wirkt jetzt
             nu_det = (1.0 / (2.0 * d_as)) / fc
             if nu_det >= 1.0:
                 continue
@@ -3170,6 +3178,15 @@ class _Diagramme:
         ax2.legend(fontsize=7, loc="upper right", ncol=2)
         self._ax_fmt(ax2)
 
+        # v7.3.1: Texte außerhalb des sichtbaren Bereichs (z.B. Q-Linien-Beschriftung, "Abblenden lohnt sich")
+        # nicht zeichnen – sie standen sonst frei neben/unter dem Diagramm.
+        for _a in (ax, ax2):
+            _y0, _y1 = sorted(_a.get_ylim()); _x0, _x1 = sorted(_a.get_xlim())
+            for _t in list(_a.texts):
+                if type(_t).__name__ == "Text" and _t.get_transform() == _a.transData:
+                    _x, _y = _t.get_position()
+                    if not (_x0 <= _x <= _x1 and _y0 <= _y <= _y1):
+                        _t.remove()
         fig.tight_layout(); canvas.draw_idle()
 
     def _diagramm_foucault(self, D, f, lam, r_zon, df_arr, kz, use_direct=False,
@@ -3481,8 +3498,7 @@ class _Diagramme:
 
         ax.set_xlabel("Öffnung D [mm]", fontsize=9)
         ax.set_ylabel("V_max praktisch  [×]  (perfekte Optik, S=1)", fontsize=9)
-        ax.set_title("Sinnvolle Maximalvergrößerung vs. Öffnung — "
-                     "Beugung + Seeing, perfekte Optik",
+        ax.set_title("V_max vs. Öffnung — Beugung + Seeing (S=1)",
                      fontsize=9, fontweight="bold")
         ax.legend(fontsize=8, loc="upper left")
         ax.grid(True, alpha=0.25)
@@ -3565,7 +3581,7 @@ def plot_wahrnehmung(D, f, lam, S_slide, S_real, V_cur=None, d_fang=0.0, d_pup=0
 
 def plot_blende(D, f, lam, D_blend):
     D_bl = min(D_blend, D - 10)
-    fig, (ax, ax2) = _neue_figur((9, 8), nrows=2)
+    fig, (ax, ax2) = _neue_figur((13, 5.2), ncols=2)   # v7.3.1: nebeneinander
     d = _Diagramme(); d._tab_blende = (fig, ax, ax2, _FakeCanvas())
     d._diagramm_blende(D, f, lam, D_bl)
     return fig
@@ -3716,7 +3732,10 @@ def main():
     def _qc(q):
         return "#2e7d32" if q >= 0.90 else "#e65100" if q >= 0.70 else "#c62828"
 
+    _Vcap = max(2.0 * D, 60.0)               # v7.3.1: Obergrenze 2·D
     def _vk_ex_text(v):
+        if v >= _Vcap - 0.5:
+            return f"> {_Vcap:.0f}x"
         return f"{v:.0f}x" if v > 30.5 else "< 30x"
 
     delta_s    = S_real - S_mar
@@ -4090,10 +4109,7 @@ def main():
             st.error(f"Foucault-Berechnungsfehler: {_ex}")
 
     if _nav == "grenzen":
-        # ── Sinnvolle Maximalvergrößerung (Helligkeit / Seeing / Spiegel) ───
-        st.markdown(
-            "Gegenprobe zur „2×D“-Faustregel: Netzhaut-Flächenhelligkeit L(V) sowie die "
-            "Grenzen durch Helligkeit, Seeing und Spiegelfehler (aktueller Strehl-Schieber).")
+        # v7.3.1: beide Diagramme nebeneinander (das untere lag sonst außerhalb des Bildschirms)
         _namen = [n for n, _ in OBJEKT_HELLIGKEITEN]
         _preset = dict(OBJEKT_HELLIGKEITEN)
 
@@ -4102,40 +4118,41 @@ def main():
 
         if "vmax_L0" not in st.session_state:
             st.session_state["vmax_L0"] = float(_preset[OBJEKT_HELLIGKEITEN[1][0]])
-        vc1, vc2, vc3, vc4, vc5 = st.columns([2, 2, 1.5, 1.5, 2])
-        objekt_v = vc1.selectbox("Objekt:", _namen, index=1, key="vmax_objekt",
-                                 on_change=_objekt_gewaehlt,
-                                 help="Füllt L₀ mit dem Referenzwert des Objekts; "
-                                      "danach frei überschreibbar.")
-        L0_v = vc2.number_input("L₀ [cd/m²]", min_value=0.0, step=10.0,
-                                format="%.1f", key="vmax_L0")
-        seeing_v = vc3.number_input("Seeing [\"]", min_value=0.0, value=1.5,
-                                    step=0.1, format="%.1f", key="vmax_seeing")
-        D_auge_v = vc4.number_input("Augenpupille [mm]", min_value=0.5, value=6.0,
-                                    step=0.5, format="%.1f", key="vmax_D_auge")
-        L_schw_v = vc5.number_input("Schwelle [cd/m²]", min_value=0.0, value=1.0,
-                                    step=0.1, format="%.2f", key="vmax_L_schwelle")
-        _show_cached("fig_vmax",
-                     lambda: plot_vmax(D, f, S_slide, objekt_v, L0_v, seeing_v,
-                                       D_auge_v, L_schw_v),
-                     _h + (objekt_v, L0_v, seeing_v, D_auge_v, L_schw_v))
-
-    if _nav == "grenzen":
-        st.markdown("---")
-        # ── Vmax vs. Öffnung für verschiedene Seeing-Werte (perfekte Optik) ──
-        st.markdown(
-            "Fundamentale Grenze auch bei perfekter Politur (S=1): Beugung + Seeing, "
-            "im Vergleich zur „2×D“-Regel.")
-        wc1, wc2, wc3 = st.columns([3, 1, 1])
-        seeings_txt = wc1.text_input("Seeing-Werte [\"], kommagetrennt",
-                                     value="0.8, 1.5, 2.5, 4.0", key="vmaxD_seeings")
-        Dmin_v = wc2.number_input("D min [mm]", min_value=10.0, value=50.0,
-                                  step=10.0, key="vmaxD_Dmin")
-        Dmax_v = wc3.number_input("D max [mm]", min_value=20.0, value=500.0,
-                                  step=10.0, key="vmaxD_Dmax")
-        _show_cached("fig_vmax_D",
-                     lambda: plot_vmax_D(seeings_txt, Dmin_v, Dmax_v),
-                     (seeings_txt, Dmin_v, Dmax_v))
+        gcol1, gcol2 = st.columns(2)
+        with gcol1:
+            st.caption("Gegenprobe zur „2×D“-Faustregel: Netzhaut-Flächenhelligkeit L(V) sowie die "
+                       "Grenzen durch Helligkeit, Seeing und Spiegelfehler (aktueller Strehl-Schieber).")
+            vc1, vc2 = st.columns([2, 1.3])
+            objekt_v = vc1.selectbox("Objekt:", _namen, index=1, key="vmax_objekt",
+                                     on_change=_objekt_gewaehlt,
+                                     help="Füllt L₀ mit dem Referenzwert des Objekts; "
+                                          "danach frei überschreibbar.")
+            L0_v = vc2.number_input("L₀ [cd/m²]", min_value=0.0, step=10.0,
+                                    format="%.1f", key="vmax_L0")
+            vc3, vc4, vc5 = st.columns(3)
+            seeing_v = vc3.number_input("Seeing [\"]", min_value=0.0, value=1.5,
+                                        step=0.1, format="%.1f", key="vmax_seeing")
+            D_auge_v = vc4.number_input("Augenpupille [mm]", min_value=0.5, value=6.0,
+                                        step=0.5, format="%.1f", key="vmax_D_auge")
+            L_schw_v = vc5.number_input("Schwelle [cd/m²]", min_value=0.0, value=1.0,
+                                        step=0.1, format="%.2f", key="vmax_L_schwelle")
+            _show_cached("fig_vmax",
+                         lambda: plot_vmax(D, f, S_slide, objekt_v, L0_v, seeing_v,
+                                           D_auge_v, L_schw_v),
+                         _h + (objekt_v, L0_v, seeing_v, D_auge_v, L_schw_v))
+        with gcol2:
+            st.caption("Fundamentale Grenze auch bei perfekter Politur (S=1): Beugung + Seeing, "
+                       "im Vergleich zur „2×D“-Regel.")
+            seeings_txt = st.text_input("Seeing-Werte [\"], kommagetrennt",
+                                        value="0.8, 1.5, 2.5, 4.0", key="vmaxD_seeings")
+            wc2, wc3 = st.columns(2)
+            Dmin_v = wc2.number_input("D min [mm]", min_value=10.0, value=50.0,
+                                      step=10.0, key="vmaxD_Dmin")
+            Dmax_v = wc3.number_input("D max [mm]", min_value=20.0, value=500.0,
+                                      step=10.0, key="vmaxD_Dmax")
+            _show_cached("fig_vmax_D",
+                         lambda: plot_vmax_D(seeings_txt, Dmin_v, Dmax_v),
+                         (seeings_txt, Dmin_v, Dmax_v))
 
     if _nav == "bauen":
         st.markdown(
@@ -4209,7 +4226,7 @@ def main():
         sph1 = ck[2].checkbox("Sp. 1 sphärisch", key="vg_sph1", help="Spiegel 1 sphärisch (aus D, f/D)")
         sph2 = ck[3].checkbox("Sp. 2 sphärisch", key="vg_sph2", help="Spiegel 2 sphärisch (aus D, f/D)")
         v_auge = ck[4].checkbox("Augen-Filter", value=True, key="vg_auge",
-                                help="Bild mit Augen-Filter bei V (Barten-Tiefpass)")
+                                help="Bild mit Augen-Filter bei V (CSF-Tiefpass)")
         v_mass = ck[5].checkbox("Augenmaßstab", value=True, key="vg_mass",
                                 help="Planet wächst mit V")
         _notiz = []
@@ -4305,7 +4322,7 @@ def main():
     st.markdown("---")
     st.caption(
         f"Newton-Spiegel v{VERSION} · "
-        "Formeln: Sacek (telescope-optics.net) · Suiter (Star Testing) · Barten 1999 (CSF) · "
+        "Formeln: Sacek (telescope-optics.net) · Suiter (Star Testing) · Mannos/Sakrison 1974 (CSF) · "
         "Strehl: exaktes Pupillenintegral"
     )
 

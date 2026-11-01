@@ -262,7 +262,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <h2>5. Wahrnehmungsmodell</h2>
 
 <h3>5.1 Contrast Sensitivity Function (CSF)</h3>
-<p>Basismodell nach Barten (1999), f in Perioden pro Grad am Auge:</p>
+<p>Basismodell nach Mannos und Sakrison (1974), f in Perioden pro Grad am Auge:</p>
 <div class="math-block"><span class="math">CSF<sub>0</sub>(f) = 2.6 &middot; (0.0192 + 0.114 f) &middot; exp(&minus;(0.114 f)<sup>1.1</sup>)</span></div>
 <p>Eine Himmelsfrequenz <span class="math">&nu;&middot;f<sub>c</sub></span> [Perioden/Bogensekunde] erscheint bei der Vergr&ouml;&szlig;erung V am Auge als <span class="math">f = &nu; &middot; f<sub>c</sub> &middot; 3600 / V</span>. Gro&szlig;e Vergr&ouml;&szlig;erung verschiebt die Details also zu niedrigen Augenfrequenzen, wo das Auge empfindlicher ist.</p>
 <p>F&uuml;r den Blenden-Tab wird die CSF leuchtdichteabh&auml;ngig skaliert:</p>
@@ -537,7 +537,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
   <li>Alle Aussagen gelten f&uuml;r monochromatisches Licht bei 550&nbsp;nm und reine sph&auml;rische Aberration (bei der Kugel) bzw. die gemessene rotationssymmetrische Wellenfront (Foucault). Astigmatismus, Zonenfehler au&szlig;erhalb der Rotationssymmetrie und Streulicht sind nicht modelliert.</li>
   <li>V<sub>krit</sub>-N&auml;herung D/(13&middot;W<sub>b</sub>) und die gegl&auml;ttete D&middot;S<sup>0.25</sup>-Kurve sind Fits bzw. N&auml;herungen; die exakten Werte stehen daneben.</li>
   <li><strong>Empirische Kalibrierung:</strong> Die Augenaufl&ouml;sung 150&Prime; in V<sub>Seeing</sub>/V<sub>Beugung</sub> (Kapitel&nbsp;8.4) ist aus praktischen Erfahrungswerten gewonnen und keine unabh&auml;ngige physiologische Herleitung; die Grenzen sind Praxisorientierung, keine physikalischen Naturkonstanten. Die V<sub>krit</sub>-N&auml;herung wurde f&uuml;r D&nbsp;=&nbsp;80&ndash;400&nbsp;mm und f/4&ndash;f/10 angepasst (mittlerer Fehler etwa 12&nbsp;%, im schlechtesten Fall deutlich mehr).</li>
-  <li>Die CSF ist ein Mittelwertmodell (Barten); individuelle Sehsch&auml;rfe und Dunkeladaption weichen ab. Die leuchtdichteabh&auml;ngige Skalierung ist vereinfacht.</li>
+  <li>Die CSF ist ein Mittelwertmodell (Mannos/Sakrison); individuelle Sehsch&auml;rfe und Dunkeladaption weichen ab. Die leuchtdichteabh&auml;ngige Skalierung ist vereinfacht.</li>
   <li>Q<sub>vis</sub> bewertet ausgedehnte Details. F&uuml;r Sterne (Punktquellen) h&auml;ngt die Wahrnehmung von Kern und Halo ab, was der Index nicht erfasst.</li>
   <li>Das Seeing ist als Langzeit-MTF angesetzt (pessimistisch); Kurzzeit-Momente mit besserem Seeing werden nicht abgebildet.</li>
   <li>Der Fangspiegel wird in der Kette Aberration &times; Ringblende mit unver&auml;nderter Aberrations-MTF behandelt (Kapitel&nbsp;5.4); im Vergleich-Tab geschieht das exakt &uuml;ber die Ringpupille.</li>
@@ -561,7 +561,8 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <ul>
   <li>Sacek, V.: <em>telescope-optics.net</em> &mdash; MTF-Herleitung, Strehl, sph&auml;rische Aberration, Foucault-Test (Residuen-Methode)</li>
   <li>Suiter, H.R.: <em>Star Testing Astronomical Telescopes</em>, Willmann-Bell 1994 &mdash; kritische Vergr&ouml;&szlig;erung, visuelle Beurteilung</li>
-  <li>Barten, P.G.J.: <em>Contrast Sensitivity of the Human Eye and its Effects on Image Quality</em>, SPIE Press 1999 &mdash; CSF-Modell</li>
+  <li>Mannos, J.L.; Sakrison, D.J.: <em>The effects of a visual fidelity criterion on the encoding of images</em>, IEEE Trans. Inf. Theory 20(4), 525&ndash;536 (1974) &mdash; CSF-Formel</li>
+  <li>Barten, P.G.J.: <em>Contrast Sensitivity of the Human Eye and its Effects on Image Quality</em>, SPIE Press 1999 &mdash; Hintergrund zur CSF, leuchtdichteabh&auml;ngige Skalierung (vereinfacht)</li>
   <li>Born, M. &amp; Wolf, E.: <em>Principles of Optics</em>, Cambridge &mdash; Pupillenintegral, Strehl</li>
   <li>Barakat, R. (1962); O&rsquo;Neill, E.L. (1956) &mdash; Autokorrelation und MTF von Ringaperturen</li>
   <li>Fried, D.L. (1966) &mdash; Langzeit-Seeing-MTF und Fried-Parameter r<sub>0</sub></li>
