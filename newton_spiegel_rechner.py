@@ -2,7 +2,7 @@
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.1 (2026-11-01)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
-  v7.3.1 (2026-11-01)  Keine Kernwerte geändert. Foucault: Option "Randzone teilen" (äußerste Zone in zwei flächengleiche Hälften, n+1 Messzonen). Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
+  v7.3.1 (2026-11-01)  Keine Kernwerte geändert. MTF-Tab: Kurve "Foucault gemessen" wird jetzt direkt aus der gemessenen Wellenfront gerechnet (vorher aus Wb_fit mit reinem Kugel-Modell – bei höheren Polynomgraden passte die Kurve nicht zum angezeigten Strehl; Strehl-Werte selbst unverändert). Foucault: Option "Randzone teilen" (äußerste Zone in zwei flächengleiche Hälften, n+1 Messzonen). Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
                         Bauen (Foucault-Test, Fangspiegel, Blende). V_krit (MTF×CSF) und "Q≥0,90 bis" werden auf 2·D begrenzt und als "> 2·D×" angezeigt (vorher 600×). Quellenangaben geprüft/korrigiert (Sacek-Abschnittsnummern entfernt bzw. 4.1.2, Barten-ISBN, Suiter-Auflage, Barakat 1965). Grenzen und Blende: beide Diagramme nebeneinander (Desktop+Web); Blende: Texte außerhalb des Diagramms entfernt; CSF korrekt als Mannos/Sakrison 1974 zitiert. MTF-Tab: Objektauswahl (Planeten/Deep-Sky/Alle) blendet die Detail-Markierungen jetzt wirklich ein/aus; Umschalter "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
                         Funktionen und Reste alter Versionen entfernt (berechne_von_S, _mtf_arrays_klassisch, kurven_N/_vergr/_blende u.a.).
   v7.3.0 (2026-10-31)  KERNWERTE GEÄNDERT (externe Prüfung): (1) Q_perc (Kennwerte "Q bei 30x/80x/160x/150x", Kernwert "Q_perc bei Slider-Vergr.") enthielt
@@ -4492,9 +4492,11 @@ class App(tk.Tk):
             ax.plot(nu_k2, mp_k2 * msr_sl, color=ACC, lw=2.0, ls="--",
                     label=f"Verbessert (Schieber)  S={S_slide:.3f}")
         if kz_fc is not None and D_fc == D and kz_fc['S_exakt'] > strehl + 0.01:
-            msr_fc = np.array([mtf_sph_rel(nu, kz_fc['Wb_fit'], paraxial=paraxial)
-                               for nu in nu_k2])
-            ax.plot(nu_k2, mp_k2 * msr_fc, color="#1a7abf", lw=1.8, ls="-.",
+            # v7.3.1: MTF direkt aus der GEMESSENEN Wellenfront (best focus, Polynom bzw. Hybrid) –
+            # nicht aus Wb_fit mit reinem ρ⁴−ρ²-Modell (das passte bei höheren Polynomgraden nicht
+            # zum angezeigten Strehl).
+            ms_fc = mtf_aus_wellenfront(kz_fc['rho_f'], kz_fc['W_c'], 0.0, nu=nu_k2)
+            ax.plot(nu_k2, ms_fc, color="#1a7abf", lw=1.8, ls="-.",
                     label=f"Foucault gemessen  (S={kz_fc['S_exakt']:.3f})")
 
         _obj = getattr(self, '_mtf_objekte', None)
