@@ -2,8 +2,8 @@
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.1 (2026-11-01)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
-  v7.3.1 (2026-11-01)  Keine Kernwerte geändert. Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
-                        Bauen (Foucault-Test, Fangspiegel, Blende). V_krit (MTF×CSF) und "Q≥0,90 bis" werden auf 2·D begrenzt und als "> 2·D×" angezeigt (vorher 600×). Grenzen und Blende: beide Diagramme nebeneinander (Desktop+Web); Blende: Texte außerhalb des Diagramms entfernt; CSF korrekt als Mannos/Sakrison 1974 zitiert. MTF-Tab: Objektauswahl (Planeten/Deep-Sky/Alle) blendet die Detail-Markierungen jetzt wirklich ein/aus; Umschalter "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
+  v7.3.1 (2026-11-01)  Keine Kernwerte geändert. Foucault: Option "Randzone teilen" (äußerste Zone in zwei flächengleiche Hälften, n+1 Messzonen). Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
+                        Bauen (Foucault-Test, Fangspiegel, Blende). V_krit (MTF×CSF) und "Q≥0,90 bis" werden auf 2·D begrenzt und als "> 2·D×" angezeigt (vorher 600×). Quellenangaben geprüft/korrigiert (Sacek-Abschnittsnummern entfernt bzw. 4.1.2, Barten-ISBN, Suiter-Auflage, Barakat 1965). Grenzen und Blende: beide Diagramme nebeneinander (Desktop+Web); Blende: Texte außerhalb des Diagramms entfernt; CSF korrekt als Mannos/Sakrison 1974 zitiert. MTF-Tab: Objektauswahl (Planeten/Deep-Sky/Alle) blendet die Detail-Markierungen jetzt wirklich ein/aus; Umschalter "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
                         Funktionen und Reste alter Versionen entfernt (berechne_von_S, _mtf_arrays_klassisch, kurven_N/_vergr/_blende u.a.).
   v7.3.0 (2026-10-31)  KERNWERTE GEÄNDERT (externe Prüfung): (1) Q_perc (Kennwerte "Q bei 30x/80x/160x/150x", Kernwert "Q_perc bei Slider-Vergr.") enthielt
                         den Strehl doppelt (msa = msr*mp*S, die MTF ist aber schon auf MTF(0)=1 normiert) -> Werte waren zu niedrig; z. B. 200/1000
@@ -63,18 +63,18 @@ Berücksichtigt:
 
 Formeln:
   Kontrast (Strehl):
-    W_PtV (paraxial)  = D⁴ / (512·f³·λ)          [Sacek §4.7.1, korrigiert 07/2026:
+    W_PtV (paraxial)  = D⁴ / (512·f³·λ)          [Sacek §4.1.2, korrigiert 07/2026:
                                                       Reflexion verdoppelt Oberflaechen-
                                                       in Wellenfrontfehler]
-    W_PtV (best focus)= W_PtV_paraxial / 4         [Sacek §4.7.2]
-    W_RMS             = W_PtV_bestfocus / (1.5·√5) [Sacek §4.7.2]
-    Strehl (Näherung) = exp(-(2π·W_RMS)²)          [Maréchal 1947, zit. n. Sacek §4.8]
-    Strehl (exakt)    = |⟨exp(i·2π·W(ρ))⟩|²        [Standardformel, vgl. Sacek §4.8]
+    W_PtV (best focus)= W_PtV_paraxial / 4         [Sacek §4.1.2]
+    W_RMS             = W_PtV_bestfocus / (1.5·√5) [Sacek]
+    Strehl (Näherung) = exp(-(2π·W_RMS)²)          [Maréchal 1947, zit. n. Sacek]
+    Strehl (exakt)    = |⟨exp(i·2π·W(ρ))⟩|²        [Standardformel, vgl. Sacek]
     D_eff (Kontrast)  = D · S^0.25                 [eigene Näherung]
 
   Schärfe:
     r_Airy [arcsec]   = 1.22·λ/D·206265
-    d_blur [mm]       = D³ / (64·f²)               [Sacek §4.7.3]
+    d_blur [mm]       = D³ / (64·f²)               [Sacek]
     Dawes [arcsec]    = 116 / D[mm]
 
   Kritische Vergrößerung:
@@ -87,13 +87,13 @@ Formeln:
                                                        Q̃(V), nicht V_krit selbst]
 
   MTF:
-    Paraboloid:  analytisch (Kreisapertur)          [Sacek §4.1]
-    Sphäre rel.: OTF-Faltungsintegral, numerisch    [Sacek §4.7]
+    Paraboloid:  analytisch (Kreisapertur)          [Sacek]
+    Sphäre rel.: OTF-Faltungsintegral, numerisch    [Sacek]
       Wellenfrontform W(ρ) = Wp·(ρ⁴−ρ²)  [best focus]
                    oder Wp·ρ⁴             [paraxialer Fokus]
       Amplitude: Wp = 4·Wb
         (Wb = PtV am besten Fokus = Wp_paraxial/4
-         → W(ρ) = Wp·(ρ⁴−ρ²) = 4·Wb·(ρ⁴−ρ²); konsistent mit Sacek §4.7)
+         → W(ρ) = Wp·(ρ⁴−ρ²) = 4·Wb·(ρ⁴−ρ²); konsistent mit Sacek)
 
   Wahrnehmung:
     CSF nach Mannos & Sakrison (1974):
@@ -106,11 +106,11 @@ Quellen:
   [Sacek]    V. Sacek, "Notes on Amateur Telescope Optics",
              https://www.telescope-optics.net  (laufend aktualisiert)
   [Suiter]   H.R. Suiter, "Star Testing Astronomical Telescopes",
-             2nd ed., Willmann-Bell (2009)
+             1. Aufl. Willmann-Bell (1994); 2. Aufl. (2013)
   [Mannos]   J.L. Mannos, D.J. Sakrison, "The effects of a visual fidelity criterion on the encoding of
              images", IEEE Trans. Inf. Theory 20(4), 525-536 (1974)  — CSF-Formel
   [Barten]   P.G.J. Barten, "Contrast Sensitivity of the Human Eye and Its Effects
-             on Image Quality", SPIE Press (1999), ISBN 978-0-8194-3296-4
+             on Image Quality", SPIE Optical Engineering Press (1999), ISBN 0-8194-3496-5
 
 Abhängigkeiten: pip install matplotlib numpy
 """
@@ -163,15 +163,15 @@ def _golden_section(f, a: float, b: float, tol: float = 1e-8) -> float:
 def _wellenfronten(D_mm: float, f_mm: float, lam_nm: float):
     """Gemeinsame Basis: Wp, Wb, Wrms, Strehl (Maréchal).
 
-    Wp  = D⁴/(512·f³·λ)   — PtV-Wellenfrontfehler am paraxialen Fokus [Sacek §4.7.1]
+    Wp  = D⁴/(512·f³·λ)   — PtV-Wellenfrontfehler am paraxialen Fokus [Sacek §4.1.2]
                              (KORRIGIERT 07/2026: D^4/(1024 f^3) ist die reine
                              Oberflaechen-Sagittadifferenz Kugel-Parabel; die
                              Wellenfront ist bei Reflexion doppelt so gross,
                              s. Sacek's aberration-coefficient-Herleitung /
                              Zahlenbeispiel in lower_order_spherical.htm)
-    Wb  = Wp/4             — PtV am besten Fokus [Sacek §4.7.2]
-    Wrms= Wb/(1.5·√5)      — RMS für reine sphärische Aberration [Sacek §4.7.2]
-    S   = exp(-(2π·Wrms)²) — Maréchal-Näherung [Maréchal 1947, zit. n. Sacek §4.8], gültig für S > ~0.6
+    Wb  = Wp/4             — PtV am besten Fokus [Sacek §4.1.2]
+    Wrms= Wb/(1.5·√5)      — RMS für reine sphärische Aberration [Sacek]
+    S   = exp(-(2π·Wrms)²) — Maréchal-Näherung [Maréchal 1947, zit. n. Sacek], gültig für S > ~0.6
     """
     lam_mm = lam_nm * 1e-6
     Wp   = D_mm**4 / (512.0 * f_mm**3 * lam_mm)   # 07/2026: 1024->512, s. Docstring oben
@@ -187,7 +187,7 @@ def _strehl_exakt(Wb: float, n: int = 2000) -> float:
 
     S = |⟨exp(i·2π·W(ρ))⟩|²   mit  W(ρ) = 4·Wb·(ρ⁴−ρ²)
     Wb = PtV-Wellenfrontfehler am besten Fokus = Wp/4
-    → W(ρ) = Wp·(ρ⁴−ρ²)  [konsistent mit Sacek §4.7, §4.8]
+    → W(ρ) = Wp·(ρ⁴−ρ²)  [konsistent mit Sacek]
     Mittelwertsubtraktion: defokusfreie Auswertung am besten Fokus.
     Maréchal-Näherung versagt für Wb > 0.08λ (ca. f/N < 8).
     """
@@ -397,7 +397,7 @@ def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
     S_exakt = _strehl_exakt(Wb)          # exaktes Pupillenintegral
     r = _kennzahlen_von_S(D_mm, S_exakt, Wb)
     r["strehl_marechal"] = S_mar         # Maréchal-Wert für Vergleich/Doku
-    # Geometrischer Unschärfefleck [Sacek §4.7.3]
+    # Geometrischer Unschärfefleck [Sacek]
     d_blur_mm = D_mm**3 / (64.0 * f_mm**2)
     d_blur_as = d_blur_mm / f_mm * 206265.0
     theta_geo = math.sqrt(r["theta_ideal"]**2 + d_blur_as**2)
@@ -440,7 +440,7 @@ def v_krit_blur_direkt(D_mm: float, f_mm: float,
                         eye_res_as: float = 60.0) -> float:
     """V ab der geometrischer Blur am Auge >= Augenauflösung — direkte Berechnung.
 
-    d_blur [mm] = D³/(64·f²)  — Durchmesser Unschärfefleck am best focus [Sacek §4.7.3]
+    d_blur [mm] = D³/(64·f²)  — Durchmesser Unschärfefleck am best focus [Sacek]
     α_blur ["]  = d_blur / f · 206265  — Winkelgröße im Teleskop-Bildfeld
     Am Auge erscheint der Blur vergrößert: α_auge = V · α_blur
     Blur sichtbar wenn α_auge >= eye_res_as:
@@ -752,7 +752,7 @@ def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
 def mtf_para(f: float) -> float:
     """Analytische MTF eines beugungsbegrenzten Kreisteleskops (Paraboloid).
 
-    M(f) = (2/π)·(arccos(f) − f·√(1−f²))   [Sacek §4.1, Standardformel Kreisapertur]
+    M(f) = (2/π)·(arccos(f) − f·√(1−f²))   [Sacek, Standardformel Kreisapertur]
     f = normierte Ortsfrequenz (0..1)
     """
     if f <= 0: return 1.0
@@ -778,7 +778,7 @@ def mtf_para_obstr(f: float, eps: float) -> float:
 
         MTF(f,ε) = [ M(f) + ε²·M(f/ε) − 2·A12(2f) / π ] / (1−ε²)
     mit M(x) = (2/π)·(arccos(x) − x·√(1−x²)), A12 = Kreis-Kreis-Überlappfläche.
-    Quellen: Barakat (1962), O'Neill (1956); vgl. Sacek §4.2.
+    Quellen: O'Neill, JOSA 46, 285 (1956); Barakat, JOSA 55, 538 (1965); vgl. Sacek.
     """
     if f <= 0: return 1.0
     if f >= 1: return 0.0
@@ -826,29 +826,40 @@ def d_fang_min(D_mm: float, f_mm: float) -> float:
 
 # ── Foucault-Auswertung ───────────────────────────────────────────────────────
 
-def foucault_zonen(D_mm: float, n: int = 4) -> np.ndarray:
+def _foucault_kanten_r2(D_mm: float, n: int, rand_geteilt: bool) -> np.ndarray:
+    """Zonenkanten in r² (gleichflächig). rand_geteilt: die äußerste Zone wird in zwei
+    flächengleiche Hälften geteilt (n+1 Messzonen, v7.3.1)."""
+    R2 = (D_mm / 2.0) ** 2
+    k = R2 * np.arange(0, n + 1) / n
+    if rand_geteilt:
+        k = np.concatenate([k[:-1], [R2 * (n - 0.5) / n], [R2]])
+    return k
+
+
+def foucault_zonen(D_mm: float, n: int = 4, rand_geteilt: bool = False) -> np.ndarray:
     """Messradien gleichflächiger Zonen (Zonenmitte, flächengewichtet).
 
-    r_i = R · √((2i−1) / (2n))   i = 1…n
-    Entspricht der FigureXP-Konvention.
+    r_i = R · √((2i−1) / (2n))   i = 1…n      (FigureXP-Konvention)
+    rand_geteilt=True: äußerste Zone in zwei flächengleiche Hälften geteilt
+    → n+1 Messradien (innere und äußere Randhälfte getrennt messen).
     """
-    R = D_mm / 2.0
-    return R * np.sqrt((2 * np.arange(1, n + 1) - 1) / (2 * n))
+    k = _foucault_kanten_r2(D_mm, n, rand_geteilt)
+    return np.sqrt((k[:-1] + k[1:]) / 2.0)
 
 
-def foucault_zonengrenzen(D_mm: float, n: int = 4) -> np.ndarray:
-    """Außengrenzen der n gleichflächigen Zonen (für Zonenmaske/Ringblende).
+def foucault_zonengrenzen(D_mm: float, n: int = 4, rand_geteilt: bool = False) -> np.ndarray:
+    """Außengrenzen der Zonen (für Zonenmaske/Ringblende).
 
     r_aussen,i = R · √(i/n)   i = 1…n   (r_aussen,n = R, Spiegelrand)
     Innengrenze von Zone i ist r_aussen,i-1 (bzw. 0 für Zone 1).
+    rand_geteilt=True: n+1 Zonen, die letzte Zone ist halbiert.
     """
-    R = D_mm / 2.0
-    return R * np.sqrt(np.arange(1, n + 1) / n)
+    return np.sqrt(_foucault_kanten_r2(D_mm, n, rand_geteilt)[1:])
 
 
 def _foucault_wellenfront_kern(r_zonen: np.ndarray, df_zonen: np.ndarray,
                                D_mm: float, R_c_mm: float,
-                               lam_nm: float) -> np.ndarray:
+                               lam_nm: float, r_grenz=None) -> np.ndarray:
     """Kernrechnung der Zonen-Wellenfront fuer gegebenen Kruemmungsradius R_c.
 
     Intern verwendet von foucault_wellenfront(); nicht direkt aufrufen
@@ -867,8 +878,11 @@ def _foucault_wellenfront_kern(r_zonen: np.ndarray, df_zonen: np.ndarray,
     # Naeherung sonst). Aussengrenze der letzten Zone = Spiegelrand D/2.
     r_bound = np.zeros(n + 1)
     r_bound[-1] = D_mm / 2.0
-    for i in range(1, n):
-        r_bound[i] = math.sqrt((r_zonen[i-1]**2 + r_zonen[i]**2) / 2.0)
+    if r_grenz is not None:                     # v7.3.1: echte Zonengrenzen (z.B. geteilte Randzone)
+        r_bound[1:] = np.asarray(r_grenz, float)
+    else:
+        for i in range(1, n):
+            r_bound[i] = math.sqrt((r_zonen[i-1]**2 + r_zonen[i]**2) / 2.0)
     Z = r_bound[1:] - r_bound[:-1]
 
     # TA = 2*(r/R_c)*residual: Faktor 2 konvertiert moving-source-Residuum
@@ -885,7 +899,8 @@ def _foucault_wellenfront_kern(r_zonen: np.ndarray, df_zonen: np.ndarray,
 def foucault_wellenfront(r_zonen: np.ndarray, df_zonen: np.ndarray,
                          D_mm: float, f_mm: float, lam_nm: float,
                          best_fit_roc: bool = True,
-                         roc_suchbereich_mm: float | None = None) -> np.ndarray:
+                         roc_suchbereich_mm: float | None = None,
+                         r_grenz=None) -> np.ndarray:
     """Rekonstruiert die Wellenfront aus Foucault-Zonenmessungen (Maskentest).
 
     NEU IMPLEMENTIERT 08/2026 (loest Bug in Vorversion vollstaendig ab,
@@ -943,18 +958,18 @@ def foucault_wellenfront(r_zonen: np.ndarray, df_zonen: np.ndarray,
     """
     R_c0 = 2.0 * f_mm
     if not best_fit_roc:
-        return _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c0, lam_nm)
+        return _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c0, lam_nm, r_grenz)
 
     if roc_suchbereich_mm is None:
         roc_suchbereich_mm = max(5.0, R_c0 * 0.01)   # +-1% Standard-Suchfenster
 
     def _rms_fuer_Rc(R_c_trial: float) -> float:
-        W = _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_trial, lam_nm)
+        W = _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_trial, lam_nm, r_grenz)
         return float(np.std(W))
 
     R_c_opt = _golden_section(_rms_fuer_Rc, R_c0 - roc_suchbereich_mm,
                               R_c0 + roc_suchbereich_mm)
-    return _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_opt, lam_nm)
+    return _foucault_wellenfront_kern(r_zonen, df_zonen, D_mm, R_c_opt, lam_nm, r_grenz)
 
 
 
@@ -1025,7 +1040,7 @@ FIT_RESIDUUM_SCHWELLE = 0.010  # lambda
 def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
                         D_mm: float, lam_nm: float | None = None,
                         use_direct: bool = False,
-                        grad_modus: str = "bic") -> dict:
+                        grad_modus: str = "bic", r_grenz=None) -> dict:
     """PtV, RMS, Strehl aus Zonenwellenfronten.
 
     Zwei Modi (use_direct):
@@ -1072,12 +1087,17 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
 
     R     = D_mm / 2.0
-    rho_z = r_zonen / R
     rho_f = np.linspace(0.0, 1.0, 2000)
 
     # Flaechengewichte der Zonen (Kreisringflaechen, normiert)
     # v7.3.0: echte Zonengrenzen (gleichflächig), nicht die Zonenmitten
-    r_outer    = foucault_zonengrenzen(D_mm, len(r_zonen))
+    r_outer    = (np.asarray(r_grenz, float) if r_grenz is not None
+                  else foucault_zonengrenzen(D_mm, len(r_zonen)))
+    # v7.3.1: W_zonen[i] ist das kumulative Integral der Steigung BIS ZUM AUSSENRAND der Zone i
+    # (foucault_wellenfront) – gehört also zum Radius r_outer[i], nicht zur Zonenmitte. Der Fit
+    # wird deshalb an den Zonengrenzen ausgewertet; dadurch hängt das Ergebnis kaum noch von der
+    # Zonenzahl ab (vorher z.B. Kugel 200/1000: n=4 -> 0,117, n=6 -> 0,127; jetzt ~0,128 für alle n).
+    rho_z = r_outer / R
     r_inner    = np.concatenate([[0.0], r_outer[:-1]])
     zone_areas = r_outer**2 - r_inner**2
     zone_areas = zone_areas / zone_areas.sum()
@@ -1164,6 +1184,7 @@ def foucault_kennzahlen(W_zonen: np.ndarray, r_zonen: np.ndarray,
     kennzahlen_zuverlaessig = use_direct or (fit_residuum_rms <= FIT_RESIDUUM_SCHWELLE)
 
     return dict(
+        rho_zonen=rho_z,
         W_zonen=W_zonen,
         W_c_zonen=W_c_zonen,
         poly_grad=poly_grad,
@@ -1194,7 +1215,7 @@ def mtf_sph_rel_1d(f: float, Wb: float, n: int = 80,
                    paraxial: bool = False) -> float:
     """Relative MTF eines sphärischen Spiegels (normiert: MTF(0)=1).
 
-    OTF-Faltungsintegral [Sacek §4.7]:
+    OTF-Faltungsintegral [Sacek]:
       MTF(f) = |∫ exp(i·2π·ΔW(x)) h(x) dx| / ∫ h(x) dx
     mit ΔW(x) = W(x+f/2) − W(x−f/2)
 
@@ -1202,7 +1223,7 @@ def mtf_sph_rel_1d(f: float, Wb: float, n: int = 80,
       best focus   (paraxial=False): W(ρ) = Wp·(ρ⁴−ρ²)
       parax. Fokus (paraxial=True):  W(ρ) = Wp·ρ⁴
 
-    Amplitude Wp = 8·Wb  [konsistent mit Sacek §4.7]:
+    Amplitude Wp = 4·Wb  [Wb = Wp/4; konsistent mit Sacek]:
       PtV von (ρ⁴−ρ²): Maximum bei ρ=0 → 0, Minimum bei ρ=1/√2 → −1/4
       → PtV_bestfocus = Wp/4 = Wb  →  Wp = 4·Wb
       Saceks Konvention: W(ρ) = a·8·(ρ⁴−ρ²) mit a = Wb/2
@@ -2812,6 +2833,12 @@ class App(tk.Tk):
                                    command=self._foucault_eingabe_neu
                                    ).pack(side="left", padx=4)
 
+                self._foucault_rand = tk.BooleanVar(value=False)
+                tk.Checkbutton(ctrl, text="Randzone teilen (innere + äußere Hälfte messen, n+1 Zonen)",
+                               variable=self._foucault_rand, bg=BG, activebackground=BG,
+                               selectcolor=BG2, font=("Helvetica", 9),
+                               command=self._foucault_eingabe_neu).pack(side="left", padx=(14, 4))
+
                 tk.Label(ctrl, text="    λ = 550 nm (fix)", bg=BG, fg="#555",
                          font=("Helvetica", 9)).pack(side="left", padx=8)
                 self._foucault_lam = tk.DoubleVar(value=550.0)
@@ -3818,6 +3845,7 @@ class App(tk.Tk):
     def _foucault_eingabe_neu(self):
         """Eingabefelder neu aufbauen wenn Zonenanzahl geändert."""
         n = self._foucault_n.get()
+        rand = bool(getattr(self, "_foucault_rand", None) and self._foucault_rand.get())
         # Alte Widgets entfernen
         for w in self._foucault_eingabe_frm.winfo_children():
             w.destroy()
@@ -3826,13 +3854,15 @@ class App(tk.Tk):
         D = self.var_D.get()
         f = self.var_f.get()
         Rc    = 2.0 * f
-        r_zon   = foucault_zonen(D, n)
-        r_grenz = foucault_zonengrenzen(D, n)
+        r_zon   = foucault_zonen(D, n, rand)
+        r_grenz = foucault_zonengrenzen(D, n, rand)
         df_para_abs = r_zon**2 / (2.0 * Rc)        # absoluter Parabolsollwert (+r²/4f)
         df_para     = df_para_abs - df_para_abs[0]  # relativ zu Zone 1 (Referenz = 0)
 
         # Info-Text mit Zonenradien und Parabolsollwerten
-        info = ("Gleichflächige Zonen — Parabolspiegel-Sollwerte, relativ zu Zone 1 "
+        info = (("Randzone geteilt: Z%d = innere, Z%d = äußere Randhälfte (je halbe Fläche).   " % (n, n + 1)
+                 if rand else "") +
+                "Gleichflächige Zonen — Parabolspiegel-Sollwerte, relativ zu Zone 1 "
                 "(+ = Messerschneide weiter vom Spiegel weg, FigureXP-Konvention):  " +
                 "  |  ".join(
                     f"Z{i+1}: r={rv:.1f}mm  ΔF_soll={dp:.3f}mm"
@@ -3905,7 +3935,7 @@ class App(tk.Tk):
 
         # Knopf: alle Zonen auf Parabolsollwerte zurücksetzen
         btn_frame = tk.Frame(self._foucault_eingabe_frm, bg=BG)
-        btn_frame.grid(row=n+1, column=0, columnspan=6, pady=6, sticky="w")
+        btn_frame.grid(row=len(r_zon)+1, column=0, columnspan=6, pady=6, sticky="w")
         tk.Button(btn_frame, text="↺  Alle auf Parabel-Sollwerte",
                   font=("Helvetica", 9), bg=BG2,
                   command=lambda: [v.set(round(d,3))
@@ -3925,6 +3955,7 @@ class App(tk.Tk):
             f          = self.var_f.get()
             lam        = self._foucault_lam.get()
             n          = self._foucault_n.get()
+            rand       = bool(getattr(self, "_foucault_rand", None) and self._foucault_rand.get())
             # _foucault_use_direct wird erst beim Tab-Aufbau erstellt;
             # Default False (Polynom) wenn Tab noch nicht geoeffnet wurde.
             if not hasattr(self, "_foucault_use_direct"):
@@ -3937,7 +3968,9 @@ class App(tk.Tk):
                 self._foucault_grad_modus = tk.StringVar(value="bic")
             grad_modus = self._foucault_grad_modus.get()
 
-            r_zon  = foucault_zonen(D, n)
+            r_zon  = foucault_zonen(D, n, rand)
+            r_gr   = foucault_zonengrenzen(D, n, rand)
+            nz     = len(r_zon)                      # Zahl der Messzonen (n oder n+1)
             df_arr = np.array([v.get() for v in self._foucault_df_vars])
             df_para_abs = r_zon**2 / (2.0 * 2.0 * f)
             df_para     = df_para_abs - df_para_abs[0]
@@ -3948,16 +3981,16 @@ class App(tk.Tk):
                     col = "#2e7d32" if abs(dv) < 0.01 else                           "#e65100" if abs(dv) < 0.1  else "#c62828"
                     w.config(text=f"{dv:+.3f}", fg=col)
 
-            W_z = foucault_wellenfront(r_zon, df_arr, D, f, lam)
+            W_z = foucault_wellenfront(r_zon, df_arr, D, f, lam, r_grenz=r_gr)
 
             # Hybrid-Modus braucht mindestens 6 Zonen um zuverlaessig
             # zu sein: bei n=4 hat das BIC-Polynom zu viel Spielraum
             # und schluckt Zonenfehler (n Punkte, nur 2 Koeffizienten
             # -> bei n=4 fast Ueberfit, Residuen zu klein).
-            ud_effektiv = use_direct and (n >= 6)
+            ud_effektiv = use_direct and (nz >= 6)
             kz  = foucault_kennzahlen(W_z, r_zon, D, lam,
                                       use_direct=ud_effektiv,
-                                      grad_modus=grad_modus)
+                                      grad_modus=grad_modus, r_grenz=r_gr)
 
             rayleigh_ok  = kz["S_exakt"] >= 0.80
             zuverlaessig = kz.get("kennzahlen_zuverlaessig", True)
@@ -3966,7 +3999,7 @@ class App(tk.Tk):
                      "#e65100" if rayleigh_ok else "#c62828")
             modus = "Hybrid" if use_direct else "Polynom"
             warn  = ""
-            if use_direct and n < 6:
+            if use_direct and nz < 6:
                 warn = "  INFO: Hybrid-Modus benoetigt n>=6 Zonen -- Polynom-Modus verwendet"
             elif not zuverlaessig:
                 warn = (f"  ⚠ UNZUVERLAESSIG: Fit-Res={kz['fit_residuum_rms']:.3f}lambda"
@@ -4014,7 +4047,7 @@ class App(tk.Tk):
 
         COR = "#E65100"; ACC = "#1565c0"; GRN = "#2e7d32"
         R     = D / 2.0
-        rho_z = r_zon / R
+        rho_z = kz.get("rho_zonen", r_zon / R)      # v7.3.1: Punkte an den Zonengrenzen (dort gilt der Wert)
 
         # ── Wellenfrontkurve (aus Polynom-Fit, am besten Fokus) ───────────
         rho_fine = kz["rho_f"]
@@ -4493,7 +4526,7 @@ class App(tk.Tk):
         fokus_color = "#2e7d32" if paraxial else ACC
         ax.text(0.98, 0.97,
                 f"{fokus_label}\n"
-                + ("Vergleichbar mit Sacek §4.7" if paraxial
+                + ("Vergleichbar mit Sacek (telescope-optics.net)" if paraxial
                    else "Vergleichbar mit Zemax / telescope-optics.net"),
                 transform=ax.transAxes, ha="right", va="top", fontsize=8,
                 color=fokus_color,

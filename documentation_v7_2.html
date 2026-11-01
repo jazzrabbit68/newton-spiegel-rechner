@@ -230,7 +230,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <p>Die absolute MTF der Sph&auml;re ist <span class="math">MTF<sub>sph,abs</sub> = MTF<sub>sph,rel</sub> &middot; MTF<sub>para</sub> &middot; S</span> (Anzeige im MTF-Tab).</p>
 
 <h3>4.2a R&uuml;ckblick: die 1D-N&auml;herung der fr&uuml;heren Versionen</h3>
-<p>Die ersten Versionen des Programms &mdash; und damit die Rechnung, aus der die Idee des visuellen Qualit&auml;tsindex Q<sub>vis</sub>(V) entstand &mdash; berechneten die relative MTF der Kugel mit einem <strong>eindimensionalen Linienintegral</strong> (Sacek, &sect;4.7). Entlang der Verschiebungsrichtung x wurde die Phasendifferenz der um &plusmn;&nu;/2 verschobenen Wellenfront ausgewertet und mit der Sehnenl&auml;nge h(x) der &Uuml;berlappfl&auml;che gewichtet:</p>
+<p>Die ersten Versionen des Programms &mdash; und damit die Rechnung, aus der die Idee des visuellen Qualit&auml;tsindex Q<sub>vis</sub>(V) entstand &mdash; berechneten die relative MTF der Kugel mit einem <strong>eindimensionalen Linienintegral</strong> (Sacek, telescope-optics.net). Entlang der Verschiebungsrichtung x wurde die Phasendifferenz der um &plusmn;&nu;/2 verschobenen Wellenfront ausgewertet und mit der Sehnenl&auml;nge h(x) der &Uuml;berlappfl&auml;che gewichtet:</p>
 <div class="math-block"><span class="math">MTF<sub>1D</sub>(&nu;) = | &sum; e<sup>i&middot;2&pi;&Delta;W(x)</sup> &middot; h(x) | / &sum; h(x), &emsp; &Delta;W(x) = W(x + &nu;/2) &minus; W(x &minus; &nu;/2), &emsp; h(x) = min(&radic;(1&minus;x<sub>1</sub><sup>2</sup>), &radic;(1&minus;x<sub>2</sub><sup>2</sup>))</span></div>
 <p>Das war die entscheidende Vereinfachung: Die Phase wird nur auf der Achse (y&nbsp;=&nbsp;0) ausgewertet, die Abh&auml;ngigkeit der Wellenfront von y innerhalb der Sehne (&rho;<sup>2</sup>&nbsp;=&nbsp;x<sup>2</sup>&nbsp;+&nbsp;y<sup>2</sup>) bleibt unber&uuml;cksichtigt. F&uuml;r gut polierte Spiegel (kleine Aberration, S &gt; 0,9) ist das eine sehr gute N&auml;herung, und sie hat es erm&ouml;glicht, die Frage &bdquo;Wie stark schadet ein Strehl von 0,9 oder 0,8 bei welcher Vergr&ouml;&szlig;erung?&ldquo; mit einer einfachen, schnellen Rechnung zu beantworten. Der Gedanke dahinter &mdash; die MTF mit der Kontrastempfindlichkeit des Auges (CSF) bei der jeweiligen Vergr&ouml;&szlig;erung zu gewichten &mdash; ist unver&auml;ndert der Kern des Modells; ge&auml;ndert hat sich nur die Berechnung der MTF selbst.</p>
 <p>Seit v7 wird die vollst&auml;ndige zweidimensionale Autokorrelation verwendet (Kapitel&nbsp;4.2). Sie wurde gepr&uuml;ft (die Summe der OTF reproduziert den exakten Strehl; bei niedrigen Frequenzen stimmt sie mit der geometrischen Strahlenoptik &uuml;berein) und liefert bei st&auml;rkerer Aberration deutlich andere, belastbarere Werte als die 1D-N&auml;herung, die die MTF bei niedrigen bis mittleren Frequenzen &uuml;bersch&auml;tzte. Die Funktion ist als <code>mtf_sph_rel_1d</code> im Code erhalten, wird aber nicht mehr aufgerufen.</p>
@@ -479,6 +479,8 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
   <p><strong>Diagramm:</strong> Wellenfrontkurve (pistonbereinigt, bester Fokus) mit Messzonen-Punkten (nm Glas und &lambda;-Abweichung) und &plusmn;&lambda;/8-Linien (rechte Achse in nm Glas); daneben die Kennzahlentafel.</p>
 </div>
 
+<p><strong>Randzone teilen (optional):</strong> Der Spiegelrand ist die schwierigste Zone. Mit der Option wird die &auml;u&szlig;erste Zone in zwei <em>fl&auml;chengleiche</em> H&auml;lften geteilt (innere und &auml;u&szlig;ere Randh&auml;lfte, Grenze bei R&middot;&radic;((n&minus;&frac12;)/n)); es gibt dann n+1 Messzonen mit je eigener Schnittweite. Die Zonenbreiten der Rekonstruktion folgen aus den tats&auml;chlichen Zonengrenzen. Ein abgesunkener Rand, der nur die &auml;u&szlig;ere H&auml;lfte betrifft, wird dadurch sichtbar und nicht &uuml;ber die ganze Randzone verschmiert. Der Hybrid-Modus ben&ouml;tigt weiterhin mindestens 6 Messzonen (z.&nbsp;B. n=6 + Randteilung = 7).</p>
+
 <h3>8.4 Grenzen: Sinnvolle Maximalvergr&ouml;&szlig;erung</h3>
 
 <div class="diagram-box">
@@ -560,13 +562,13 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <ul>
   <li>Sacek, V.: <em>telescope-optics.net</em> &mdash; MTF-Herleitung, Strehl, sph&auml;rische Aberration, Foucault-Test (Residuen-Methode)</li>
-  <li>Suiter, H.R.: <em>Star Testing Astronomical Telescopes</em>, Willmann-Bell 1994 &mdash; kritische Vergr&ouml;&szlig;erung, visuelle Beurteilung</li>
+  <li>Suiter, H.R.: <em>Star Testing Astronomical Telescopes</em>, Willmann-Bell, 1. Aufl. 1994, 2. Aufl. 2013 &mdash; kritische Vergr&ouml;&szlig;erung, visuelle Beurteilung</li>
   <li>Mannos, J.L.; Sakrison, D.J.: <em>The effects of a visual fidelity criterion on the encoding of images</em>, IEEE Trans. Inf. Theory 20(4), 525&ndash;536 (1974) &mdash; CSF-Formel</li>
-  <li>Barten, P.G.J.: <em>Contrast Sensitivity of the Human Eye and its Effects on Image Quality</em>, SPIE Press 1999 &mdash; Hintergrund zur CSF, leuchtdichteabh&auml;ngige Skalierung (vereinfacht)</li>
+  <li>Barten, P.G.J.: <em>Contrast Sensitivity of the Human Eye and its Effects on Image Quality</em>, SPIE Optical Engineering Press 1999 &mdash; Hintergrund zur CSF, leuchtdichteabh&auml;ngige Skalierung (vereinfacht)</li>
   <li>Born, M. &amp; Wolf, E.: <em>Principles of Optics</em>, Cambridge &mdash; Pupillenintegral, Strehl</li>
-  <li>Barakat, R. (1962); O&rsquo;Neill, E.L. (1956) &mdash; Autokorrelation und MTF von Ringaperturen</li>
-  <li>Fried, D.L. (1966) &mdash; Langzeit-Seeing-MTF und Fried-Parameter r<sub>0</sub></li>
-  <li>Rowe, D.: <em>FigureXP</em> &mdash; Foucault-Konventionen, gleichfl&auml;chige Zonen, Best-Fit-ROC, &delta;l-Vorzeichen</li>
+  <li>O&rsquo;Neill, E.L.: <em>Transfer function for an annular aperture</em>, J. Opt. Soc. Am. 46, 285 (1956); Barakat, R.: <em>Transfer function of an annular aperture in the presence of spherical aberration</em>, J. Opt. Soc. Am. 55, 538 (1965) &mdash; MTF von Ringaperturen (Fangspiegel)</li>
+  <li>Fried, D.L.: J. Opt. Soc. Am. 56, 1372 (1966) &mdash; Langzeit-Seeing-MTF und Fried-Parameter r<sub>0</sub></li>
+  <li>Rowe, D.; Lerch, J.: <em>FigureXP</em> (Stellafane) &mdash; Foucault-Konventionen, gleichfl&auml;chige Zonen, Best-Fit-ROC, &delta;l-Vorzeichen</li>
 </ul>
 
 <div class="footer-note">
