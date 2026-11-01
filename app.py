@@ -1,10 +1,13 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.3.0 (2026-10-31)
-Entspricht newton_spiegel_rechner.py v7.3.0
+Streamlit-Version v7.3.1 (2026-11-01)
+Entspricht newton_spiegel_rechner.py v7.3.1
 
 Änderungshistorie (jüngste zuerst):
+  v7.3.1 (2026-11-01)  Keine Kernwerte geändert. Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
+                        Bauen (Foucault-Test, Fangspiegel, Blende). MTF-Tab: Checkbox "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
+                        Funktionen und Reste alter Versionen entfernt.
   v7.3.0 (2026-10-31)  KERNWERTE GEÄNDERT (externe Prüfung): (1) Q_perc (Kennwerte "Q bei 30x/80x/160x/150x", Kernwert "Q_perc bei Slider-Vergr.") enthielt
                         den Strehl doppelt (msa = msr*mp*S, die MTF ist aber schon auf MTF(0)=1 normiert) -> Werte waren zu niedrig; z. B. 200/1000
                         bei 150x: 0,035 -> 0,153 (Q_vis exakt 0,138). (2) Foucault: Zonenfläche/Hybrid-Ringe nutzten die Zonenmitten statt der echten
@@ -71,7 +74,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.3.0 (2026-10-31)"
+VERSION = "7.3.1 (2026-11-01)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -368,9 +371,6 @@ def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
     return r
 
 
-def berechne_von_S(D_mm: float, S: float, lam_nm: float = 550.0) -> dict:
-    """Alle Kennzahlen direkt aus S — kein Umweg über Brennweite."""
-    return _kennzahlen_von_S(D_mm, S, _Wb_von_S(S))
 
 
 def berechne_vergr(D_mm: float, f_mm: float, lam_nm: float,
@@ -638,7 +638,6 @@ def v_max_diffraktion(D_mm: float, eye_res_as: float = 150.0) -> float:
     """
     if D_mm <= 0:
         return 0.0
-    dawes_as = 116.0 / D_mm
     return eye_res_as * D_mm / 116.0
 
 
@@ -692,7 +691,7 @@ def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
 
     strehls_marechal: Marechal-Naeherung  S = exp(-(2*pi*Wrms)^2)
     strehls_exakt:    exaktes Pupillenintegral (Born & Wolf)
-    Beide am besten Fokus (Faktor 16 in Wellenfrontformel).
+    Beide am besten Fokus (Wb = D^4/(2048 f^3 lam)).
     """
     ns = np.linspace(N_min, N_max, schritte)
     strehls_mar, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
@@ -1239,16 +1238,6 @@ def mtf_sph_rel(f: float, Wb: float, n: int = 80,
 
 
 
-def _mtf_arrays_klassisch(Wb: float, S: float, fc: float,
-                           n_pts: int, paraxial: bool = False):
-    """MTF-Arrays für klassisches Kurvendiagramm mit wählbarer Fokusebene."""
-    freqs_norm = np.linspace(0, 1, n_pts)
-    freqs_as   = freqs_norm * fc
-    mp  = np.array([mtf_para(f)                           for f in freqs_norm])
-    msr = np.array([mtf_sph_rel(f, Wb, paraxial=paraxial) for f in freqs_norm])
-    msa = msr * mp
-    return freqs_as, mp, msa, msr
-
 
 def mtf_kurven(D_mm: float, f_mm: float, lam_nm: float = 550.0,
                n_pts: int = 200) -> tuple:
@@ -1478,105 +1467,6 @@ def perceived_quality_exakt_kurven_von_Wb(D_mm: float, Wb: float, lam_nm: float,
     return num / np.maximum(den, 1e-12)
 
 
-def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
-    """Strehl und eff. Öffnungen als Funktion von f/D.
-
-    Rückgabe: ns, strehls_marechal, deff_ks, aufl_verluste, strehls_exakt
-
-    strehls_marechal: Marechal-Naeherung  S = exp(-(2*pi*Wrms)^2)
-    strehls_exakt:    exaktes Pupillenintegral (Born & Wolf)
-    Beide am besten Fokus (Faktor 16 in Wellenfrontformel).
-    """
-    ns = np.linspace(N_min, N_max, schritte)
-    strehls_mar, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
-    for n in ns:
-        r = berechne(D_mm, D_mm * n, lam_nm)
-        strehls_mar.append(r["strehl_marechal"])   # echte Marechal-Naeherung
-        deff_ks.append(r["Deff_k"])
-        aufl_verluste.append(r["aufl_verlust_pct"])
-        strehls_exakt.append(r["strehl"])           # exaktes Pupillenintegral
-    return (ns, np.array(strehls_mar), np.array(deff_ks),
-            np.array(aufl_verluste), np.array(strehls_exakt))
-
-
-def kurven_vergr(D_mm, f_mm, lam_nm, eye_res_as=60.0,
-                 V_min=20, V_max=600, schritte=400):
-    """Kurven für das Vergrößerungs-Diagramm."""
-    vs = np.linspace(V_min, V_max, schritte)
-    dpara, dsph, verluste = [], [], []
-    for V in vs:
-        rv = berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as)
-        dpara.append(rv["Deff_para"])
-        dsph.append(rv["Deff_sph"])
-        verluste.append(rv["verlust"])
-    return vs, np.array(dpara), np.array(dsph), np.array(verluste)
-
-
-def kurven_blende(D_mm: float, f_mm: float, lam_nm: float,
-                  D_blende: float, V_min: float = 30.0,
-                  V_max: float = 400.0, n_pts: int = 150) -> tuple:
-    """Q̃(V) für Original-Spiegel und abgeblendet auf D_blende — Näherungsformel.
-
-    Abblenden: gleiche Brennweite f, kleinere Öffnung D_blende
-      → Wp_blende = D_blende^4 / (512·f^3·λ)  kleiner  [07/2026: 1024->512]
-      → Strehl_blende höher
-      → Beugungsgrenze schlechter (fc ∝ D_blende)
-
-    Rückgabe: V_arr, Q_orig, Q_blend, S_orig, S_blend
-    """
-    V_arr = np.linspace(V_min, V_max, n_pts)
-
-    def Q_naeh(V_a, S, D):
-        Vk = v_wendepunkt_naeh(D, _Wb_von_S(S))
-        w  = 1.0 / (1.0 + (Vk / np.maximum(V_a, 1e-9))**2)
-        return S + (1.0 - S) * (1.0 - w)
-
-    # Original
-    _, _, Wb_o, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
-    S_orig = _strehl_exakt(Wb_o)
-
-    # Abgeblendet
-    _, _, Wb_b, _, _ = _wellenfronten(D_blende, f_mm, lam_nm)
-    S_blend = _strehl_exakt(Wb_b)
-
-    Q_orig  = Q_naeh(V_arr, S_orig,  D_mm)
-    Q_blend = Q_naeh(V_arr, S_blend, D_blende)
-
-    return V_arr, Q_orig, Q_blend, S_orig, S_blend
-
-
-
-def qvis_einzelrechner(D_mm: float, S: float, V: float,
-                       lam_nm: float = 550.0) -> dict:
-    """Q_vis für EINEN einzelnen Spiegel: Öffnung D, Strehl S, Vergrößerung V
-    (neu in v6.10.0).
-
-    Für beliebige Kombinationen (z.B. den eigenen 400er mit gemessenem
-    Strehl 0,96), unabhängig von den Hauptreglern. Brennweite wird nicht
-    gebraucht: Q_vis hängt nur von D, vom Wellenfrontfehler Wb und von V ab;
-    Wb folgt aus S per Inversion des exakten Pupillenintegrals (_Wb_von_S).
-
-    Rückgabe:
-        Wb        Best-Fokus-Wellenfrontfehler PtV [λ]
-        Q         Q_vis exakt (MTF×CSF-Integral, rel. zum Paraboloid = 1)
-        Q_naeh    Näherung Q̃ = S + (1−S)·(1−w(V))   (wie im Diagramm gestrichelt)
-        verlust   Wahrnehmungsverlust ggü. Paraboloid [%]  = (1−Q)·100
-        V_krit    10%-Kontrastverlust-Schwelle (Näherung D/(13·Wb)), 1e9 = ∞
-        V_q90     Vergrößerung, ab der Q_vis exakt unter 0,90 fällt
-                  (auf 30…600× begrenzt; 600.0 heißt „≥ 600×“, 30.0 „≤ 30×“)
-    """
-    S  = min(max(float(S), 1e-6), 1.0)
-    Wb = _Wb_von_S(S)
-    Q  = 1.0 if Wb <= 1e-9 else perceived_quality_exakt_von_Wb(D_mm, Wb, lam_nm, V)
-    S_ph = _strehl_exakt(Wb)
-    Vk_w = v_wendepunkt_naeh(D_mm, Wb)
-    w    = 1.0 / (1.0 + (Vk_w / max(V, 1e-9)) ** 2)
-    Q_n  = S_ph + (1.0 - S_ph) * (1.0 - w)
-    return dict(D=D_mm, S=S, V=V, lam=lam_nm, Wb=Wb, Q=Q, Q_naeh=Q_n,
-                verlust=(1.0 - Q) * 100.0,
-                V_krit=v_krit_naeh(D_mm, Wb),
-                V_q90=(600.0 if Wb <= 1e-9 else
-                       v_krit_aus_qvis_von_Wb(D_mm, Wb, lam_nm, 0.90)))
 
 
 def qvis_kurve_mit_fangspiegel(D_mm: float, S: float, d_fang_mm: float,
@@ -1743,7 +1633,7 @@ def fangspiegel_skizze(ax, D, f, r):
     Koordinaten: u entlang der OAZ-Achse (Feldblende/Fokus bei u = 0),
     v quer dazu; optische Achse bei u = A."""
     A, R, rf, rt = r["A"], r["R_hut"], r["B_ok"] / 2.0, r["oaz_r"]
-    L, dF, N = r["oaz_l"], r["d_pass"], f / D
+    L, dF = r["oaz_l"], r["d_pass"]
     ax.set_aspect("equal")
     ax.set_title("Draufsicht: Blende gegenüber dem OAZ (Blick entlang der Achse)",
                  fontsize=9)
@@ -1761,7 +1651,7 @@ def fangspiegel_skizze(ax, D, f, r):
     ax.text(A + R * 1.04, 0, f"Blende\nSehne {r['d_blende']:.0f}\nBogen {r['d_bogen_pass']:.0f}",
             fontsize=8, va="center", ha="left")
     # Fangspiegel von oben (Ellipse: d√2 längs u, d quer)
-    from matplotlib.patches import Ellipse, Rectangle
+    from matplotlib.patches import Ellipse
     ax.add_patch(Ellipse((A, 0), dF * math.sqrt(2), dF, fc="#b3c7e6", ec="#1a4a8a",
                          lw=1.2, zorder=3))
     ax.text(A, 0, f"Fang-\nspiegel\nØ {dF:.0f}", ha="center", va="center", fontsize=7,
@@ -1838,14 +1728,6 @@ _QABS_MSR = {}
 _QABS_MO = {}
 
 
-def _qabs_msr(S: float) -> np.ndarray:
-    key = round(float(S), 4)
-    if key not in _QABS_MSR:
-        Wb = _Wb_von_S(min(max(key, 1e-6), 1.0))
-        nu = np.linspace(0.0, 1.0, _QABS_N)
-        _QABS_MSR[key] = (np.ones_like(nu) if Wb <= 1e-9
-                          else np.array([mtf_sph_rel(x, Wb) for x in nu]))
-    return _QABS_MSR[key]
 
 
 def _qabs_mo(eps: float) -> np.ndarray:
@@ -2708,7 +2590,6 @@ class _Diagramme:
 
         freqs_as, fc, mp_arr, msa, msr_arr, strehl = mtf_kurven(D, f, lam)
 
-        objekte = self._mtf_objekte.get()
         all_details = [
             ("Jupiter\nGürtel",      5.0,      "#4a90d9", "planeten"),
             ("Jupiter\nFestons",     1.5,      "#4a90d9", "planeten"),
@@ -3783,10 +3664,10 @@ def main():
              "gilt die Kugel.")
 
     st.sidebar.markdown("---")
-    _NAV = [("Grundlagen", [("grund", "Diagramme"), ("kenn", "Kennwerte")]),
-            ("Bildqualität", [("wahr", "Wahrnehmung"), ("mtf", "MTF"), ("blende", "Blende")]),
-            ("", [("messen", "Messen (Foucault)"), ("grenzen", "Grenzen"), ("bauen", "Bauen"),
-                  ("vergleich", "Vergleich (Beta)"), ("doku", "ℹ️ Dokumentation")])]
+    _NAV = [("Grundlagen", [("grund", "Diagramme"), ("kenn", "Kennwerte"), ("grenzen", "Grenzen (max. Vergr.)")]),
+            ("Bildqualität", [("wahr", "Wahrnehmung"), ("mtf", "MTF"), ("vergleich", "Vergleich (Beta)")]),
+            ("Bauen", [("messen", "Foucault-Test"), ("bauen", "Fangspiegel"), ("blende", "Blende")]),
+            ("", [("doku", "ℹ️ Dokumentation")])]
     if "nav" not in st.session_state:
         st.session_state["nav"] = "grund"
 
@@ -4037,7 +3918,6 @@ def main():
                      "niedrig ausfallen). Fest koppelt den Grad an die Zonenzahl.")
             grad_modus = "fest" if grad_label.startswith("Fest") else "bic"
 
-        R       = D / 2.0
         r_zon   = foucault_zonen(D, n_zonen)
         r_grenz = foucault_zonengrenzen(D, n_zonen)
         Rc      = 2.0 * f
@@ -4372,7 +4252,7 @@ def main():
 
     if _nav == "doku":
         # Doku-HTML aus Datei lesen (liegt neben app.py) oder eingebettet anzeigen
-        import os, pathlib
+        import pathlib
         _doc_candidates = [
             pathlib.Path(__file__).parent / "documentation_v7_2.html",
             pathlib.Path("documentation_v7_2.html"),

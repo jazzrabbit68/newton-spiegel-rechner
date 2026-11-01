@@ -1,7 +1,10 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.0 (2026-10-31)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.1 (2026-11-01)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.3.1 (2026-11-01)  Keine Kernwerte geändert. Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
+                        Bauen (Foucault-Test, Fangspiegel, Blende). MTF-Tab: Umschalter "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
+                        Funktionen und Reste alter Versionen entfernt (berechne_von_S, _mtf_arrays_klassisch, kurven_N/_vergr/_blende u.a.).
   v7.3.0 (2026-10-31)  KERNWERTE GEÄNDERT (externe Prüfung): (1) Q_perc (Kennwerte "Q bei 30x/80x/160x/150x", Kernwert "Q_perc bei Slider-Vergr.") enthielt
                         den Strehl doppelt (msa = msr*mp*S, die MTF ist aber schon auf MTF(0)=1 normiert) -> Werte waren zu niedrig; z. B. 200/1000
                         bei 150x: 0,035 -> 0,153 (Q_vis exakt 0,138). (2) Foucault: Zonenfläche/Hybrid-Ringe nutzten die Zonenmitten statt der echten
@@ -406,9 +409,6 @@ def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
     return r
 
 
-def berechne_von_S(D_mm: float, S: float, lam_nm: float = 550.0) -> dict:
-    """Alle Kennzahlen direkt aus S — kein Umweg über Brennweite."""
-    return _kennzahlen_von_S(D_mm, S, _Wb_von_S(S))
 
 
 def berechne_vergr(D_mm: float, f_mm: float, lam_nm: float,
@@ -676,7 +676,6 @@ def v_max_diffraktion(D_mm: float, eye_res_as: float = 150.0) -> float:
     """
     if D_mm <= 0:
         return 0.0
-    dawes_as = 116.0 / D_mm
     return eye_res_as * D_mm / 116.0
 
 
@@ -730,7 +729,7 @@ def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
 
     strehls_marechal: Marechal-Naeherung  S = exp(-(2*pi*Wrms)^2)
     strehls_exakt:    exaktes Pupillenintegral (Born & Wolf)
-    Beide am besten Fokus (Faktor 16 in Wellenfrontformel).
+    Beide am besten Fokus (Wb = D^4/(2048 f^3 lam)).
     """
     ns = np.linspace(N_min, N_max, schritte)
     strehls_mar, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
@@ -1277,16 +1276,6 @@ def mtf_sph_rel(f: float, Wb: float, n: int = 80,
 
 
 
-def _mtf_arrays_klassisch(Wb: float, S: float, fc: float,
-                           n_pts: int, paraxial: bool = False):
-    """MTF-Arrays für klassisches Kurvendiagramm mit wählbarer Fokusebene."""
-    freqs_norm = np.linspace(0, 1, n_pts)
-    freqs_as   = freqs_norm * fc
-    mp  = np.array([mtf_para(f)                           for f in freqs_norm])
-    msr = np.array([mtf_sph_rel(f, Wb, paraxial=paraxial) for f in freqs_norm])
-    msa = msr * mp
-    return freqs_as, mp, msa, msr
-
 
 def mtf_kurven(D_mm: float, f_mm: float, lam_nm: float = 550.0,
                n_pts: int = 200) -> tuple:
@@ -1516,71 +1505,6 @@ def perceived_quality_exakt_kurven_von_Wb(D_mm: float, Wb: float, lam_nm: float,
     return num / np.maximum(den, 1e-12)
 
 
-def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
-    """Strehl und eff. Öffnungen als Funktion von f/D.
-
-    Rückgabe: ns, strehls_marechal, deff_ks, aufl_verluste, strehls_exakt
-
-    strehls_marechal: Marechal-Naeherung  S = exp(-(2*pi*Wrms)^2)
-    strehls_exakt:    exaktes Pupillenintegral (Born & Wolf)
-    Beide am besten Fokus (Faktor 16 in Wellenfrontformel).
-    """
-    ns = np.linspace(N_min, N_max, schritte)
-    strehls_mar, deff_ks, aufl_verluste, strehls_exakt = [], [], [], []
-    for n in ns:
-        r = berechne(D_mm, D_mm * n, lam_nm)
-        strehls_mar.append(r["strehl_marechal"])   # echte Marechal-Naeherung
-        deff_ks.append(r["Deff_k"])
-        aufl_verluste.append(r["aufl_verlust_pct"])
-        strehls_exakt.append(r["strehl"])           # exaktes Pupillenintegral
-    return (ns, np.array(strehls_mar), np.array(deff_ks),
-            np.array(aufl_verluste), np.array(strehls_exakt))
-
-
-def kurven_vergr(D_mm, f_mm, lam_nm, eye_res_as=60.0,
-                 V_min=20, V_max=600, schritte=400):
-    """Kurven für das Vergrößerungs-Diagramm."""
-    vs = np.linspace(V_min, V_max, schritte)
-    dpara, dsph, verluste = [], [], []
-    for V in vs:
-        rv = berechne_vergr(D_mm, f_mm, lam_nm, V, eye_res_as)
-        dpara.append(rv["Deff_para"])
-        dsph.append(rv["Deff_sph"])
-        verluste.append(rv["verlust"])
-    return vs, np.array(dpara), np.array(dsph), np.array(verluste)
-
-
-def kurven_blende(D_mm: float, f_mm: float, lam_nm: float,
-                  D_blende: float, V_min: float = 30.0,
-                  V_max: float = 400.0, n_pts: int = 150) -> tuple:
-    """Q̃(V) für Original-Spiegel und abgeblendet auf D_blende — Näherungsformel.
-
-    Abblenden: gleiche Brennweite f, kleinere Öffnung D_blende
-      → Wp_blende = D_blende^4 / (512·f^3·λ)  kleiner  [07/2026: 1024->512]
-      → Strehl_blende höher
-      → Beugungsgrenze schlechter (fc ∝ D_blende)
-
-    Rückgabe: V_arr, Q_orig, Q_blend, S_orig, S_blend
-    """
-    V_arr = np.linspace(V_min, V_max, n_pts)
-
-    def Q_naeh(V_a, S, D):
-        Vk = v_wendepunkt_naeh(D, _Wb_von_S(S))
-        w  = 1.0 / (1.0 + (Vk / np.maximum(V_a, 1e-9))**2)
-        return S + (1.0 - S) * (1.0 - w)
-
-    # Original
-    _, _, Wb_o, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
-    S_orig = _strehl_exakt(Wb_o)
-
-    # Abgeblendet
-    _, _, Wb_b, _, _ = _wellenfronten(D_blende, f_mm, lam_nm)
-    S_blend = _strehl_exakt(Wb_b)
-
-    Q_orig  = Q_naeh(V_arr, S_orig,  D_mm)
-    Q_blend = Q_naeh(V_arr, S_blend, D_blende)
-
-    return V_arr, Q_orig, Q_blend, S_orig, S_blend
 
 
 def qvis_einzelrechner(D_mm: float, S: float, V: float,
@@ -1780,7 +1704,7 @@ def fangspiegel_skizze(ax, D, f, r):
     Koordinaten: u entlang der OAZ-Achse (Feldblende/Fokus bei u = 0),
     v quer dazu; optische Achse bei u = A."""
     A, R, rf, rt = r["A"], r["R_hut"], r["B_ok"] / 2.0, r["oaz_r"]
-    L, dF, N = r["oaz_l"], r["d_pass"], f / D
+    L, dF = r["oaz_l"], r["d_pass"]
     ax.set_aspect("equal")
     ax.set_title("Draufsicht: Blende gegenüber dem OAZ (Blick entlang der Achse)",
                  fontsize=9)
@@ -1798,7 +1722,7 @@ def fangspiegel_skizze(ax, D, f, r):
     ax.text(A + R * 1.04, 0, f"Blende\nSehne {r['d_blende']:.0f}\nBogen {r['d_bogen_pass']:.0f}",
             fontsize=8, va="center", ha="left")
     # Fangspiegel von oben (Ellipse: d√2 längs u, d quer)
-    from matplotlib.patches import Ellipse, Rectangle
+    from matplotlib.patches import Ellipse
     ax.add_patch(Ellipse((A, 0), dF * math.sqrt(2), dF, fc="#b3c7e6", ec="#1a4a8a",
                          lw=1.2, zorder=3))
     ax.text(A, 0, f"Fang-\nspiegel\nØ {dF:.0f}", ha="center", va="center", fontsize=7,
@@ -1875,14 +1799,6 @@ _QABS_MSR = {}
 _QABS_MO = {}
 
 
-def _qabs_msr(S: float) -> np.ndarray:
-    key = round(float(S), 4)
-    if key not in _QABS_MSR:
-        Wb = _Wb_von_S(min(max(key, 1e-6), 1.0))
-        nu = np.linspace(0.0, 1.0, _QABS_N)
-        _QABS_MSR[key] = (np.ones_like(nu) if Wb <= 1e-9
-                          else np.array([mtf_sph_rel(x, Wb) for x in nu]))
-    return _QABS_MSR[key]
 
 
 def _qabs_mo(eps: float) -> np.ndarray:
@@ -2360,7 +2276,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.3.0 (2026-10-31)"
+VERSION  = "7.3.1 (2026-11-01)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -2426,8 +2342,8 @@ STRINGS = {
     "tab_mtf":         {"de": "  MTF  ",                    "en": "  MTF  "},
     "tab_wahrnehmung": {"de": "  Wahrnehmung  ",            "en": "  Perception  "},
     "tab_blende":      {"de": "  Blende  ",                 "en": "  Stop-down  "},
-    "tab_foucault":    {"de": "  Foucault  ",               "en": "  Foucault  "},
-    "tab_vmax":        {"de": "  Max. Vergrößerung  ",       "en": "  Max. magnification  "},
+    "tab_foucault":    {"de": "  Foucault-Test  ",          "en": "  Foucault test  "},
+    "tab_vmax":        {"de": "  Grenzen (max. Vergr.)  ",   "en": "  Limits (max. magn.)  "},
     "tab_vmax_D":      {"de": "  Vmax vs. Ø / Seeing  ",        "en": "  Vmax vs. D/seeing  "},
     "tab_fangspiegel": {"de": "  Fangspiegel  ",              "en": "  Secondary mirror  "},
     "tab_vergleich":   {"de": "  Vergleich (Beta)  ",         "en": "  Comparison (beta)  "},
@@ -2668,27 +2584,24 @@ class App(tk.Tk):
         self._mtf_label_widgets = {}
 
         tab_attrs = [
-            ("_tab_grund",        "tab_grund"),
+            ("_tab_grund",        "tab_grund"),          # Reihenfolge = Reihenfolge in _tab_gruppen
             ("_tab_kennwerte",    "tab_kennwerte"),
-            ("_tab_wahrnehmung",  "tab_wahrnehmung"),
-            ("_tab_mtf",          "tab_mtf"),
-            ("_tab_blende",       "tab_blende"),
-            ("_tab_foucault",     "tab_foucault"),
             ("_tab_vmax",         "tab_vmax"),
             ("_tab_vmax_D",       "tab_vmax_D"),
-            ("_tab_fangspiegel",  "tab_fangspiegel"),
+            ("_tab_wahrnehmung",  "tab_wahrnehmung"),
+            ("_tab_mtf",          "tab_mtf"),
             ("_tab_vergleich",    "tab_vergleich"),
+            ("_tab_foucault",     "tab_foucault"),
+            ("_tab_fangspiegel",  "tab_fangspiegel"),
+            ("_tab_blende",       "tab_blende"),
         ]
         self._tab_keys = [k for _, k in tab_attrs]
         # v7.1.0: Gruppen (oberste Reiter); Gruppen mit mehreren Diagrammen
         # bekommen ein eigenes Unter-Notebook.
         self._tab_gruppen = [
-            ("grp_t_grund",     ["tab_grund", "tab_kennwerte"]),
-            ("grp_t_bild",      ["tab_wahrnehmung", "tab_mtf", "tab_blende"]),
-            ("grp_t_messen",    ["tab_foucault"]),
-            ("grp_t_grenzen",   ["tab_vmax"]),   # tab_vmax_D teilt sich den Tab (rechte Hälfte)
-            ("grp_t_bauen",     ["tab_fangspiegel"]),
-            ("grp_t_vergleich", ["tab_vergleich"]),
+            ("grp_t_grund",     ["tab_grund", "tab_kennwerte", "tab_vmax"]),   # tab_vmax_D teilt sich den Tab (rechte Hälfte)
+            ("grp_t_bild",      ["tab_wahrnehmung", "tab_mtf", "tab_vergleich"]),
+            ("grp_t_bauen",     ["tab_foucault", "tab_fangspiegel", "tab_blende"]),
         ]
         self._tab_nb = {}      # tab_key -> (Notebook, Frame)
         self._grp_nb = []      # pro Gruppe: (Gruppen-Frame, Unter-Notebook | None)
@@ -2707,7 +2620,10 @@ class App(tk.Tk):
             gi = next(i for i, (_, ks) in enumerate(self._tab_gruppen)
                       if tab_key in ks or (tab_key == "tab_vmax_D" and "tab_vmax" in ks))
             gfrm, sub = self._grp_nb[gi]
-            if sub is not None:
+            if tab_key == "tab_vmax_D":            # teilt sich den Tab mit tab_vmax (rechte Hälfte)
+                frm = self._tab_nb["tab_vmax"][1]
+                self._tab_nb[tab_key] = self._tab_nb["tab_vmax"]
+            elif sub is not None:
                 frm = tk.Frame(sub, bg=BG)
                 sub.add(frm, text=T(tab_key))
                 self._tab_nb[tab_key] = (sub, frm)
@@ -3328,7 +3244,7 @@ class App(tk.Tk):
                        Qp_80=Qp_80, Qp_200=Qp_200, Qp_350=Qp_350, Qp_V=Qp_V,
                        Qp_s=Qp_s)
             self.after(0, lambda r=res: self._aktualisieren(r))
-        except Exception as exc:
+        except Exception:
             import traceback
             msg = traceback.format_exc()
             self.after(0, lambda m=msg: self._zeige_fehler(m))
@@ -3743,7 +3659,7 @@ class App(tk.Tk):
         print("BERECHNUNGSFEHLER:\n", msg)   # immer in Terminal
         try:
             self.lbl_verdict.config(
-                text=f"⚠ Berechnungsfehler (Details in Terminal)", fg="#c62828")
+                text="⚠ Berechnungsfehler (Details in Terminal)", fg="#c62828")
         except Exception:
             pass
 
@@ -3762,7 +3678,7 @@ class App(tk.Tk):
             return
         try:
             self._aktualisieren_ui(res)
-        except Exception as exc:
+        except Exception:
             import traceback
             self._zeige_fehler(traceback.format_exc())
 
@@ -3806,7 +3722,6 @@ class App(tk.Tk):
         # ── Ergebniskarten ─────────────────────────────────────────────────
         rv2 = self._res
         r   = r_real
-        S_mar      = r["strehl_marechal"]
         _col_ex    = "#2e7d32" if S_real >= 0.95 else "#e65100" if S_real >= 0.80 else "#c62828"
         Vk_naeh_s  = Vk_slide["Vk_sph"]
         delta_halb = Vk_halb - Vk_naeh
@@ -4488,7 +4403,6 @@ class App(tk.Tk):
 
         freqs_as, fc, mp_arr, msa, msr_arr, strehl = mtf_kurven(D, f, lam)
 
-        objekte = self._mtf_objekte.get()
         all_details = [
             ("Jupiter\nGürtel",      5.0,      "#4a90d9", "planeten"),
             ("Jupiter\nFestons",     1.5,      "#4a90d9", "planeten"),
