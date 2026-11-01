@@ -2,7 +2,7 @@
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.1 (2026-11-01)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
-  v7.3.1 (2026-11-01)  Keine Kernwerte geändert. MTF-Tab: Kurve "Foucault gemessen" wird jetzt direkt aus der gemessenen Wellenfront gerechnet (vorher aus Wb_fit mit reinem Kugel-Modell – bei höheren Polynomgraden passte die Kurve nicht zum angezeigten Strehl; Strehl-Werte selbst unverändert). Foucault: Option "Randzone teilen" (äußerste Zone in zwei flächengleiche Hälften, n+1 Messzonen). Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
+  v7.3.1 (2026-11-01)  Keine Kernwerte geändert. MTF-Tab: Kurve "Foucault gemessen" wird jetzt direkt aus der gemessenen Wellenfront gerechnet (vorher aus Wb_fit mit reinem Kugel-Modell – bei höheren Polynomgraden passte die Kurve nicht zum angezeigten Strehl; Strehl-Werte selbst unverändert). Kernwerte (minimal): MTF = |OTF| statt negative OTF-Werte auf 0 zu kappen (betrifft nur Spiegel mit Kontrastumkehr, z.B. 200/1200: Q_vis bei 300x 0,120 -> 0,129; 200/1000 und 114/900 unverändert); Foucault-MTF-Kurve erscheint jetzt immer, wenn Messdaten für diese Öffnung vorliegen. Foucault: Option "Randzone teilen" (äußerste Zone in zwei flächengleiche Hälften, n+1 Messzonen). Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
                         Bauen (Foucault-Test, Fangspiegel, Blende). V_krit (MTF×CSF) und "Q≥0,90 bis" werden auf 2·D begrenzt und als "> 2·D×" angezeigt (vorher 600×). Quellenangaben geprüft/korrigiert (Sacek-Abschnittsnummern entfernt bzw. 4.1.2, Barten-ISBN, Suiter-Auflage, Barakat 1965). Grenzen und Blende: beide Diagramme nebeneinander (Desktop+Web); Blende: Texte außerhalb des Diagramms entfernt; CSF korrekt als Mannos/Sakrison 1974 zitiert. MTF-Tab: Objektauswahl (Planeten/Deep-Sky/Alle) blendet die Detail-Markierungen jetzt wirklich ein/aus; Umschalter "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
                         Funktionen und Reste alter Versionen entfernt (berechne_von_S, _mtf_arrays_klassisch, kurven_N/_vergr/_blende u.a.).
   v7.3.0 (2026-10-31)  KERNWERTE GEÄNDERT (externe Prüfung): (1) Q_perc (Kennwerte "Q bei 30x/80x/160x/150x", Kernwert "Q_perc bei Slider-Vergr.") enthielt
@@ -1885,7 +1885,9 @@ def mtf_aus_wellenfront(rho, W_c, eps=0.0, Np=128, nu=None) -> np.ndarray:
     M = 2 * Np
     F = np.fft.fft2(P, s=(M, M))
     ac = np.fft.ifft2(np.abs(F) ** 2)
-    otf = np.real(ac[0, :Np]) / max(float(np.real(ac[0, 0])), 1e-12)
+    # v7.3.1: MTF = |OTF| (Betrag). Der Imaginärteil ist bei rotationssymmetrischer Pupille null (≈1e-16);
+    # negative OTF-Werte (Kontrastumkehr) wurden früher bei 0 abgeschnitten, jetzt als Betrag gezählt.
+    otf = np.abs(np.real(ac[0, :Np])) / max(float(np.real(ac[0, 0])), 1e-12)
     nu_k = np.arange(Np) / float(Np)
     if nu is None:
         nu = np.linspace(0.0, 1.0, _QABS_N)
@@ -4491,7 +4493,7 @@ class App(tk.Tk):
             msr_sl = np.array([mtf_sph_rel(nu, Wb_sl, paraxial=paraxial) for nu in nu_k2])
             ax.plot(nu_k2, mp_k2 * msr_sl, color=ACC, lw=2.0, ls="--",
                     label=f"Verbessert (Schieber)  S={S_slide:.3f}")
-        if kz_fc is not None and D_fc == D and kz_fc['S_exakt'] > strehl + 0.01:
+        if kz_fc is not None and D_fc == D:      # v7.3.1: immer zeigen, wenn Messdaten für diese Öffnung vorliegen (früher nur bei S_Foucault > S_Spiegel)
             # v7.3.1: MTF direkt aus der GEMESSENEN Wellenfront (best focus, Polynom bzw. Hybrid) –
             # nicht aus Wb_fit mit reinem ρ⁴−ρ²-Modell (das passte bei höheren Polynomgraden nicht
             # zum angezeigten Strehl).
