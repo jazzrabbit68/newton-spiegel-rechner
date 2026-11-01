@@ -2773,6 +2773,11 @@ class App(tk.Tk):
                                         command=self._aktualisieren)
                     rb.pack(side="left", padx=8)
                     self._mtf_label_widgets[key] = rb
+                self._mtf_alt1d = tk.BooleanVar(value=False)
+                tk.Checkbutton(row1b, text="alte 1D-Näherung zeigen", variable=self._mtf_alt1d,
+                               bg=BG, fg="#666", activebackground=BG, selectcolor=BG2,
+                               font=("Helvetica", 9), command=self._aktualisieren
+                               ).pack(side="left", padx=14)
                 row2 = tk.Frame(btn_frame, bg=BG)
                 row2.pack(side="top", anchor="w", pady=(3, 0))
                 lbl_obj = tk.Label(row2, text=T("mtf_obj_lbl"), bg=BG, fg=ACC,
@@ -4515,6 +4520,12 @@ class App(tk.Tk):
                 label="Paraboloid  (Beugungsgrenze)")
         ax.plot(nu_k2, ms_k2,  color=COR, lw=2.2, ls="-",
                 label=f"Sphäre absolut  (S={strehl:.3f})")
+
+        # v7.3.1: optional die ALTE 1D-Näherung (Linienintegral, bis v6.x) zum Vergleich
+        if getattr(self, '_mtf_alt1d', None) is not None and self._mtf_alt1d.get():
+            msr_1d = np.array([mtf_sph_rel_1d(nu, Wb_k, paraxial=paraxial) for nu in nu_k2])
+            ax.plot(nu_k2, mp_k2 * msr_1d, color=COR, lw=1.6, ls=(0, (4, 2)), alpha=0.75,
+                    label="Sphäre absolut – alte 1D-Näherung (nur Vergleich)")
 
         # v7.2.3: Schieber-Kurve (verbesserter Spiegel) UND – falls für dieses D
         # vorhanden – die Foucault-Messung als getrennte Kurven (relative Kurve entfällt).

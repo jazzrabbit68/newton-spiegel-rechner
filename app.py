@@ -2741,6 +2741,12 @@ class _Diagramme:
         ax.plot(nu_k2, ms_k2,  color=COR, lw=2.2, ls="-",
                 label=f"Sphäre absolut  (S={strehl:.3f})")
 
+        # v7.3.1: optional die ALTE 1D-Näherung (Linienintegral, bis v6.x) zum Vergleich
+        if getattr(self, '_mtf_alt1d', None) is not None and self._mtf_alt1d.get():
+            msr_1d = np.array([mtf_sph_rel_1d(nu, Wb_k, paraxial=paraxial) for nu in nu_k2])
+            ax.plot(nu_k2, mp_k2 * msr_1d, color=COR, lw=1.6, ls=(0, (4, 2)), alpha=0.75,
+                    label="Sphäre absolut – alte 1D-Näherung (nur Vergleich)")
+
         # v7.2.3: Schieber-Kurve (verbesserter Spiegel) UND – falls für dieses D
         # vorhanden – die Foucault-Messung als getrennte Kurven (relative Kurve entfällt).
         kz_fc = getattr(self, '_foucault_letzte_kz', None)
@@ -3654,11 +3660,12 @@ def plot_beugung(D, f):
 
 
 def plot_mtf(D, f, lam, S_slide, paraxial=False, objekte="planeten",
-             kz_fc=None, D_fc=None):
+             kz_fc=None, D_fc=None, alt1d=False):
     fig, ax = _neue_figur((8, 4.5))
     d = _Diagramme(); d._tab_mtf = (fig, ax, _FakeCanvas())
     d._mtf_objekte = _Var(objekte)
     d._mtf_fokus   = _Var("paraxial" if paraxial else "bestfocus")
+    d._mtf_alt1d   = _Var(bool(alt1d))
     d._foucault_letzte_kz = kz_fc       # Vergleichskurve aus dem Foucault-Tab
     d._foucault_letzte_D  = D_fc
     d._diagramm_mtf(D, f, lam, S_slide)
@@ -3953,6 +3960,11 @@ def main():
         with c2:
             objekte_mode = st.radio("Objekte:", ["Planeten", "Deep-Sky (M42)", "Alle"],
                                     horizontal=True, key="mtf_objekte")
+        alt1d = st.checkbox("alte 1D-Näherung zusätzlich zeigen (nur Vergleich)",
+                            key="mtf_alt1d",
+                            help="Zeigt die frühere eindimensionale MTF-Rechnung gestrichelt. "
+                                 "Sie weicht bei starker Aberration (kleiner Strehl) deutlich von der "
+                                 "exakten 2D-Rechnung ab.")
         paraxial  = "Paraxial" in fokus_mode
         objekte_k = {"Planeten": "planeten", "Deep-Sky (M42)": "deepsky", "Alle": "alle"}[objekte_mode]
         # Vergleichskurve: zuletzt im Foucault-Tab gemessene Wellenfront (falls
@@ -3962,8 +3974,8 @@ def main():
         _fc_key = (round(float(_kz_fc["S_exakt"]), 4), _D_fc) if _kz_fc is not None else None
         _show_cached("fig_mtf", lambda: plot_mtf(D, f, lam, S_slide,
                      paraxial=paraxial, objekte=objekte_k,
-                     kz_fc=_kz_fc, D_fc=_D_fc),
-                     _h + (paraxial, objekte_k, _fc_key))
+                     kz_fc=_kz_fc, D_fc=_D_fc, alt1d=alt1d),
+                     _h + (paraxial, objekte_k, _fc_key, alt1d))
 
     if _nav == "wahr":
         # ── Ablesen: exakte Q_vis-Werte bei gewählter Vergrößerung ───────────
