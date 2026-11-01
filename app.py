@@ -3714,6 +3714,8 @@ def main():
     for _gname, _items in _NAV:
         if _gname:
             st.sidebar.caption(_gname)
+        else:
+            st.sidebar.divider()          # v7.3.1: Dokumentation deutlich von den Gruppen absetzen
         for _k, _lbl in _items:
             st.sidebar.button(_lbl, key=f"navbtn_{_k}", use_container_width=True,
                               type="primary" if st.session_state["nav"] == _k else "secondary",
