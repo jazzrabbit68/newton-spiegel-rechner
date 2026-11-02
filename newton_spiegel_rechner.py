@@ -1,7 +1,12 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.1 (2026-11-01)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.2 (2026-11-02)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.3.2 (2026-11-02)  Fehlerkorrekturen. KERN (minimal): _perceived_quality_kern bekommt Wb direkt statt es aus S per _Wb_von_S zurückzurechnen
+                        (bei Wb > 0,9, z.B. 200/1000, landete die Inversion auf dem falschen Ast -> V_krit/Dämpfung w(V) und damit Q_perc in
+                        den Kennwerten verfälscht; z.B. 200/1000 bei 150x: 0,153 -> 0,142; 200/1200, 114/900 unverändert). Strehl-Diagramm: Linie
+                        "Verbessert" erschien bei Schieber 0, weil gegen den Maréchal- statt den exakten Strehl verglichen wurde. Kennwerte:
+                        "V_krit Näherung" zeigt nicht mehr ein Δ gegen V½ (zwei verschiedene Größen), sondern V½ exakt getrennt.
   v7.3.1 (2026-11-01)  Keine Kernwerte geändert. MTF-Tab: Kurve "Foucault gemessen" wird jetzt direkt aus der gemessenen Wellenfront gerechnet (vorher aus Wb_fit mit reinem Kugel-Modell – bei höheren Polynomgraden passte die Kurve nicht zum angezeigten Strehl; Strehl-Werte selbst unverändert). Kernwerte (minimal): MTF = |OTF| statt negative OTF-Werte auf 0 zu kappen (betrifft nur Spiegel mit Kontrastumkehr, z.B. 200/1200: Q_vis bei 300x 0,120 -> 0,129; 200/1000 und 114/900 unverändert); Foucault-MTF-Kurve erscheint jetzt immer, wenn Messdaten für diese Öffnung vorliegen. Foucault: Option "Randzone teilen" (äußerste Zone in zwei flächengleiche Hälften, n+1 Messzonen). Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
                         Bauen (Foucault-Test, Fangspiegel, Blende). V_krit (MTF×CSF) und "Q≥0,90 bis" werden auf 2·D begrenzt und als "> 2·D×" angezeigt (vorher 600×). Quellenangaben geprüft/korrigiert (Sacek-Abschnittsnummern entfernt bzw. 4.1.2, Barten-ISBN, Suiter-Auflage, Barakat 1965). Grenzen und Blende: beide Diagramme nebeneinander (Desktop+Web); Blende: Texte außerhalb des Diagramms entfernt; CSF korrekt als Mannos/Sakrison 1974 zitiert. MTF-Tab: Objektauswahl (Planeten/Deep-Sky/Alle) blendet die Detail-Markierungen jetzt wirklich ein/aus; Umschalter "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
                         Funktionen und Reste alter Versionen entfernt (berechne_von_S, _mtf_arrays_klassisch, kurven_N/_vergr/_blende u.a.).
@@ -333,7 +338,7 @@ def _mtf_arrays(Wb: float, S: float, fc: float, n_pts: int):
 
 
 def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr,
-                             S, V, D_mm, use_csf=True):
+                             S, V, D_mm, use_csf=True, Wb=None):
     """CSF-gewichtetes MTF-Integral mit Dämpfungsfunktion w(V).
 
     w(V) modelliert den Übergang vom augendominierten zum aberrationsdominierten
@@ -344,7 +349,7 @@ def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr,
     weight    = np.array([csf(fi) if use_csf else mtf_eye(fi) for fi in f_cpd_arr])
     _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
     Q_raw  = float(_trapz(msa_arr * weight, nu) / max(_trapz(mp_arr * weight, nu), 1e-12))
-    V_krit = v_krit_naeh(D_mm, _Wb_von_S(S))
+    V_krit = v_krit_naeh(D_mm, Wb if Wb is not None else _Wb_von_S(S))   # v7.3.2: Wb direkt (Inversion unzuverlässig bei Wb > 0,9)
     w      = 1.0 / (1.0 + (V_krit / V) ** 2)
     return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
 
@@ -1444,7 +1449,8 @@ def perceived_quality(D_mm: float, f_mm: float, lam_nm: float,
                       use_csf: bool = True) -> float:
     """Wahrgenommener Qualitätsindex Q_perc(V) — CSF-gewichtetes MTF-Integral."""
     freqs_as, fc, mp, msa, _, S = mtf_kurven(D_mm, f_mm, lam_nm, n_pts)
-    return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf)
+    Wb = _wellenfronten(D_mm, f_mm, lam_nm)[2]
+    return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf, Wb=Wb)
 
 
 def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float, V: float,
@@ -2305,7 +2311,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.3.1 (2026-11-01)"
+VERSION  = "7.3.2 (2026-11-02)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -3758,7 +3764,6 @@ class App(tk.Tk):
         r   = r_real
         _col_ex    = "#2e7d32" if S_real >= 0.95 else "#e65100" if S_real >= 0.80 else "#c62828"
         Vk_naeh_s  = Vk_slide["Vk_sph"]
-        delta_halb = Vk_halb - Vk_naeh
         delta_ex   = Vk_exakt - Vk_naeh
         col_naeh   = "#534AB7"
         col_blur   = "#2e7d32" if Vk_blur > 50 else "#e65100" if Vk_blur > 20 else "#c62828"
@@ -3782,7 +3787,7 @@ class App(tk.Tk):
             text=f"{r['Deff_k']:.1f} → {Deff_k_slide:.1f} mm")
         rv2["rVkrit_naeh"].config(
             text=f"{Vk_naeh:.0f}×  →  {Vk_naeh_s:.0f}×"
-                 f"  |  exakt: {Vk_halb:.0f}×  (Δ {delta_halb:+.0f}×)",
+                 f"  |  V½ exakt: {Vk_halb:.0f}×",
             fg=col_naeh)
         rv2["rVkrit_blur"].config(
             text=(f"{Vk_blur:.0f}×  (α_blur={D**3/(64*f**2)/f*206265:.1f}\"  — unabh. von S)"
@@ -4252,7 +4257,7 @@ class App(tk.Tk):
                     xy=(N_akt, S_akt), xytext=(8, 10),
                     textcoords="offset points", fontsize=9, color="#333",
                     arrowprops=dict(arrowstyle="-", color="#aaa"))
-        if S_sph and S_sph > S_akt_mar:
+        if S_sph and S_sph > S_akt + 0.002:
             ax.axhline(S_sph, color=COR, lw=1.5, ls="-.",
                        label=f"Verbessert S={S_sph:.3f}")
             ax.annotate(f"S={S_sph:.3f}", xy=(14.5, S_sph),

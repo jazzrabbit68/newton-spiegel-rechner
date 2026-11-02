@@ -1,10 +1,16 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.3.1 (2026-11-01)
-Entspricht newton_spiegel_rechner.py v7.3.1
+Streamlit-Version v7.3.2 (2026-11-02)
+Entspricht newton_spiegel_rechner.py v7.3.1 (Kern-Fix aus v7.3.2 noch nach dort übernehmen)
 
 Änderungshistorie (jüngste zuerst):
+  v7.3.2 (2026-11-02)  Fehlerkorrekturen. KERN (minimal): _perceived_quality_kern bekommt Wb direkt statt es aus S per _Wb_von_S zurückzurechnen
+                        (bei Wb > 0,9, z.B. 200/1000, landete die Inversion auf dem falschen Ast -> V_krit/Dämpfung w(V) und damit Q_perc in
+                        den Kennwerten verfälscht; gleicher Fehlertyp wie v7.2.1). Strehl-Diagramm: Linie "Verbessert" erschien bei Schieber 0, weil
+                        gegen den Maréchal- statt den exakten Strehl verglichen wurde. Kennwerte: veraltete Zeile "V½ D·0.7·√S" ersetzt
+                        (V_krit-Näherung D/(13·Wb) und V½ exakt getrennt, doppelte V_krit-Zeile entfernt). Foucault mit geteilter Randzone:
+                        Knöpfe "Alle auf Parabel/Null" setzen jetzt auch die letzte Zone.
   v7.3.1 (2026-11-01)  Keine Kernwerte geändert. MTF-Tab: Kurve "Foucault gemessen" wird jetzt direkt aus der gemessenen Wellenfront gerechnet (vorher aus Wb_fit mit reinem Kugel-Modell – bei höheren Polynomgraden passte die Kurve nicht zum angezeigten Strehl; Strehl-Werte selbst unverändert). Kernwerte (minimal): MTF = |OTF| statt negative OTF-Werte auf 0 zu kappen (betrifft nur Spiegel mit Kontrastumkehr, z.B. 200/1200: Q_vis bei 300x 0,120 -> 0,129; 200/1000 und 114/900 unverändert); Foucault-MTF-Kurve erscheint jetzt immer, wenn Messdaten für diese Öffnung vorliegen. Foucault: Option "Randzone teilen" (äußerste Zone in zwei flächengleiche Hälften, n+1 Messzonen). Neue Tab-Gruppen: Grundlagen (Diagramme, Kennwerte, Grenzen), Bildqualität (Wahrnehmung, MTF, Vergleich),
                         Bauen (Foucault-Test, Fangspiegel, Blende). V_krit (MTF×CSF) wird auf 2·D begrenzt und als "> 2·D x" angezeigt (vorher 600x). Quellenangaben geprüft/korrigiert (Sacek-Abschnittsnummern entfernt bzw. 4.1.2, Barten-ISBN, Suiter-Auflage, Barakat 1965). Grenzen und Blende: beide Diagramme nebeneinander (Desktop+Web); Blende: Texte außerhalb des Diagramms entfernt; CSF korrekt als Mannos/Sakrison 1974 zitiert. MTF-Tab: Objektauswahl (Planeten/Deep-Sky/Alle) blendet die Detail-Markierungen jetzt wirklich ein/aus; Checkbox "alte 1D-Näherung zeigen" (nur Vergleichskurve). Aufräumen: ungenutzte
                         Funktionen und Reste alter Versionen entfernt.
@@ -74,7 +80,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.3.1 (2026-11-01)"
+VERSION = "7.3.2 (2026-11-02)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -293,7 +299,7 @@ def _mtf_arrays(Wb: float, S: float, fc: float, n_pts: int):
 
 
 def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr,
-                             S, V, D_mm, use_csf=True):
+                             S, V, D_mm, use_csf=True, Wb=None):
     """CSF-gewichtetes MTF-Integral mit Dämpfungsfunktion w(V).
 
     w(V) modelliert den Übergang vom augendominierten zum aberrationsdominierten
@@ -304,7 +310,7 @@ def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr,
     weight    = np.array([csf(fi) if use_csf else mtf_eye(fi) for fi in f_cpd_arr])
     _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
     Q_raw  = float(_trapz(msa_arr * weight, nu) / max(_trapz(mp_arr * weight, nu), 1e-12))
-    V_krit = v_krit_naeh(D_mm, _Wb_von_S(S))
+    V_krit = v_krit_naeh(D_mm, Wb if Wb is not None else _Wb_von_S(S))   # v7.3.2: Wb direkt (Inversion unzuverlässig bei Wb > 0,9)
     w      = 1.0 / (1.0 + (V_krit / V) ** 2)
     return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
 
@@ -1404,7 +1410,8 @@ def perceived_quality(D_mm: float, f_mm: float, lam_nm: float,
                       use_csf: bool = True) -> float:
     """Wahrgenommener Qualitätsindex Q_perc(V) — CSF-gewichtetes MTF-Integral."""
     freqs_as, fc, mp, msa, _, S = mtf_kurven(D_mm, f_mm, lam_nm, n_pts)
-    return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf)
+    Wb = _wellenfronten(D_mm, f_mm, lam_nm)[2]
+    return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf, Wb=Wb)
 
 
 def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float, V: float,
@@ -2425,7 +2432,7 @@ class _Diagramme:
                     xy=(N_akt, S_akt), xytext=(8, 10),
                     textcoords="offset points", fontsize=9, color="#333",
                     arrowprops=dict(arrowstyle="-", color="#aaa"))
-        if S_sph and S_sph > S_akt_mar:
+        if S_sph and S_sph > S_akt + 0.002:
             ax.axhline(S_sph, color=COR, lw=1.5, ls="-.",
                        label=f"Verbessert S={S_sph:.3f}")
             ax.annotate(f"S={S_sph:.3f}", xy=(14.5, S_sph),
@@ -3766,7 +3773,6 @@ def main():
         return f"{v:.0f}x" if v > 30.5 else "< 30x"
 
     delta_s    = S_real - S_mar
-    delta_halb = Vk_halb - Vk_naeh
     avp        = r_real["aufl_verlust_pct"]
     alpha_blur = D**3 / (64 * f**2) / f * 206265
 
@@ -3797,17 +3803,17 @@ def main():
                  f"{S_real:.4f} &#8594; {S_slide:.4f}  (&#916; Mar. {delta_s:+.4f})", s_col)
     rows += _row("D_eff Kontrast",       f"{r_real['Deff_k']:.1f} &#8594; {Deff_k_sl:.1f} mm")
     rows += _hdr("Vergr&#246;&#223;erung")
-    rows += _row("V&#189;  D&#183;0.7&#183;&#8730;S",
-                 f"{Vk_naeh:.0f}x &#8594; {Vk_naeh_s:.0f}x  | exakt: {Vk_halb:.0f}x  (&#916; {delta_halb:+.0f}x)")
+    rows += _row("V_krit N&#228;herung D/(13&#183;Wb)",
+                 f"{Vk_naeh:.0f}x &#8594; {Vk_naeh_s:.0f}x", "#534AB7")
+    rows += _row("V&#189; exakt (Halbwertspunkt)", f"{Vk_halb:.0f}x")
     rows += _row("V_krit Blur (geom.)",
                  f"{Vk_blur:.0f}x  &#945;_blur={alpha_blur:.1f}\"" if Vk_blur > 1 else "< 1x - Blur dominiert immer")
     rows += _row("V_krit MTF&#215;CSF >10%",
                  f"{_vk_ex_text(Vk_exakt)} &#8594; {_vk_ex_text(Vk_exakt_s)}")
     rows += _row("Aufl.verlust",         f"{avp:.1f}%  (Blur {r_real['d_blur_as']:.1f}\")")
     rows += _row("Verlust bei 150x",     f"{rv['verlust']:.1f} mm")
-    rows += _row("V_krit / Vmax",
-                 f"{Vk['Vk_sph']:.0f}x &#8594; {Vk_slide['Vk_sph']:.0f}x  | Para: {'&#8734;' if Vk['Vk_para'] >= 1e8 else format(Vk['Vk_para'], '.0f') + 'x'}  | Vmax: {Vk['Vmax']:.0f}x",
-                 "#534AB7")
+    rows += _row("V_krit Paraboloid / Vmax",
+                 f"{'&#8734;' if Vk['Vk_para'] >= 1e8 else format(Vk['Vk_para'], '.0f') + 'x'}  | Vmax: {Vk['Vmax']:.0f}x")
     rows += _hdr("Q_perc (CSF-gewichtet)")
     for lbl_q, q, qs in [("Q bei  30x", Qp_80, Qs_80), ("Q bei  80x", Qp_200, Qs_200),
                          ("Q bei 160x", Qp_350, Qs_350), ("Q bei 150x", Qp_V, Qs_V)]:
@@ -4035,7 +4041,7 @@ def main():
         # damit session_state-Schreibvorgänge nicht mit laufenden Widget-Keys kollidieren.
         bk1, bk2 = st.columns(2)
         if bk1.button("↺  Alle auf Parabel-Sollwerte"):
-            for i in range(1, n_zonen):
+            for i in range(1, nz_tot):
                 k = f"{key_prefix}_z{i}"
                 v = round(float(df_para[i]), 3)
                 # Widget-Key löschen, dann neu setzen – vermeidet Streamlit-Konflikt
@@ -4044,7 +4050,7 @@ def main():
                 st.session_state[k] = v
             st.rerun()
         if bk2.button("✕  Alle auf Null (Kugel)"):
-            for i in range(1, n_zonen):
+            for i in range(1, nz_tot):
                 k = f"{key_prefix}_z{i}"
                 if k in st.session_state:
                     del st.session_state[k]
