@@ -1,7 +1,12 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.2 (2026-11-02)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.3 (2026-11-02)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.3.3 (2026-11-02)  KERNWERTE GEÄNDERT: (1) Geometrischer Blur war doppelt so groß wie richtig: d_blur = D³/(128·f²) ist der Durchmesser des
+                        kleinsten Zerstreuungskreises am besten Fokus (per Strahlverfolgung geprüft: 200/1000 -> 0,0625 mm); die alte Formel D³/(64·f²)
+                        ist der Radius am paraxialen Fokus (stammt aus der Zeit vor dem "best focus"). Betroffen: V_krit Blur (geom.), Aufl.verlust,
+                        alpha_blur. (2) Q_perc entfernt (Relikt: w(V) zählte die Vergrößerung doppelt, Abweichung bis ~0,1 bei kleinem V);
+                        die Kennwerte "Q bei 30x/80x/160x/150x" zeigen jetzt Q_vis exakt (MTF×CSF, Paraboloid = 1; entspricht der Wahrnehmungs-Kurve).
   v7.3.2 (2026-11-02)  Fehlerkorrekturen. KERN (minimal): _perceived_quality_kern bekommt Wb direkt statt es aus S per _Wb_von_S zurückzurechnen
                         (bei Wb > 0,9, z.B. 200/1000, landete die Inversion auf dem falschen Ast -> V_krit/Dämpfung w(V) und damit Q_perc in
                         den Kennwerten verfälscht; z.B. 200/1000 bei 150x: 0,153 -> 0,142; 200/1200, 114/900 unverändert). Strehl-Diagramm: Linie
@@ -79,7 +84,7 @@ Formeln:
 
   Schärfe:
     r_Airy [arcsec]   = 1.22·λ/D·206265
-    d_blur [mm]       = D³ / (64·f²)               [Sacek]
+    d_blur [mm]       = D³ / (128·f²)              [Sacek, kleinster Zerstreuungskreis]
     Dawes [arcsec]    = 116 / D[mm]
 
   Kritische Vergrößerung:
@@ -337,23 +342,6 @@ def _mtf_arrays(Wb: float, S: float, fc: float, n_pts: int):
     return freqs_as, mp, msa, msr
 
 
-def _perceived_quality_kern(freqs_as, fc_scope, mp_arr, msa_arr,
-                             S, V, D_mm, use_csf=True, Wb=None):
-    """CSF-gewichtetes MTF-Integral mit Dämpfungsfunktion w(V).
-
-    w(V) modelliert den Übergang vom augendominierten zum aberrationsdominierten
-    Bereich (eigene Näherungsformel).
-    """
-    nu        = freqs_as / fc_scope
-    f_cpd_arr = freqs_as * 3600.0 / V
-    weight    = np.array([csf(fi) if use_csf else mtf_eye(fi) for fi in f_cpd_arr])
-    _trapz    = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    Q_raw  = float(_trapz(msa_arr * weight, nu) / max(_trapz(mp_arr * weight, nu), 1e-12))
-    V_krit = v_krit_naeh(D_mm, Wb if Wb is not None else _Wb_von_S(S))   # v7.3.2: Wb direkt (Inversion unzuverlässig bei Wb > 0,9)
-    w      = 1.0 / (1.0 + (V_krit / V) ** 2)
-    return float(Q_raw + (1.0 - Q_raw) * (1.0 - w))
-
-
 # ── Öffentliche Rechenfunktionen ──────────────────────────────────────────────
 
 # ── Geglättete Strehl-Kurve (nur für das Diagramm „D_eff vs. Öffnung“) ────────
@@ -403,7 +391,7 @@ def berechne(D_mm: float, f_mm: float, lam_nm: float) -> dict:
     r = _kennzahlen_von_S(D_mm, S_exakt, Wb)
     r["strehl_marechal"] = S_mar         # Maréchal-Wert für Vergleich/Doku
     # Geometrischer Unschärfefleck [Sacek]
-    d_blur_mm = D_mm**3 / (64.0 * f_mm**2)
+    d_blur_mm = D_mm**3 / (128.0 * f_mm**2)
     d_blur_as = d_blur_mm / f_mm * 206265.0
     theta_geo = math.sqrt(r["theta_ideal"]**2 + d_blur_as**2)
     r.update(
@@ -445,7 +433,8 @@ def v_krit_blur_direkt(D_mm: float, f_mm: float,
                         eye_res_as: float = 60.0) -> float:
     """V ab der geometrischer Blur am Auge >= Augenauflösung — direkte Berechnung.
 
-    d_blur [mm] = D³/(64·f²)  — Durchmesser Unschärfefleck am best focus [Sacek]
+    d_blur [mm] = D³/(128·f²)  — Durchmesser des kleinsten Zerstreuungskreises am best focus
+    (1/4 des Blur-Durchmessers D³/(32·f²) am paraxialen Fokus; Strahlverfolgung 200/1000: 0,0628 mm) [Sacek]
     α_blur ["]  = d_blur / f · 206265  — Winkelgröße im Teleskop-Bildfeld
     Am Auge erscheint der Blur vergrößert: α_auge = V · α_blur
     Blur sichtbar wenn α_auge >= eye_res_as:
@@ -455,7 +444,7 @@ def v_krit_blur_direkt(D_mm: float, f_mm: float,
     Interpretation: unterhalb dieser V ist der Blur kleiner als das Auflösungsvermögen
     des Auges und damit nicht wahrnehmbar.
     """
-    d_blur_mm      = D_mm**3 / (64.0 * f_mm**2)
+    d_blur_mm      = D_mm**3 / (128.0 * f_mm**2)
     alpha_blur_as  = d_blur_mm / f_mm * 206265.0
     if alpha_blur_as <= 0:
         return 1e9
@@ -1444,28 +1433,12 @@ def Q_vis_blende_batch(D_mm: float, f_mm: float, lam_nm: float,
     return result
 
 
-def perceived_quality(D_mm: float, f_mm: float, lam_nm: float,
-                      V: float, n_pts: int = 120,
-                      use_csf: bool = True) -> float:
-    """Wahrgenommener Qualitätsindex Q_perc(V) — CSF-gewichtetes MTF-Integral."""
-    freqs_as, fc, mp, msa, _, S = mtf_kurven(D_mm, f_mm, lam_nm, n_pts)
-    Wb = _wellenfronten(D_mm, f_mm, lam_nm)[2]
-    return _perceived_quality_kern(freqs_as, fc, mp, msa, S, V, D_mm, use_csf, Wb=Wb)
-
-
-def perceived_quality_von_S(D_mm: float, S: float, lam_nm: float, V: float,
-                            n_pts: int = 120) -> float:
-    """Q_perc(V) für einen Spiegel mit vorgegebenem Strehl S (Schieber)."""
-    freqs_as, fc, mp, msa, _, S_ = mtf_kurven_von_S(D_mm, S, lam_nm, n_pts)
-    return _perceived_quality_kern(freqs_as, fc, mp, msa, S_, V, D_mm, True)
-
-
-def _qperc_schieber(D_mm, f_mm, lam_nm, S_slide, V):
-    """Q_perc für die Schieberstellung; ohne Verbesserung = echte Kugel."""
+def _qvis_schieber(D_mm, f_mm, lam_nm, S_slide, V):
+    """Q_vis(V) exakt (MTF×CSF, Paraboloid = 1) für die Schieberstellung; ohne Verbesserung = echte Kugel."""
     Wb_r = _wellenfronten(D_mm, f_mm, lam_nm)[2]
     if S_slide <= _strehl_exakt(Wb_r) + 1e-6:
-        return perceived_quality(D_mm, f_mm, lam_nm, V)
-    return perceived_quality_von_S(D_mm, S_slide, lam_nm, V)
+        return perceived_quality_exakt(D_mm, f_mm, lam_nm, V)
+    return perceived_quality_exakt_von_Wb(D_mm, _Wb_schieber(D_mm, f_mm, lam_nm, S_slide), lam_nm, V)
 
 
 def perceived_quality_exakt(D_mm: float, f_mm: float, lam_nm: float,
@@ -2311,7 +2284,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.3.2 (2026-11-02)"
+VERSION  = "7.3.3 (2026-11-02)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -2337,8 +2310,8 @@ STRINGS = {
                      "en": "Contrast"},
     "grp_sharpness": {"de": "Schärfe bei gewählter Vergrößerung",
                       "en": "Sharpness at selected magnification"},
-    "grp_qvis":  {"de": "Wahrgenommener Kontrast Q_perc (CSF-gewichtet)",
-                  "en": "Perceived contrast Q_perc (CSF-weighted)"},
+    "grp_qvis":  {"de": "Visueller Qualitätsindex Q_vis (MTF×CSF, Paraboloid = 1)",
+                  "en": "Visual quality index Q_vis (MTF×CSF, paraboloid = 1)"},
     # Karten-Labels
     "rN":           {"de": "Öffnungsverhältnis",              "en": "Focal ratio"},
     "rWp":          {"de": "W_PtV paraxial [λ]",              "en": "W_PtV paraxial [λ]"},
@@ -2356,10 +2329,10 @@ STRINGS = {
                      "en": "Resolut. loss vs. paraboloid [%]"},
     "rVerlustV":    {"de": "Verlust bei dieser Vergr. [mm]",
                      "en": "Loss at this magnif. [mm]"},
-    "rQp80":        {"de": "Q_perc  bei  30×",          "en": "Q_perc  at  30×"},
-    "rQp200":       {"de": "Q_perc  bei  80×",          "en": "Q_perc  at  80×"},
-    "rQp350":       {"de": "Q_perc  bei 160×",          "en": "Q_perc  at 160×"},
-    "rQpV":         {"de": "Q_perc  bei Slider-Vergr.", "en": "Q_perc  at slider magnif."},
+    "rQp80":        {"de": "Q_vis  bei 30×",          "en": "Q_vis  at  30×"},
+    "rQp200":       {"de": "Q_vis  bei 80×",          "en": "Q_vis  at  80×"},
+    "rQp350":       {"de": "Q_vis  bei 160×",          "en": "Q_vis  at 160×"},
+    "rQpV":         {"de": "Q_vis  bei Slider-Vergr.", "en": "Q_vis  at slider magnif."},
     # Tab-Titel
     "grp_kern":        {"de": "Kernwerte", "en": "Key values"},
     "grp_t_grund":     {"de": "  Grundlagen  ",             "en": "  Basics  "},
@@ -3266,11 +3239,11 @@ class App(tk.Tk):
             Wb_s         = _Wb_schieber(D, f, lam, S_slide)
             Vk_slide["Vk_sph"] = v_krit_naeh(D, Wb_s)
             Vk_exakt_s   = v_krit_aus_qvis_von_Wb(D, Wb_s, lam, rel_schwelle=0.90)
-            Qp_80        = perceived_quality(D, f, lam, 30.0)
-            Qp_200       = perceived_quality(D, f, lam, 80.0)
-            Qp_350       = perceived_quality(D, f, lam, 160.0)
-            Qp_V         = perceived_quality(D, f, lam, 150.0)
-            Qp_s         = tuple(_qperc_schieber(D, f, lam, S_slide, v)
+            Qp_80        = perceived_quality_exakt(D, f, lam, 30.0)
+            Qp_200       = perceived_quality_exakt(D, f, lam, 80.0)
+            Qp_350       = perceived_quality_exakt(D, f, lam, 160.0)
+            Qp_V         = perceived_quality_exakt(D, f, lam, 150.0)
+            Qp_s         = tuple(_qvis_schieber(D, f, lam, S_slide, v)
                                  for v in (30.0, 80.0, 160.0, 150.0))
 
             if self._compute_cancel:
@@ -3790,7 +3763,7 @@ class App(tk.Tk):
                  f"  |  V½ exakt: {Vk_halb:.0f}×",
             fg=col_naeh)
         rv2["rVkrit_blur"].config(
-            text=(f"{Vk_blur:.0f}×  (α_blur={D**3/(64*f**2)/f*206265:.1f}\"  — unabh. von S)"
+            text=(f"{Vk_blur:.0f}×  (α_blur={D**3/(128*f**2)/f*206265:.1f}\"  — unabh. von S)"
                   if Vk_blur > 1 else "< 1×  — Blur dominiert immer"),
             fg=col_blur)
         rv2["rVkrit_exakt"].config(
