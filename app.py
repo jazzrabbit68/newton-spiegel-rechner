@@ -5,6 +5,14 @@ Streamlit-Version v7.5.0 (2026-11-03)
 Entspricht newton_spiegel_rechner.py v7.5.0
 
 Änderungshistorie (jüngste zuerst):
+  v7.5.1 (2026-11-03)  FEHLER KORRIGIERT (Review): (1) Étendue beim Abblenden — qabs_zaehler reduziert die Leuchtdichte für die
+                        CSF jetzt um rho_s² = (V·d_p/D)², wenn die Augenpupille den Spiegel abblendet (vorher: L unverändert,
+                        d. h. die Pupillenkurven rechneten bei abgeblendeter Optik mit der vollen Öffnungs-Helligkeit und
+                        damit zu photopisch; betrifft die v7.5.0-Pupillenkurven mit gesetztem L, Kurven relativ zu einem
+                        gleich abgeblendeten Paraboloid verschieben sich dadurch leicht). (2) _kennzahlen_von_S: Qvis =
+                        Qshape statt S·Qshape (Doppel-Strehl, gleicher Fehlertyp wie Q_perc vor v7.3.0; Feld wird aktuell
+                        nirgends angezeigt, nur Konsistenz). (3) Wahrnehmung-Tab: Schieber-Pupillenkurve nutzt jetzt
+                        wf=_wf_kugel(Wb_s) statt der S->Wb-Inversion, die bei S < ~0,09 (schnelle Kugeln) versagt.
   v7.5.0 (2026-11-03)  Leuchtdichte und Augenpupille zusammengeführt: ein Auswahlfeld "Objekt" setzt Bildhelligkeit L UND Augenpupille d_p gemeinsam
                         (Mond 2500 cd/m² / 2,5 mm · Jupiter 6000 / 3 · Saturn 500 / 4 · Mars 300 / 4 · helles DSO 5 / 6 · schwaches DSO 0,5 / 7; "Aus" = photopisch
                         ohne Abblenden; "Frei" = L und d_p selbst eintragen). Die Pupillenkurven (MIT Augenpupille) rechnen jetzt mit derselben
@@ -100,7 +108,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.5.0 (2026-11-03)"
+VERSION = "7.5.1 (2026-11-03)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -296,8 +304,11 @@ def _kennzahlen_von_S(D_mm: float, S: float, Wb: float) -> dict:
     Q04 = mtf_sph_rel(0.4, Wb)
     Q06 = mtf_sph_rel(0.6, Wb)
     # MTF-Form-Qualität: gewichtetes Mittel grober/mittlerer/feiner Details
+    # v7.5.1: KEIN zusätzlicher Faktor S mehr (Qvis = S*Qshape zählte den
+    # Strehl doppelt — mtf_sph_rel enthält ihn bereits; gleicher Fehlertyp
+    # wie Q_perc vor v7.3.0). Feld wird aktuell nirgends angezeigt.
     Qshape  = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
-    Qvis    = S * Qshape
+    Qvis    = Qshape
     Deff_vis = D_mm * Qvis**0.25
     return dict(strehl=S, Wb=Wb,
                 Deff_k=Deff_k,   loss_k=D_mm - Deff_k,
@@ -1907,13 +1918,20 @@ def qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm=550.0, seeing=0.0,
     """∫ MTF_ges(ν) · CSF(ν/V) dν  über die WINKELfrequenz (absolut).
     d_pupil: Augenpupille [mm] (0 = aus): bei Austrittspupille D/V > d_pupil
     nutzt das Auge nur die Teilöffnung V·d_pupil (blendet den Spiegel ab).
-    wf: optionale Foucault-Wellenfront; mtf_nu: fertige Gesamt-MTF (nur ohne Pupille)."""
+    wf: optionale Foucault-Wellenfront; mtf_nu: fertige Gesamt-MTF (nur ohne Pupille).
+
+    v7.5.1: Étendue — blendet die Augenpupille ab (rho_s < 1), sinkt die
+    Netzhautleuchtdichte um (V·d_p/D)² = rho_s² (s. helligkeit_praxis).
+    Die effektive Leuchtdichte L_eff = L·rho_s² wird an die leuchtdichte-
+    abhängige CSF weitergegeben; ohne Abblenden (rho_s = 1) unverändert."""
     _tr = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    if mtf_nu is not None and wf is None and _rho_s(D_mm, V, d_pupil) >= 0.999:
-        x, base, nu = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L)
+    rs = _rho_s(D_mm, V, d_pupil)
+    L_eff = None if L is None else float(L) * min(1.0, rs ** 2)
+    if mtf_nu is not None and wf is None and rs >= 0.999:
+        x, base, nu = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L_eff)
         return float(_tr(np.interp(nu, _QABS_NUG, mtf_nu) * base, x))
     m, D_use = _mtf_eff(D_mm, S, d_fang_mm, V, d_pupil, wf, lam_nm)
-    x, base, nu = _qabs_basis(D_use, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L)
+    x, base, nu = _qabs_basis(D_use, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L_eff)
     return float(_tr(np.interp(nu, _QABS_NUG, m) * base, x))
 
 
@@ -1942,6 +1960,9 @@ def qvis_pupille_kurve(D_mm: float, S, V_arr, d_pupil: float,
     Aberration wird nur über diese Teilöffnung gerechnet (mit Refokus).
     wf: Wellenfront der Kugel (dict) oder None -> S-Modell (Kugelwellenfront
     zu S, wie beim Schieber).  Ohne Seeing, ohne Fangspiegel.
+    L (v7.5.1): wird beim Abblenden um rho_s² reduziert (Étendue, s.
+    qabs_zaehler) — die CSF der Pupillenkurven rechnet also mit der
+    REALen Netzhautleuchtdichte, nicht mit der bei voller Öffnung.
     Auswertung auf einem groben V-Gitter (verdichtet um V = D/d_p), dazwischen
     linear interpoliert."""
     V_arr = np.asarray(V_arr, dtype=float)
@@ -2817,7 +2838,11 @@ class _Diagramme:
         if d_pup > 0:
             Qp_sph = qvis_pupille_kurve(D, 1.0, V_arr, d_pup, lam, wf=_wf_kugel(Wb, lam), L=L_obj)
             if has_slide:
-                Qp_slide = qvis_pupille_kurve(D, S_slide, V_arr, d_pup, lam, L=L_obj)
+                # v7.5.1: wf statt S-Modell — _Wb_von_S versagt bei S < ~0,09
+                # (schnelle Kugeln mit Schieber knapp über Kugel-Strehl);
+                # _Wb_schieber liefert bei Schieber = Kugel die echte Kugel.
+                Qp_slide = qvis_pupille_kurve(D, S_slide, V_arr, d_pup, lam,
+                                              wf=_wf_kugel(Wb_s, lam), L=L_obj)
 
         if L_obj is None:      # Q̃-Näherung gilt nur photopisch
             ax.fill_between(V_arr, Qe_sph, Qn_sph,
