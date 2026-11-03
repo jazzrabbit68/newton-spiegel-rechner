@@ -1,7 +1,32 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.3.3 (2026-11-02)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.5.1 (2026-11-03)
 ============================================================================================
 Änderungshistorie (jüngste zuerst):
+  v7.5.1 (2026-11-03)  KERNWERTE GEÄNDERT: (1) Objekt-Helligkeiten korrigiert (Flächenhelligkeit aus Sonnenlicht pro Fläche × Albedo bzw. aus Magnitude pro
+                        Bogensekunde²; Größenordnungen ±30 %): Mond 2500 -> 3500, Jupiter 6000 -> 600, Saturn 500 -> 200, Mars 300 -> 2000 cd/m². Q_vis ändert sich
+                        dadurch nicht (alle > 100 cd/m² = photopisch); geändert ist die Helligkeitsgrenze im Grenzen-Tab (Standard Jupiter) und die Absolutwerte im
+                        Blende-Tab (Zeilen "Jupiter" 6000 -> 600, "Mars/Saturn" 500 -> "Saturn" 200). (2) Aus Martins Review übernommen: _kennzahlen_von_S: Qvis = Qshape
+                        statt S·Qshape (Doppel-Strehl; Feld wird aktuell nirgends angezeigt). (3) Aus Martins Review übernommen: Wahrnehmung-Tab: Schieber-Pupillenkurve
+                        (und Ablesezeile Desktop) nutzt wf=_wf_kugel(Wb_Schieber) statt der S->Wb-Inversion, die bei S < ~0,09 (schnelle Kugeln) versagt.
+                        (4) Numerik: bei gesetztem L rechnen die Kurven mit feinerem ν-Gitter (≥ 200 Punkte; die CSF-Spitze liegt bei sehr kleinem ν, 80 Punkte
+                        ergaben bei L = 0,5 und 30x bis 0,03 zu wenig). NICHT übernommen: Étendue-Änderung in qabs_zaehler (L_eff = L·rho_s²): sie wirkt in der falschen Richtung. Retinale Leuchtdichte sinkt erst, wenn die
+                        Austrittspupille D/V KLEINER als die Augenpupille wird (hohe V), nicht wenn das Auge abblendet (rho_s < 1, niedrige V). Eine korrekte Étendue
+                        (L_eff = L·min(1, (D/(V·d_p))²)) würde die Kurven bei hoher V deutlich anheben und ist als eigene Entscheidung offen.
+  v7.5.0 (2026-11-03)  Leuchtdichte und Augenpupille zusammengeführt: ein Auswahlfeld "Objekt" setzt Bildhelligkeit L UND Augenpupille d_p gemeinsam
+                        (Mond 2500 cd/m² / 2,5 mm · Jupiter 6000 / 3 · Saturn 500 / 4 · Mars 300 / 4 · helles DSO 5 / 6 · schwaches DSO 0,5 / 7; "Aus" = photopisch
+                        ohne Abblenden; "Frei" = L und d_p selbst eintragen). Die Pupillenkurven (MIT Augenpupille) rechnen jetzt mit derselben
+                        leuchtdichteabhängigen CSF wie die exakten Kurven (vorher photopisch). Standard = Jupiter (L ≥ 100 cd/m² gilt photopisch, d_p = 3 mm), d. h.
+                        Standardanzeige wie v7.4.0 mit Pupille 3 mm. Hinweis: Pupillenkurven sind auf einen gleich abgeblendeten Paraboloid normiert; der Öffnungsverlust
+                        durch das Abblenden steckt NICHT in Q_vis, sondern in Q_abs (Tab Vergleich). d_p-Werte sind Richtwerte aus der Praxis, keine Messwerte.
+  v7.4.0 (2026-11-03)  NEUES FEATURE + KERNWERTE (nur wenn Leuchtdichte gewählt): Q_vis berücksichtigt jetzt die Bildhelligkeit. Bei wenig Licht
+                        (dunkles Deep-Sky-Feld) wandert die Spitze der Kontrastempfindlichkeit (CSF) zu NIEDRIGEREN Ortsfrequenzen (≈2 statt ≈8 cpd bei
+                        0,5 statt 100 cd/m²); grobe Strukturen dominieren, dort ist ein schlechter Spiegel relativ gut. Der Wahrnehmungs-Tab hat dafür das neue
+                        Eingabefeld "Leuchtdichte L [cd/m²]" (0 = aus = photopisch wie bisher; Mond 2500, Jupiter 6000, Saturn 500, Mars 300, helles DSO 5,
+                        schwaches DSO 0,5). Beispiel 200/1000, 30x: Q_vis 0,37 (photopisch) -> 0,62 (L=5) -> 0,79 (L=0,5). Standard bleibt photopisch, damit die
+                        Kennwerte und alle früheren Zahlen reproduzierbar bleiben. Verschiebung der Spitze: f_Spitze ∝ (L/100)^0,25 (nach oben bei L≥100 gedeckelt);
+                        Exponent 0,25 ist eine an Barten (1999) angelehnte Näherung, kein Messwert. FEHLER KORRIGIERT: csf_lum (Blende-Tab) verschob die
+                        CSF-Spitze bei wenig Licht in die falsche Richtung (zu höheren statt niedrigeren Frequenzen); Absolutwerte im Blende-Tab ändern sich dadurch.
+                        Hinweis: Q̃-Näherung, V_krit, V½ und die Augenpupillen-Kurven bleiben photopisch; bei gesetztem L werden die Q̃-Kurven ausgeblendet.
   v7.3.3 (2026-11-02)  KERNWERTE GEÄNDERT: (1) Geometrischer Blur war doppelt so groß wie richtig: d_blur = D³/(128·f²) ist der Durchmesser des
                         kleinsten Zerstreuungskreises am besten Fokus (per Strahlverfolgung geprüft: 200/1000 -> 0,0625 mm); die alte Formel D³/(64·f²)
                         ist der Radius am paraxialen Fokus (stammt aus der Zeit vor dem "best focus"). Betroffen: V_krit Blur (geom.), Aufl.verlust,
@@ -321,7 +346,8 @@ def _kennzahlen_von_S(D_mm: float, S: float, Wb: float) -> dict:
     Q06 = mtf_sph_rel(0.6, Wb)
     # MTF-Form-Qualität: gewichtetes Mittel grober/mittlerer/feiner Details
     Qshape  = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
-    Qvis    = S * Qshape
+    # v7.5.1: KEIN zusätzlicher Faktor S mehr (mtf_sph_rel enthält den Strehl bereits; Doppelzählung)
+    Qvis    = Qshape
     Deff_vis = D_mm * Qvis**0.25
     return dict(strehl=S, Wb=Wb,
                 Deff_k=Deff_k,   loss_k=D_mm - Deff_k,
@@ -713,13 +739,26 @@ def v_max_helligkeit(D_mm: float, L0: float, D_auge_mm: float = 6.0,
 # Werte aus csf_lum-Dokumentation übernommen, um Mars/Saturn getrennt und
 # Mond ergänzt.
 OBJEKT_HELLIGKEITEN = [
-    ("Mond",           2500.0),
-    ("Jupiter",        6000.0),
-    ("Saturn",          500.0),
-    ("Mars",            300.0),
+    ("Mond",           3500.0),
+    ("Jupiter",         600.0),
+    ("Saturn",          200.0),
+    ("Mars",           2000.0),
     ("Helles DSO",        5.0),
     ("Schwaches DSO",     0.5),
 ]
+
+# Augenpupille d_p [mm] je Objekt (v7.5.0, Richtwerte aus der Praxis)
+OBJEKT_PUPILLE = {"Mond": 2.5, "Jupiter": 3.0, "Saturn": 4.0, "Mars": 4.0,
+                  "Helles DSO": 6.0, "Schwaches DSO": 7.0}
+
+
+def _L_wirksam(L):
+    """Leuchtdichte für die CSF-Verschiebung: None (= photopisch), wenn nicht gesetzt oder ≥ 100 cd/m²."""
+    try:
+        L = float(L or 0.0)
+    except (TypeError, ValueError):
+        return None
+    return L if 0.0 < L < 100.0 else None
 
 
 def kurven_N(D_mm, lam_nm, N_min=3.0, N_max=15.0, schritte=150):
@@ -1351,20 +1390,49 @@ def csf_lum(f_cpd: float, L: float) -> float:
 
     Bei niedriger Leuchtdichte L [cd/m²]:
       - Amplitude sinkt ∝ √(L/L_ref)
-      - Peak-Frequenz verschiebt leicht  ∝ (L/L_ref)^0.1
+      - Spitze wandert zu NIEDRIGEREN Frequenzen ∝ (L/L_ref)^0,25  (s. csf_L)
+        (bis v7.3.3 war die Richtung falsch: Spitze wanderte zu höheren Frequenzen)
 
     L_ref = 100 cd/m² (mittlere photopische Leuchtdichte).
     Typische Werte am Okular (geschätzt):
-      Jupiter-Scheibe  ~6000 cd/m²
-      Mars/Saturn       ~500 cd/m²
+      Mond             ~3500 cd/m²   Mars (Opposition) ~2000 cd/m²
+      Jupiter-Scheibe   ~600 cd/m²   Saturn            ~200 cd/m²
       Schwacher Planet   ~50 cd/m²
       Heller Nebel        ~5 cd/m²
       Schwaches Deep-Sky ~0.5 cd/m²
     """
     L = max(L, 1e-4)
-    f_scale = (L / _L_REF) ** 0.1
     a_scale = (L / _L_REF) ** 0.5
-    return csf(f_cpd * f_scale) * a_scale
+    return float(csf_L(f_cpd, L)) * a_scale
+
+
+# ── v7.4.0: Leuchtdichte-abhängige CSF für Q_vis ─────────────────────────
+# Spitze der Kontrastempfindlichkeit f_Spitze ≈ 7,9 cpd · (L/100)^0,25
+# (nach oben bei L ≥ 100 cd/m² gedeckelt). Exponent: Näherung, angelehnt an
+# Barten (1999); bei 0,5 / 5 / 100 cd/m² liegt die Spitze bei 2,1 / 3,7 / 7,9 cpd.
+# Die Amplitude kürzt sich in Q_vis (Verhältnis zum Paraboloid) heraus, nur die
+# Verschiebung der Spitze wirkt.
+_CSF_L_EXPO = 0.25
+
+
+def _csf_shift(L=None) -> float:
+    """Frequenz-Skalierung der CSF-Spitze; L None oder ≥ L_ref -> 1 (photopisch)."""
+    if L is None:
+        return 1.0
+    return min((max(float(L), 1e-4) / _L_REF) ** _CSF_L_EXPO, 1.0)
+
+
+def csf_L(f_cpd, L=None):
+    """CSF (Mannos/Sakrison-Form) mit zu niedrigeren Frequenzen verschobener
+    Spitze bei wenig Licht; akzeptiert Skalar oder Array. L=None -> identisch
+    zu csf()."""
+    f = np.maximum(np.asarray(f_cpd, dtype=float) / _csf_shift(L), 1e-6)
+    return 2.6 * (0.0192 + 0.114 * f) * np.exp(-((0.114 * f) ** 1.1))
+
+
+def csf_spitze_cpd(L=None) -> float:
+    """Lage der CSF-Spitze [cpd] (nur zur Anzeige)."""
+    return 7.9 * _csf_shift(L)
 
 
 def Q_vis_blende(D_mm: float, f_mm: float, lam_nm: float,
@@ -1425,28 +1493,31 @@ def Q_vis_blende_batch(D_mm: float, f_mm: float, lam_nm: float,
     V_g   = V_arr[None, :, None]                            # (1, nV, 1)
     f_cpd = nu_g * fc_orig * 3600.0 / V_g                   # (n, nV, nL) via broadcast
     L_s   = np.maximum(L_ok, 1e-4)
-    f_sc  = (L_s / 100.0) ** 0.1
+    f_sc  = np.minimum((L_s / 100.0) ** _CSF_L_EXPO, 1.0)
     a_sc  = (L_s / 100.0) ** 0.5
-    f_eff = np.maximum(f_cpd * f_sc, 1e-6)
+    f_eff = np.maximum(f_cpd / f_sc, 1e-6)
     csf_m = 2.6 * (0.0192 + 0.114 * f_eff) * np.exp(-((0.114 * f_eff) ** 1.1)) * a_sc
     result = _trapz(ms_mp[:, None, None] * csf_m, nu, axis=0)  # (nV, nL)
     return result
 
 
-def _qvis_schieber(D_mm, f_mm, lam_nm, S_slide, V):
-    """Q_vis(V) exakt (MTF×CSF, Paraboloid = 1) für die Schieberstellung; ohne Verbesserung = echte Kugel."""
+def _qvis_schieber(D_mm, f_mm, lam_nm, S_slide, V, L=None):
+    """Q_vis(V) exakt (MTF×CSF, Paraboloid = 1) für die Schieberstellung; ohne Verbesserung = echte Kugel.
+    L: Leuchtdichte [cd/m²] oder None (= photopisch, wie bisher)."""
     Wb_r = _wellenfronten(D_mm, f_mm, lam_nm)[2]
     if S_slide <= _strehl_exakt(Wb_r) + 1e-6:
-        return perceived_quality_exakt(D_mm, f_mm, lam_nm, V)
-    return perceived_quality_exakt_von_Wb(D_mm, _Wb_schieber(D_mm, f_mm, lam_nm, S_slide), lam_nm, V)
+        return perceived_quality_exakt(D_mm, f_mm, lam_nm, V, L=L)
+    return perceived_quality_exakt_von_Wb(D_mm, _Wb_schieber(D_mm, f_mm, lam_nm, S_slide), lam_nm, V, L=L)
 
 
 def perceived_quality_exakt(D_mm: float, f_mm: float, lam_nm: float,
-                             V: float, n_pts: int = 200) -> float:
+                             V: float, n_pts: int = 200, L=None) -> float:
     """Q_vis exakt: MTF×CSF-Integral ohne Dämpfungsfunktion w(V).
 
     Q_vis(V) = ∫ msr·mp·CSF dν / ∫ mp·CSF dν
     Grenzwerte:  Q_vis(V→V_min) → 1   ·   Q_vis(V→∞) → S_form
+    L (v7.4.0): Leuchtdichte [cd/m²]; verschiebt die CSF-Spitze zu niedrigeren
+    Frequenzen (s. csf_L).  None = photopisch (Mannos/Sakrison, wie bisher).
     """
     _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
     fc     = D_mm / (lam_nm * 1e-6 * 206265)
@@ -1454,18 +1525,21 @@ def perceived_quality_exakt(D_mm: float, f_mm: float, lam_nm: float,
     nu     = np.linspace(0.0, 1.0, n_pts)
     mp     = np.array([mtf_para(f)          for f in nu])
     msr    = np.array([mtf_sph_rel(f, Wb)   for f in nu])
-    w_csf  = np.array([csf(fi * 3600.0 / V) for fi in nu * fc])
+    w_csf  = csf_L(nu * fc * 3600.0 / V, L)
     return float(_trapz(msr * mp * w_csf, nu) /
                  max(_trapz(mp * w_csf, nu), 1e-12))
 
 
 def perceived_quality_exakt_kurven(D_mm: float, f_mm: float, lam_nm: float,
-                                    V_arr: np.ndarray, n_pts: int = 80) -> np.ndarray:
+                                    V_arr: np.ndarray, n_pts: int = 80, L=None) -> np.ndarray:
     """perceived_quality_exakt für ein Array von Vergrößerungen — vektorisiert.
 
     MTF-Arrays werden einmal berechnet, CSF-Gewichtung per numpy-Broadcast
     über alle V gleichzeitig → ~7× schneller als Schleife.
+    L: Leuchtdichte [cd/m²] oder None (= photopisch).
     """
+    if L is not None:
+        n_pts = max(n_pts, 200)   # v7.5.1: bei wenig Licht liegt die CSF-Spitze bei sehr kleinem ν -> feineres Gitter
     _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
     lam_mm  = lam_nm * 1e-6
     _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
@@ -1476,28 +1550,34 @@ def perceived_quality_exakt_kurven(D_mm: float, f_mm: float, lam_nm: float,
     # (n_pts, n_V) broadcast: CSF-Matrix
     V_arr   = np.asarray(V_arr)
     f_cpd   = np.maximum(nu[:, None] * fc * 3600.0 / V_arr[None, :], 1e-6)
-    csf_mat = 2.6 * (0.0192 + 0.114 * f_cpd) * np.exp(-((0.114 * f_cpd) ** 1.1))
+    csf_mat = csf_L(f_cpd, L)
     num = _trapz(msr[:, None] * mp[:, None] * csf_mat, nu, axis=0)
     den = _trapz(mp[:, None] * csf_mat, nu, axis=0)
     return num / np.maximum(den, 1e-12)
 
 
 def perceived_quality_exakt_von_Wb(D_mm: float, Wb: float, lam_nm: float,
-                                    V: float, n_pts: int = 80) -> float:
-    """Q_vis exakt direkt aus Wb — für Schieber-Kurve mit beliebigem Strehl."""
+                                    V: float, n_pts: int = 80, L=None) -> float:
+    """Q_vis exakt direkt aus Wb — für Schieber-Kurve mit beliebigem Strehl.
+    L: Leuchtdichte [cd/m²] oder None (= photopisch)."""
+    if L is not None:
+        n_pts = max(n_pts, 200)   # v7.5.1: feineres Gitter bei wenig Licht
     fc     = D_mm / (lam_nm * 1e-6 * 206265)
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
     nu     = np.linspace(0.0, 1.0, n_pts)
     mp     = np.array([mtf_para(f)          for f in nu])
     msr    = np.array([mtf_sph_rel(f, Wb)   for f in nu])
-    w_csf  = np.array([csf(fi * 3600.0 / V) for fi in nu * fc])
+    w_csf  = csf_L(nu * fc * 3600.0 / V, L)
     return float(_trapz(msr * mp * w_csf, nu) /
                  max(_trapz(mp * w_csf, nu), 1e-12))
 
 
 def perceived_quality_exakt_kurven_von_Wb(D_mm: float, Wb: float, lam_nm: float,
-                                           V_arr: np.ndarray, n_pts: int = 80) -> np.ndarray:
-    """perceived_quality_exakt_von_Wb für ein Array von Vergrößerungen — vektorisiert."""
+                                           V_arr: np.ndarray, n_pts: int = 80, L=None) -> np.ndarray:
+    """perceived_quality_exakt_von_Wb für ein Array von Vergrößerungen — vektorisiert.
+    L: Leuchtdichte [cd/m²] oder None (= photopisch)."""
+    if L is not None:
+        n_pts = max(n_pts, 200)   # v7.5.1: feineres Gitter bei wenig Licht
     _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
     fc      = D_mm / (lam_nm * 1e-6 * 206265)
     nu      = np.linspace(0.0, 1.0, n_pts)
@@ -1505,16 +1585,14 @@ def perceived_quality_exakt_kurven_von_Wb(D_mm: float, Wb: float, lam_nm: float,
     msr     = np.array([mtf_sph_rel(f, Wb) for f in nu])
     V_arr   = np.asarray(V_arr)
     f_cpd   = np.maximum(nu[:, None] * fc * 3600.0 / V_arr[None, :], 1e-6)
-    csf_mat = 2.6 * (0.0192 + 0.114 * f_cpd) * np.exp(-((0.114 * f_cpd) ** 1.1))
+    csf_mat = csf_L(f_cpd, L)
     num = _trapz(msr[:, None] * mp[:, None] * csf_mat, nu, axis=0)
     den = _trapz(mp[:, None] * csf_mat, nu, axis=0)
     return num / np.maximum(den, 1e-12)
 
 
-
-
 def qvis_einzelrechner(D_mm: float, S: float, V: float,
-                       lam_nm: float = 550.0) -> dict:
+                       lam_nm: float = 550.0, L=None) -> dict:
     """Q_vis für EINEN einzelnen Spiegel: Öffnung D, Strehl S, Vergrößerung V
     (neu in v6.10.0).
 
@@ -1534,7 +1612,7 @@ def qvis_einzelrechner(D_mm: float, S: float, V: float,
     """
     S  = min(max(float(S), 1e-6), 1.0)
     Wb = _Wb_von_S(S)
-    Q  = 1.0 if Wb <= 1e-9 else perceived_quality_exakt_von_Wb(D_mm, Wb, lam_nm, V)
+    Q  = 1.0 if Wb <= 1e-9 else perceived_quality_exakt_von_Wb(D_mm, Wb, lam_nm, V, L=L)   # L: v7.4.0, None = photopisch
     S_ph = _strehl_exakt(Wb)
     Vk_w = v_wendepunkt_naeh(D_mm, Wb)
     w    = 1.0 / (1.0 + (Vk_w / max(V, 1e-9)) ** 2)
@@ -1835,7 +1913,7 @@ def _qabs_mtf(S: float, eps: float, rho_s: float = 1.0) -> np.ndarray:
     return _QABS_MTF[key]
 
 
-def _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=True):
+def _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=True, L=None):
     """Strehl-unabhängiger Teil: (x_ang [cyc/″], Gewicht) für Spiegel-Ø D."""
     fc = D_mm / (lam_nm * 1e-6 * 206265.0)             # cyc/arcsec
     # Nur der vom Auge sichtbare Bereich (≤70 cyc/° am Auge) wird integriert: sonst wird bei
@@ -1843,7 +1921,7 @@ def _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=True):
     nu_max = min(1.0, 70.0 * V / 3600.0 / fc)
     nu = np.linspace(0.0, nu_max, _QABS_N)
     x  = nu * fc
-    w  = np.array([csf(v * 3600.0 / V) for v in x])
+    w  = csf_L(x * 3600.0 / V, L)                      # v7.5.0: L=None -> photopisch (wie bisher)
     see = seeing_mtf(x * 206265.0, seeing, lam_nm)
     return x, (_qabs_mo(d_fang_mm / D_mm) if mit_mo else 1.0) * w * see, nu
 
@@ -1914,27 +1992,27 @@ def _mtf_eff(D_mm, S, d_fang_mm, V, d_pupil=0.0, wf=None, lam_nm=550.0):
 
 
 def qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm=550.0, seeing=0.0,
-                 mtf_nu=None, d_pupil=0.0, wf=None) -> float:
+                 mtf_nu=None, d_pupil=0.0, wf=None, L=None) -> float:
     """∫ MTF_ges(ν) · CSF(ν/V) dν  über die WINKELfrequenz (absolut).
     d_pupil: Augenpupille [mm] (0 = aus): bei Austrittspupille D/V > d_pupil
     nutzt das Auge nur die Teilöffnung V·d_pupil (blendet den Spiegel ab).
     wf: optionale Foucault-Wellenfront; mtf_nu: fertige Gesamt-MTF (nur ohne Pupille)."""
     _tr = getattr(np, "trapezoid", getattr(np, "trapz", None))
     if mtf_nu is not None and wf is None and _rho_s(D_mm, V, d_pupil) >= 0.999:
-        x, base, nu = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=False)
+        x, base, nu = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L)
         return float(_tr(np.interp(nu, _QABS_NUG, mtf_nu) * base, x))
     m, D_use = _mtf_eff(D_mm, S, d_fang_mm, V, d_pupil, wf, lam_nm)
-    x, base, nu = _qabs_basis(D_use, d_fang_mm, V, lam_nm, seeing, mit_mo=False)
+    x, base, nu = _qabs_basis(D_use, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L)
     return float(_tr(np.interp(nu, _QABS_NUG, m) * base, x))
 
 
 def qabs(D_mm, S, d_fang_mm, V, ref_D=200.0, ref_S=1.0, ref_d=0.0,
-         lam_nm=550.0, seeing=0.0, mtf_nu=None, d_pupil=0.0, wf=None) -> float:
+         lam_nm=550.0, seeing=0.0, mtf_nu=None, d_pupil=0.0, wf=None, L=None) -> float:
     """Absolutes Q_abs: sichtbare Detailübertragung relativ zu einem festen
     Referenzspiegel (Standard: idealer 200-mm ohne Fangspiegel = 1; der
     Referenzspiegel wird von derselben Augenpupille abgeblendet)."""
-    return (qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm, seeing, mtf_nu, d_pupil, wf) /
-            max(qabs_zaehler(ref_D, ref_S, ref_d, V, lam_nm, seeing, None, d_pupil), 1e-12))
+    return (qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm, seeing, mtf_nu, d_pupil, wf, L) /
+            max(qabs_zaehler(ref_D, ref_S, ref_d, V, lam_nm, seeing, None, d_pupil, None, L), 1e-12))
 
 
 def _wf_kugel(Wb: float, lam_nm: float = 550.0) -> dict:
@@ -1944,7 +2022,7 @@ def _wf_kugel(Wb: float, lam_nm: float = 550.0) -> dict:
 
 
 def qvis_pupille_kurve(D_mm: float, S, V_arr, d_pupil: float,
-                       lam_nm: float = 550.0, wf=None) -> np.ndarray:
+                       lam_nm: float = 550.0, wf=None, L=None) -> np.ndarray:
     """Q_vis(V) MIT Abblenden durch die Augenpupille (v7.2.0).
 
     Relativ zu einem idealen Spiegel gleicher Öffnung, der von derselben
@@ -1964,7 +2042,7 @@ def qvis_pupille_kurve(D_mm: float, S, V_arr, d_pupil: float,
     gitter += [v for v in np.linspace(0.75 * vs, 1.45 * vs, 22) if v0 <= v <= v1]
     gitter = np.unique(np.round(gitter, 3))
     q = np.array([qabs(D_mm, S, 0.0, float(v), D_mm, 1.0, 0.0, lam_nm, 0.0,
-                       d_pupil=d_pupil, wf=wf) for v in gitter])
+                       d_pupil=d_pupil, wf=wf, L=L) for v in gitter])
     return np.interp(V_arr, gitter, q)
 
 
@@ -2284,7 +2362,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.3.3 (2026-11-02)"
+VERSION  = "7.5.1 (2026-11-03)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -2760,6 +2838,25 @@ class App(tk.Tk):
                          bg=BG, fg="#666", font=("Helvetica", 9)).pack(side="left", padx=(2, 0))
                 e_pp.bind("<Return>",   self._wahrnehmung_neu)
                 e_pp.bind("<FocusOut>", self._wahrnehmung_neu)
+                wn3 = tk.Frame(frm, bg=BG)
+                wn3.pack(side="top", fill="x", padx=8, pady=(2, 0))
+                tk.Label(wn3, text="Objekt:", bg=BG, fg="#111",
+                         font=("Helvetica", 9, "bold")).pack(side="left")
+                self._wn_obj_var = tk.StringVar(value="Jupiter")
+                _cb = ttk.Combobox(wn3, textvariable=self._wn_obj_var, width=15, state="readonly",
+                                   values=["Aus (photopisch)"] + [n for n, _ in OBJEKT_HELLIGKEITEN] + ["Frei"])
+                _cb.pack(side="left", padx=(3, 14))
+                _cb.bind("<<ComboboxSelected>>", self._wn_objekt_gewaehlt)
+                tk.Label(wn3, text="Leuchtdichte L =", bg=BG, fg="#2e7d32",
+                         font=("Helvetica", 9, "bold")).pack(side="left")
+                self._wn_L_var = tk.StringVar(value="600")
+                e_L = tk.Entry(wn3, textvariable=self._wn_L_var, width=7,
+                               font=("Helvetica", 9))
+                e_L.pack(side="left", padx=(3, 0))
+                tk.Label(wn3, text="cd/m²  (Objekt setzt L und Augenpupille zusammen; \"Frei\" = selbst eintragen; 0 = photopisch)",
+                         bg=BG, fg="#666", font=("Helvetica", 9)).pack(side="left", padx=(2, 0))
+                e_L.bind("<Return>",   self._wahrnehmung_neu)
+                e_L.bind("<FocusOut>", self._wahrnehmung_neu)
                 for _e in (e_v,):
                     _e.bind("<Return>",   self._wahrnehmung_neu)
                     _e.bind("<FocusOut>", self._wahrnehmung_neu)
@@ -2922,7 +3019,7 @@ class App(tk.Tk):
 
                 tk.Label(ctrlv, text="L₀ [cd/m²]:", bg=BG, fg="#555",
                          font=("Helvetica", 9)).pack(side="left")
-                self._vmax_L0 = tk.DoubleVar(value=6000.0)
+                self._vmax_L0 = tk.DoubleVar(value=600.0)
                 tk.Entry(ctrlv, textvariable=self._vmax_L0, width=8,
                          font=("Helvetica", 9)).pack(side="left", padx=(2, 12))
                 tk.Button(ctrlv, text="↻ Update", font=("Helvetica", 8),
@@ -4542,6 +4639,22 @@ class App(tk.Tk):
             p = float(getattr(self, "_wn_pup", 3.0))
         self._wn_pup = p                                  # Augenpupille [mm], 0 = aus
         self._wn_pup_var.set(f"{p:g}")
+        try:                                              # v7.4.0: Leuchtdichte [cd/m²], 0 = photopisch
+            Lv = float(str(self._wn_L_var.get()).strip().replace(",", "."))
+            if Lv < 0:
+                raise ValueError
+        except (tk.TclError, ValueError):
+            Lv = float(getattr(self, "_wn_L", 0.0))
+        self._wn_L = Lv
+        self._wn_L_var.set(f"{Lv:g}")
+        _name = "Frei"                                    # v7.5.0: Objekt-Anzeige mit den Eingaben abgleichen
+        if p == 0 and Lv == 0:
+            _name = "Aus (photopisch)"
+        else:
+            for _n, _L0 in OBJEKT_HELLIGKEITEN:
+                if abs(_L0 - Lv) < 1e-9 and abs(OBJEKT_PUPILLE[_n] - p) < 1e-9:
+                    _name = _n
+        self._wn_obj_var.set(_name)
         return V
 
     def _wahrnehmung_readout(self, D, f, lam, S_slide, S_real):
@@ -4554,15 +4667,17 @@ class App(tk.Tk):
             return f"> {_Vcap:.0f}×" if v >= _Vcap - 0.5 else "≤ 30×" if v <= 30.5 else f"{v:.0f}×"
         def _vk(v):
             return "∞" if v >= 1e8 else f"{v:.0f}×"
-        q_sph = perceived_quality_exakt(D, f, lam, V)
+        L_o = _L_wirksam(getattr(self, "_wn_L", 0.0))     # v7.4.0/7.5.0
+        q_sph = perceived_quality_exakt(D, f, lam, V, L=L_o)
         _, _, Wb_sph, _, _ = _wellenfronten(D, f, lam)
         S_sph = _strehl_exakt(Wb_sph)
         zeilen = [
             f"V = {V:.0f}×  (λ={lam:.0f} nm)   —   D={D:.0f} mm  f={f:.0f} mm  (f/{f/D:.1f})",
-            f"Sphäre   S={S_sph:.3f}:   Q_vis = {q_sph:.4f}   Verlust {(1-q_sph)*100:.1f} %",
+            f"Sphäre   S={S_sph:.3f}:   Q_vis = {q_sph:.4f}   Verlust {(1-q_sph)*100:.1f} %"
+            + (f"   [Leuchtdichte L = {L_o:g} cd/m², CSF-Spitze ≈ {csf_spitze_cpd(L_o):.1f} cpd]" if L_o else ""),
         ]
         if S_slide is not None and S_real is not None and S_slide > S_real + 0.01:
-            e = qvis_einzelrechner(D, S_slide, V, lam)
+            e = qvis_einzelrechner(D, S_slide, V, lam, L=L_o)
             zeilen.append(
                 f"Schieber S={S_slide:.3f}:   Q_vis = {e['Q']:.4f}   Q̃ = {e['Q_naeh']:.4f}   "
                 f"Verlust {e['verlust']:.1f} %   Q≥0.90 bis {_vtxt(e['V_q90'])}   V_krit {_vk(e['V_krit'])}")
@@ -4578,16 +4693,26 @@ class App(tk.Tk):
         d_pp = getattr(self, "_wn_pup", 0.0)
         if d_pp > 0:
             _, _, Wb_k, _, _ = _wellenfronten(D, f, lam)
-            q_pk = float(qvis_pupille_kurve(D, 1.0, [V], d_pp, lam, wf=_wf_kugel(Wb_k, lam))[0])
+            q_pk = float(qvis_pupille_kurve(D, 1.0, [V], d_pp, lam, wf=_wf_kugel(Wb_k, lam), L=L_o)[0])
             txt = f"Mit Augenpupille {d_pp:g} mm (Austrittspupille {D/V:.1f} mm" + \
                   (", Auge blendet ab" if D / V > d_pp else ", volle Öffnung") + \
                   f"):   Sphäre Q_vis = {q_pk:.4f}"
             if S_slide is not None and S_real is not None and S_slide > S_real + 0.01:
-                q_ps = float(qvis_pupille_kurve(D, S_slide, [V], d_pp, lam)[0])
+                q_ps = float(qvis_pupille_kurve(D, S_slide, [V], d_pp, lam,
+                                            wf=_wf_kugel(_Wb_schieber(D, f, lam, S_slide), lam), L=L_o)[0])
                 txt += f"   Schieber Q_vis = {q_ps:.4f}"
             zeilen.append(txt)
         zeilen.append("Paraboloid:   Q_vis = 1.0000")
         self._wn_readout.config(text="\n".join(zeilen))
+
+    def _wn_objekt_gewaehlt(self, *_):
+        """Objekt gewählt: Leuchtdichte L und Augenpupille d_p gemeinsam setzen (v7.5.0)."""
+        n = self._wn_obj_var.get()
+        if n.startswith("Aus"):
+            self._wn_L_var.set("0"); self._wn_pup_var.set("0")
+        elif n in OBJEKT_PUPILLE:
+            self._wn_L_var.set(f"{dict(OBJEKT_HELLIGKEITEN)[n]:g}"); self._wn_pup_var.set(f"{OBJEKT_PUPILLE[n]:g}")
+        self._wahrnehmung_neu()
 
     def _wahrnehmung_neu(self, *_):
         """Nur das Wahrnehmungs-Diagramm neu zeichnen (Cursor)."""
@@ -4622,6 +4747,7 @@ class App(tk.Tk):
             self._wahrnehmung_lesen()
             self._wahrnehmung_readout(D, f, lam, S_slide, S_real)
         V_cur = getattr(self, "_wn_V", None)
+        L_obj = _L_wirksam(getattr(self, "_wn_L", 0.0))   # Leuchtdichte [cd/m²]; None = photopisch (aus oder ≥ 100)
 
         _, _, Wb, _, S_mar = _wellenfronten(D, f, lam)
         S_exakt = _strehl_exakt(Wb)
@@ -4636,9 +4762,9 @@ class App(tk.Tk):
             V_min_plot = min(V_min_plot, V_cur * 0.85)
         V_arr      = np.linspace(V_min_plot, V_max_plot, 150)
 
-        Qe_sph  = perceived_quality_exakt_kurven(D, f, lam, V_arr)
+        Qe_sph  = perceived_quality_exakt_kurven(D, f, lam, V_arr, L=L_obj)
         f_para  = D * 50.0
-        Qe_para = perceived_quality_exakt_kurven(D, f_para, lam, V_arr)
+        Qe_para = perceived_quality_exakt_kurven(D, f_para, lam, V_arr, L=L_obj)
 
         def Q_naeh(V_a, S, Wb_val):
             Vk = v_wendepunkt_naeh(D, Wb_val)
@@ -4654,34 +4780,41 @@ class App(tk.Tk):
             Wb_s      = _Wb_schieber(D, f, lam, S_slide)
             S_ex_s    = S_slide
             S_ex_s_ph = _strehl_exakt(Wb_s)
-            Qe_slide  = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr)
+            Qe_slide  = perceived_quality_exakt_kurven_von_Wb(D, Wb_s, lam, V_arr, L=L_obj)
             Qn_slide  = Q_naeh(V_arr, S_ex_s_ph, Wb_s)
 
         strehl_label = f"Sphäre f/{f/D:.1f}  S={S_exakt:.3f} (exakt)"
+        if L_obj:
+            strehl_label += f"  L={L_obj:g} cd/m²"
 
         # v7.2.0: Kurven MIT Abblenden durch die Augenpupille (zusätzlich)
         d_pup = getattr(self, "_wn_pup", 0.0) or 0.0
         if d_pup > 0:
-            Qp_sph = qvis_pupille_kurve(D, 1.0, V_arr, d_pup, lam, wf=_wf_kugel(Wb, lam))
+            Qp_sph = qvis_pupille_kurve(D, 1.0, V_arr, d_pup, lam, wf=_wf_kugel(Wb, lam), L=L_obj)
             if has_slide:
-                Qp_slide = qvis_pupille_kurve(D, S_slide, V_arr, d_pup, lam)
+                Qp_slide = qvis_pupille_kurve(D, S_slide, V_arr, d_pup, lam,
+                                              wf=_wf_kugel(Wb_s, lam), L=L_obj)   # v7.5.1: wf statt S->Wb-Inversion
 
-        ax.fill_between(V_arr, Qe_sph, Qn_sph,
-                        color="#534AB7", alpha=0.12, label="Abweichung exakt ↔ Näherung")
+        if L_obj is None:      # Q̃-Näherung gilt nur photopisch
+            ax.fill_between(V_arr, Qe_sph, Qn_sph,
+                            color="#534AB7", alpha=0.12, label="Abweichung exakt ↔ Näherung")
         ax.fill_between(V_arr, Qe_sph, Qe_para,
                         color=COR, alpha=0.10, label="Wahrnehmungsverlust")
         ax.plot(V_arr, Qe_para, color=GRN, lw=2.0, ls="-",  label="Paraboloid  exakt")
-        ax.plot(V_arr, Qn_para, color=GRN, lw=1.0, ls="--", alpha=0.4)
+        if L_obj is None:
+            ax.plot(V_arr, Qn_para, color=GRN, lw=1.0, ls="--", alpha=0.4)
         ax.plot(V_arr, Qe_sph,  color=COR, lw=2.2, ls="-",
                 label=f"{strehl_label}  exakt")
-        ax.plot(V_arr, Qn_sph,  color=COR, lw=1.5, ls="--", alpha=0.75,
-                label=f"Sphäre  Näherung Q̃  (S={S_exakt:.3f})")
+        if L_obj is None:
+            ax.plot(V_arr, Qn_sph,  color=COR, lw=1.5, ls="--", alpha=0.75,
+                    label=f"Sphäre  Näherung Q̃  (S={S_exakt:.3f})")
 
         if has_slide:
             ax.plot(V_arr, Qe_slide, color=ACC, lw=2.0, ls="-",
                     label=f"Schieber exakt  S={S_ex_s:.3f}")
-            ax.plot(V_arr, Qn_slide, color=ACC, lw=1.2, ls="--", alpha=0.7,
-                    label=f"Schieber Näherung  S={S_ex_s:.3f}")
+            if L_obj is None:
+                ax.plot(V_arr, Qn_slide, color=ACC, lw=1.2, ls="--", alpha=0.7,
+                        label=f"Schieber Näherung  S={S_ex_s:.3f}")
 
         if d_pup > 0:
             ax.plot(V_arr, Qp_sph, color=COR, lw=2.4, ls="-.",
@@ -4727,17 +4860,17 @@ class App(tk.Tk):
         # ── Ablese-Cursor: exakter Wert bei der gewählten Vergrößerung ───────
         if V_cur is not None:
             ax.axvline(V_cur, color="#111", lw=1.3, ls="-", alpha=0.8, zorder=4)
-            pts = [(perceived_quality_exakt(D, f, lam, V_cur), COR,
+            pts = [(perceived_quality_exakt(D, f, lam, V_cur, L=L_obj), COR,
                     f"Sphäre {{q:.3f}}"),
                    (1.0, GRN, "Parab. 1.000")]
             if has_slide:
-                pts.append((perceived_quality_exakt_von_Wb(D, Wb_s, lam, V_cur),
+                pts.append((perceived_quality_exakt_von_Wb(D, Wb_s, lam, V_cur, L=L_obj),
                             ACC, "Schieber {q:.3f}"))
             if d_fs > 0:
                 pts.append((float(qvis_kurve_mit_fangspiegel(D, S_fs, d_fs, lam, V_cur)[0]),
                             "#6a1b9a", "Schieber+FS {q:.3f}"))
             if d_pup > 0:
-                pts.append((float(qvis_pupille_kurve(D, 1.0, [V_cur], d_pup, lam,
+                pts.append((float(qvis_pupille_kurve(D, 1.0, [V_cur], d_pup, lam, L=L_obj,
                                                      wf=_wf_kugel(Wb, lam))[0]),
                             COR, "Sphäre+Pupille {q:.3f}"))
             # Beschriftungen von oben nach unten, mit Mindestabstand (Punkte
@@ -4763,7 +4896,10 @@ class App(tk.Tk):
         ax.text(0.015, 0.985,
                 f"V_krit (10%-Schwelle, exakt)   = {V_krit:.0f}×   [D/(13·Wb)]\n"
                 f"V_wendepunkt (Näherungsformel) = {V_wende:.0f}×   [V_krit/³√(S²)]\n"
-                f"V½ (echter Halbwertspunkt)     = {V_halb:.0f}×   [nur via Integral]",
+                f"V½ (echter Halbwertspunkt)     = {V_halb:.0f}×   [nur via Integral]"
+                + (f"\nLeuchtdichte L = {L_obj:g} cd/m²: CSF-Spitze ≈ {csf_spitze_cpd(L_obj):.1f} cpd"
+                   f"\n(V_krit, V½: photopisch; Q̃-Kurven ausgeblendet)" if L_obj else "")
+                + (f"\nPupillenkurven: rel. zum gleich abgeblendeten Paraboloid (Öffnungsverlust → Q_abs)" if d_pup > 0 else ""),
                 transform=ax.transAxes, fontsize=7, family="monospace",
                 va="top", ha="left",
                 bbox=dict(boxstyle="round", fc="white", ec="#999", alpha=0.85))
@@ -4773,7 +4909,7 @@ class App(tk.Tk):
         ax.set_ylabel(T("ax_qvis"), fontsize=10)
         ax.set_title(
             f"Visuelle Wahrnehmung  —  D={D:.0f}mm  f/{f/D:.1f}"
-            f"  |  S_exakt={S_exakt:.3f}  max.Abw.={max_abw:.3f}"
+            f"  |  S_exakt={S_exakt:.3f}" + ("" if L_obj else f"  max.Abw.={max_abw:.3f}")
             + (f"  |  Cursor V={V_cur:.0f}×" if V_cur is not None else ""),
             fontsize=9)
         ax.legend(fontsize=8, loc="lower right",
@@ -5014,8 +5150,8 @@ class App(tk.Tk):
 
         # ── Unterer Panel: Gain-Faktor mit Leuchtdichte-Effekt ────────────────
         objekte_lum = [
-            ("Jupiter",           6000, "#e65100"),
-            ("Mars/Saturn",        500, "#c8860a"),
+            ("Jupiter",            600, "#e65100"),
+            ("Saturn",             200, "#c8860a"),
             ("Schwacher Planet",    50, "#1565c0"),
             ("Heller Nebel",         5, "#6a1b9a"),
             ("Schwaches Deep-Sky",   0.5, "#1b5e20"),

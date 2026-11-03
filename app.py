@@ -1,18 +1,20 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.5.0 (2026-11-03)
-Entspricht newton_spiegel_rechner.py v7.5.0
+Streamlit-Version v7.5.1 (2026-11-03)
+Entspricht newton_spiegel_rechner.py v7.5.1
 
 Änderungshistorie (jüngste zuerst):
-  v7.5.1 (2026-11-03)  FEHLER KORRIGIERT (Review): (1) Étendue beim Abblenden — qabs_zaehler reduziert die Leuchtdichte für die
-                        CSF jetzt um rho_s² = (V·d_p/D)², wenn die Augenpupille den Spiegel abblendet (vorher: L unverändert,
-                        d. h. die Pupillenkurven rechneten bei abgeblendeter Optik mit der vollen Öffnungs-Helligkeit und
-                        damit zu photopisch; betrifft die v7.5.0-Pupillenkurven mit gesetztem L, Kurven relativ zu einem
-                        gleich abgeblendeten Paraboloid verschieben sich dadurch leicht). (2) _kennzahlen_von_S: Qvis =
-                        Qshape statt S·Qshape (Doppel-Strehl, gleicher Fehlertyp wie Q_perc vor v7.3.0; Feld wird aktuell
-                        nirgends angezeigt, nur Konsistenz). (3) Wahrnehmung-Tab: Schieber-Pupillenkurve nutzt jetzt
-                        wf=_wf_kugel(Wb_s) statt der S->Wb-Inversion, die bei S < ~0,09 (schnelle Kugeln) versagt.
+  v7.5.1 (2026-11-03)  KERNWERTE GEÄNDERT: (1) Objekt-Helligkeiten korrigiert (Flächenhelligkeit aus Sonnenlicht pro Fläche × Albedo bzw. aus Magnitude pro
+                        Bogensekunde²; Größenordnungen ±30 %): Mond 2500 -> 3500, Jupiter 6000 -> 600, Saturn 500 -> 200, Mars 300 -> 2000 cd/m². Q_vis ändert sich
+                        dadurch nicht (alle > 100 cd/m² = photopisch); geändert ist die Helligkeitsgrenze im Grenzen-Tab (Standard Jupiter) und die Absolutwerte im
+                        Blende-Tab (Zeilen "Jupiter" 6000 -> 600, "Mars/Saturn" 500 -> "Saturn" 200). (2) Aus Martins Review übernommen: _kennzahlen_von_S: Qvis = Qshape
+                        statt S·Qshape (Doppel-Strehl; Feld wird aktuell nirgends angezeigt). (3) Aus Martins Review übernommen: Wahrnehmung-Tab: Schieber-Pupillenkurve
+                        (und Ablesezeile Desktop) nutzt wf=_wf_kugel(Wb_Schieber) statt der S->Wb-Inversion, die bei S < ~0,09 (schnelle Kugeln) versagt.
+                        (4) Numerik: bei gesetztem L rechnen die Kurven mit feinerem ν-Gitter (≥ 200 Punkte; die CSF-Spitze liegt bei sehr kleinem ν, 80 Punkte
+                        ergaben bei L = 0,5 und 30x bis 0,03 zu wenig). NICHT übernommen: Étendue-Änderung in qabs_zaehler (L_eff = L·rho_s²): sie wirkt in der falschen Richtung. Retinale Leuchtdichte sinkt erst, wenn die
+                        Austrittspupille D/V KLEINER als die Augenpupille wird (hohe V), nicht wenn das Auge abblendet (rho_s < 1, niedrige V). Eine korrekte Étendue
+                        (L_eff = L·min(1, (D/(V·d_p))²)) würde die Kurven bei hoher V deutlich anheben und ist als eigene Entscheidung offen.
   v7.5.0 (2026-11-03)  Leuchtdichte und Augenpupille zusammengeführt: ein Auswahlfeld "Objekt" setzt Bildhelligkeit L UND Augenpupille d_p gemeinsam
                         (Mond 2500 cd/m² / 2,5 mm · Jupiter 6000 / 3 · Saturn 500 / 4 · Mars 300 / 4 · helles DSO 5 / 6 · schwaches DSO 0,5 / 7; "Aus" = photopisch
                         ohne Abblenden; "Frei" = L und d_p selbst eintragen). Die Pupillenkurven (MIT Augenpupille) rechnen jetzt mit derselben
@@ -304,10 +306,8 @@ def _kennzahlen_von_S(D_mm: float, S: float, Wb: float) -> dict:
     Q04 = mtf_sph_rel(0.4, Wb)
     Q06 = mtf_sph_rel(0.6, Wb)
     # MTF-Form-Qualität: gewichtetes Mittel grober/mittlerer/feiner Details
-    # v7.5.1: KEIN zusätzlicher Faktor S mehr (Qvis = S*Qshape zählte den
-    # Strehl doppelt — mtf_sph_rel enthält ihn bereits; gleicher Fehlertyp
-    # wie Q_perc vor v7.3.0). Feld wird aktuell nirgends angezeigt.
     Qshape  = 0.4*Q02 + 0.4*Q04 + 0.2*Q06
+    # v7.5.1: KEIN zusätzlicher Faktor S mehr (mtf_sph_rel enthält den Strehl bereits; Doppelzählung)
     Qvis    = Qshape
     Deff_vis = D_mm * Qvis**0.25
     return dict(strehl=S, Wb=Wb,
@@ -700,10 +700,10 @@ def v_max_helligkeit(D_mm: float, L0: float, D_auge_mm: float = 6.0,
 # Werte aus csf_lum-Dokumentation übernommen, um Mars/Saturn getrennt und
 # Mond ergänzt.
 OBJEKT_HELLIGKEITEN = [
-    ("Mond",           2500.0),
-    ("Jupiter",        6000.0),
-    ("Saturn",          500.0),
-    ("Mars",            300.0),
+    ("Mond",           3500.0),
+    ("Jupiter",         600.0),
+    ("Saturn",          200.0),
+    ("Mars",           2000.0),
     ("Helles DSO",        5.0),
     ("Schwaches DSO",     0.5),
 ]
@@ -1356,8 +1356,8 @@ def csf_lum(f_cpd: float, L: float) -> float:
 
     L_ref = 100 cd/m² (mittlere photopische Leuchtdichte).
     Typische Werte am Okular (geschätzt):
-      Jupiter-Scheibe  ~6000 cd/m²
-      Mars/Saturn       ~500 cd/m²
+      Mond             ~3500 cd/m²   Mars (Opposition) ~2000 cd/m²
+      Jupiter-Scheibe   ~600 cd/m²   Saturn            ~200 cd/m²
       Schwacher Planet   ~50 cd/m²
       Heller Nebel        ~5 cd/m²
       Schwaches Deep-Sky ~0.5 cd/m²
@@ -1499,6 +1499,8 @@ def perceived_quality_exakt_kurven(D_mm: float, f_mm: float, lam_nm: float,
     über alle V gleichzeitig → ~7× schneller als Schleife.
     L: Leuchtdichte [cd/m²] oder None (= photopisch).
     """
+    if L is not None:
+        n_pts = max(n_pts, 200)   # v7.5.1: bei wenig Licht liegt die CSF-Spitze bei sehr kleinem ν -> feineres Gitter
     _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
     lam_mm  = lam_nm * 1e-6
     _, _, Wb, _, _ = _wellenfronten(D_mm, f_mm, lam_nm)
@@ -1519,6 +1521,8 @@ def perceived_quality_exakt_von_Wb(D_mm: float, Wb: float, lam_nm: float,
                                     V: float, n_pts: int = 80, L=None) -> float:
     """Q_vis exakt direkt aus Wb — für Schieber-Kurve mit beliebigem Strehl.
     L: Leuchtdichte [cd/m²] oder None (= photopisch)."""
+    if L is not None:
+        n_pts = max(n_pts, 200)   # v7.5.1: feineres Gitter bei wenig Licht
     fc     = D_mm / (lam_nm * 1e-6 * 206265)
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
     nu     = np.linspace(0.0, 1.0, n_pts)
@@ -1533,6 +1537,8 @@ def perceived_quality_exakt_kurven_von_Wb(D_mm: float, Wb: float, lam_nm: float,
                                            V_arr: np.ndarray, n_pts: int = 80, L=None) -> np.ndarray:
     """perceived_quality_exakt_von_Wb für ein Array von Vergrößerungen — vektorisiert.
     L: Leuchtdichte [cd/m²] oder None (= photopisch)."""
+    if L is not None:
+        n_pts = max(n_pts, 200)   # v7.5.1: feineres Gitter bei wenig Licht
     _trapz  = getattr(np, "trapezoid", getattr(np, "trapz", None))
     fc      = D_mm / (lam_nm * 1e-6 * 206265)
     nu      = np.linspace(0.0, 1.0, n_pts)
@@ -1918,20 +1924,13 @@ def qabs_zaehler(D_mm, S, d_fang_mm, V, lam_nm=550.0, seeing=0.0,
     """∫ MTF_ges(ν) · CSF(ν/V) dν  über die WINKELfrequenz (absolut).
     d_pupil: Augenpupille [mm] (0 = aus): bei Austrittspupille D/V > d_pupil
     nutzt das Auge nur die Teilöffnung V·d_pupil (blendet den Spiegel ab).
-    wf: optionale Foucault-Wellenfront; mtf_nu: fertige Gesamt-MTF (nur ohne Pupille).
-
-    v7.5.1: Étendue — blendet die Augenpupille ab (rho_s < 1), sinkt die
-    Netzhautleuchtdichte um (V·d_p/D)² = rho_s² (s. helligkeit_praxis).
-    Die effektive Leuchtdichte L_eff = L·rho_s² wird an die leuchtdichte-
-    abhängige CSF weitergegeben; ohne Abblenden (rho_s = 1) unverändert."""
+    wf: optionale Foucault-Wellenfront; mtf_nu: fertige Gesamt-MTF (nur ohne Pupille)."""
     _tr = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    rs = _rho_s(D_mm, V, d_pupil)
-    L_eff = None if L is None else float(L) * min(1.0, rs ** 2)
-    if mtf_nu is not None and wf is None and rs >= 0.999:
-        x, base, nu = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L_eff)
+    if mtf_nu is not None and wf is None and _rho_s(D_mm, V, d_pupil) >= 0.999:
+        x, base, nu = _qabs_basis(D_mm, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L)
         return float(_tr(np.interp(nu, _QABS_NUG, mtf_nu) * base, x))
     m, D_use = _mtf_eff(D_mm, S, d_fang_mm, V, d_pupil, wf, lam_nm)
-    x, base, nu = _qabs_basis(D_use, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L_eff)
+    x, base, nu = _qabs_basis(D_use, d_fang_mm, V, lam_nm, seeing, mit_mo=False, L=L)
     return float(_tr(np.interp(nu, _QABS_NUG, m) * base, x))
 
 
@@ -1960,9 +1959,6 @@ def qvis_pupille_kurve(D_mm: float, S, V_arr, d_pupil: float,
     Aberration wird nur über diese Teilöffnung gerechnet (mit Refokus).
     wf: Wellenfront der Kugel (dict) oder None -> S-Modell (Kugelwellenfront
     zu S, wie beim Schieber).  Ohne Seeing, ohne Fangspiegel.
-    L (v7.5.1): wird beim Abblenden um rho_s² reduziert (Étendue, s.
-    qabs_zaehler) — die CSF der Pupillenkurven rechnet also mit der
-    REALen Netzhautleuchtdichte, nicht mit der bei voller Öffnung.
     Auswertung auf einem groben V-Gitter (verdichtet um V = D/d_p), dazwischen
     linear interpoliert."""
     V_arr = np.asarray(V_arr, dtype=float)
@@ -2442,7 +2438,7 @@ class _Diagramme:
         self._mtf_objekte = _Var("planeten")
         self._mtf_fokus   = _Var("bestfocus")
         self._vmax_objekt     = _Var(OBJEKT_HELLIGKEITEN[1][0])
-        self._vmax_L0         = _Var(6000.0)
+        self._vmax_L0         = _Var(600.0)
         self._vmax_seeing     = _Var(1.5)
         self._vmax_D_auge     = _Var(6.0)
         self._vmax_L_schwelle = _Var(1.0)
@@ -2838,11 +2834,8 @@ class _Diagramme:
         if d_pup > 0:
             Qp_sph = qvis_pupille_kurve(D, 1.0, V_arr, d_pup, lam, wf=_wf_kugel(Wb, lam), L=L_obj)
             if has_slide:
-                # v7.5.1: wf statt S-Modell — _Wb_von_S versagt bei S < ~0,09
-                # (schnelle Kugeln mit Schieber knapp über Kugel-Strehl);
-                # _Wb_schieber liefert bei Schieber = Kugel die echte Kugel.
                 Qp_slide = qvis_pupille_kurve(D, S_slide, V_arr, d_pup, lam,
-                                              wf=_wf_kugel(Wb_s, lam), L=L_obj)
+                                              wf=_wf_kugel(Wb_s, lam), L=L_obj)   # v7.5.1: wf statt S->Wb-Inversion
 
         if L_obj is None:      # Q̃-Näherung gilt nur photopisch
             ax.fill_between(V_arr, Qe_sph, Qn_sph,
@@ -3198,8 +3191,8 @@ class _Diagramme:
 
         # ── Unterer Panel: Gain-Faktor mit Leuchtdichte-Effekt ────────────────
         objekte_lum = [
-            ("Jupiter",           6000, "#e65100"),
-            ("Mars/Saturn",        500, "#c8860a"),
+            ("Jupiter",            600, "#e65100"),
+            ("Saturn",             200, "#c8860a"),
             ("Schwacher Planet",    50, "#1565c0"),
             ("Heller Nebel",         5, "#6a1b9a"),
             ("Schwaches Deep-Sky",   0.5, "#1b5e20"),
@@ -3991,7 +3984,7 @@ def main():
             "Objekt  (Helligkeit + Augenpupille)", [_opt_aus] + _obj_namen + [_opt_frei],
             index=2, key="wn_obj",
             help="Ein Feld setzt Bildhelligkeit L [cd/m²] UND Augenpupille d_p zusammen: "
-                 "Mond 2500 / 2,5 mm · Jupiter 6000 / 3 · Saturn 500 / 4 · Mars 300 / 4 · "
+                 "Mond 3500 / 2,5 mm · Jupiter 600 / 3 · Saturn 200 / 4 · Mars 2000 / 4 · "
                  "helles DSO 5 / 6 · schwaches DSO 0,5 / 7. Bei wenig Licht wandert die Spitze der "
                  "Kontrastempfindlichkeit zu groben Strukturen, ein schlechter Spiegel wirkt dann "
                  "besser. Ab L ≥ 100 cd/m² gilt photopisch. Q̃-Kurven, V_krit und V½ bleiben "
@@ -4400,6 +4393,8 @@ def main():
         # Doku-HTML aus Datei lesen (liegt neben app.py) oder eingebettet anzeigen
         import pathlib
         _doc_candidates = [
+            pathlib.Path(__file__).parent / "documentation_v7_5.html",
+            pathlib.Path("documentation_v7_5.html"),
             pathlib.Path(__file__).parent / "documentation_v7_2.html",
             pathlib.Path("documentation_v7_2.html"),
             pathlib.Path(__file__).parent / "documentation_v7_1.html",
@@ -4428,7 +4423,7 @@ def main():
                 unsafe_allow_html=True)
         else:
             st.info(
-                "Dokumentationsdatei **documentation_v7_2.html** nicht gefunden. "
+                "Dokumentationsdatei **documentation_v7_5.html** nicht gefunden. "
                 "Bitte die Datei ins gleiche Verzeichnis wie app.py legen.",
                 icon="ℹ️")
             st.markdown("""
