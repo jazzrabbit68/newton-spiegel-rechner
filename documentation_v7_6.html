@@ -12,7 +12,7 @@
     font-size: 9pt; color: #777;
   }
   @bottom-left {
-    content: "Technische Dokumentation v7.6.2: Newton-Spiegel-Rechner";
+    content: "Technische Dokumentation v7.7.0: Newton-Spiegel-Rechner";
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 9pt; color: #777;
   }
@@ -81,7 +81,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <div class="header-banner">
   <h1>Technische Gesamtdokumentation</h1>
-  <div class="subtitle">Newton-Spiegel-Rechner v7.6.2 &mdash; Mathematisch-Physikalische Modelle, Bewertung und Bauhilfen</div>
+  <div class="subtitle">Newton-Spiegel-Rechner v7.7.0 &mdash; Mathematisch-Physikalische Modelle, Bewertung und Bauhilfen</div>
 </div>
 
 <p>Diese Dokumentation beschreibt den aktuellen Stand des Programms <code>newton_spiegel_rechner.py</code> (Desktop, tkinter) und der Web-App <code>app.py</code> (Streamlit). Beide Versionen verwenden dieselben Rechenkerne. Das Programm bewertet Newton-Spiegel &mdash; vor allem sph&auml;rische, aber auch beliebig gut polierte &mdash; nach Wellenfrontfehler, Strehl-Quotient, MTF und einem wahrnehmungsbezogenen Qualit&auml;tsindex, hilft beim Auswerten des Foucault-Tests und beim Auslegen von Fangspiegel und Blende, und vergleicht verschiedene Spiegel miteinander, auch wenn sie unterschiedlich gro&szlig; sind.</p>
@@ -317,7 +317,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <div class="math-block"><span class="math">w = 1 / [1 + (V<sub>Wende</sub> / V)<sup>2</sup>], &emsp; Q&#771;(V) = S + (1 &minus; S) &middot; (1 &minus; w)</span></div>
 <p>Das Diagramm zeigt die gr&ouml;&szlig;te Abweichung zwischen N&auml;herung und exakter Kurve an. Die N&auml;herung gilt photopisch; sobald die Netzhautleuchtdichte L<sub>eff</sub> im Plotbereich unter 100&nbsp;cd/m&sup2; f&auml;llt (Kapitel&nbsp;5.5), werden die Q&#771;-Kurven ausgeblendet.</p>
 
-<p><strong>Q<sub>vis</sub> in den Kennwerten:</strong> Die Kennwerte zeigen Q<sub>vis</sub> exakt (photopisch) bei 30&times;, 80&times;, 160&times; und bei der gew&auml;hlten Vergr&ouml;&szlig;erung, jeweils Kugel &rarr; Schieber. Es ist dieselbe Gr&ouml;&szlig;e wie die durchgezogene Kurve im Wahrnehmungs-Tab. F&uuml;r den Vergleich verschieden gro&szlig;er Spiegel ist Q<sub>abs</sub> (Kapitel&nbsp;6) zu verwenden.</p>
+<p><strong>Q<sub>vis</sub> in den Kennwerten:</strong> Die Kennwerte zeigen Q<sub>vis</sub> exakt bei 30&times;, 60&times;, 100&times; und 150&times;, jeweils Kugel &rarr; Schieber, und zwar bewusst <em>photopisch mit voller &Ouml;ffnung</em> (ohne Helligkeit, Augenpupille, Seeing und Fangspiegel). Das ist eine Eigenschaft der Spiegelfl&auml;che und die strengste Bewertung: In allen gerechneten F&auml;llen (sechs Objekte, sechs Spiegel von 114/900 bis 400/1600, V&nbsp;=&nbsp;30&hellip;250) liegt Q<sub>vis</sub> mit Objekthelligkeit und Pupille h&ouml;her oder gleich. Wie der Spiegel an einem bestimmten Objekt wirkt, zeigt der Wahrnehmungs-Tab; dort h&auml;ngt Q<sub>vis</sub>(V) vom Objekt ab. F&uuml;r den Vergleich verschieden gro&szlig;er Spiegel ist Q<sub>abs</sub> (Kapitel&nbsp;6) zu verwenden.</p>
 
 <h3>5.3 Ablese-Cursor und Einzelspiegel-Rechner</h3>
 <p>Im Wahrnehmungs-Tab liest man Q<sub>vis</sub> bei einer beliebigen Vergr&ouml;&szlig;erung ab (Eingabefeld oder Klick ins Diagramm). Ausgegeben werden Q<sub>vis</sub> exakt und N&auml;herung, Wahrnehmungsverlust gegen&uuml;ber dem Paraboloid in Prozent, V<sub>krit</sub> und die Vergr&ouml;&szlig;erung, ab der Q<sub>vis</sub> unter 0,90 f&auml;llt. Spiegel mit gemessenem Strehl lassen sich &uuml;ber den Schieber einstellen, die Brennweite wird dazu nicht ben&ouml;tigt (Q<sub>vis</sub> h&auml;ngt nur von D, W<sub>b</sub> und V ab). In der Web-Version entfällt die Wertetabelle; die Werte stehen als Punkte und Beschriftungen im Diagramm. Das gew&auml;hlte Objekt (Kapitel&nbsp;5.5) wirkt auf Cursorwerte und Ergebniszeilen mit.</p>
@@ -453,7 +453,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <div class="diagram-box">
   <div class="diagram-title">Kennwerte</div>
-  <p>Vollst&auml;ndige Tafel: f/D, W<sub>p</sub>, W<sub>b</sub>, W<sub>rms</sub>, Strehl (Mar&eacute;chal und exakt, jeweils Kugel&nbsp;&rarr;&nbsp;Schieber), D<sub>eff</sub>, die drei V<sub>krit</sub>-Varianten und V<sub>krit,Blur</sub>, Aufl&ouml;sungsverlust, Q<sub>vis</sub> (exakt, photopisch) bei 30&times;, 80&times;, 160&times; und der gew&auml;hlten Vergr&ouml;&szlig;erung. Links stehen nur Strehl, V<sub>krit</sub>, D<sub>eff</sub> und Q<sub>vis</sub>; dazu eine farbige Beurteilung (gr&uuml;n S&nbsp;&ge;&nbsp;0,95, orange 0,80&ndash;0,95, rot S&nbsp;&lt;&nbsp;0,80) und eine Zeile mit V<sub>krit</sub> real, mit Schieber, f&uuml;r das Paraboloid und V<sub>max</sub> (= D/0,5).</p>
+  <p>Der Tab ist seit 7.7 ein <strong>Steckbrief aus drei Fragen</strong>, jeweils Kugel &rarr; Schieber: <em>Wie gut ist die Fl&auml;che?</em> (Strehl exakt, W<sub>PtV</sub> best focus), <em>Bis wohin tr&auml;gt sie?</em> (V<sub>krit</sub> aus MTF&times;CSF, V<sub>&frac12;</sub>) und <em>Wie wirkt sie im Bild?</em> (Q<sub>vis</sub> bei 30, 60, 100, 150&times;, photopisch, volle &Ouml;ffnung, Kapitel&nbsp;5.5). Dazu kommt eine farbige Beurteilung (gr&uuml;n S&nbsp;&ge;&nbsp;0,95, orange 0,80&ndash;0,95, rot S&nbsp;&lt;&nbsp;0,80) und eine Zeile mit V<sub>krit</sub> real, mit Schieber, f&uuml;r das Paraboloid und V<sub>max</sub> (= D/0,5). Unter <em>Details</em> (aufklappbar) stehen die &uuml;brigen Werte: f/D, W<sub>p</sub>, W<sub>rms</sub>, Strehl nach Mar&eacute;chal, D<sub>eff</sub>, die N&auml;herung V<sub>krit</sub> = D/(13&middot;W<sub>b</sub>), V<sub>krit,Blur</sub>, Aufl&ouml;sungsverlust und der Verlust bei 150&times;.</p>
 </div>
 
 <h3>8.2 Bildqualit&auml;t</h3>
@@ -634,7 +634,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 </ul>
 
 <div class="footer-note">
-  Technische Gesamtdokumentation v7.6 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 7.6.2).
+  Technische Gesamtdokumentation v7.6 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 7.7.0).
 </div>
 
 </body>

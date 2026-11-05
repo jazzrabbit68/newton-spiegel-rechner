@@ -1,7 +1,8 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.6.2 (2026-11-05)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v7.7.0 (2026-11-05)
 ============================================================================================
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
+  v7.7  (2026-11-05)  Tab Kennwerte als Steckbrief (Fläche · Reichweite · Bildwirkung, Q_vis photopisch bei 30/60/100/150×), übrige Werte unter "Details"
   v7.6  (2026-11-05)  Netzhauthelligkeit (Étendue) geht in Q_vis ein; Fangspiegel-Tab: Tubus-Ø aus dem Übersichtsokular (Gittertubus); Antoniadi-Hinweis beim Seeing
   v7.5  (2026-11-03)  Ein Feld "Objekt" setzt Leuchtdichte und Augenpupille gemeinsam; Objekthelligkeiten korrigiert
   v7.4  (2026-11-03)  Q_vis berücksichtigt die Bildhelligkeit (leuchtdichteabhängige CSF)
@@ -2360,7 +2361,7 @@ ACC = "#534AB7"
 COR = "#D85A30"
 GRN = "#0F6E56"
 
-VERSION  = "7.6.2 (2026-11-05)"
+VERSION  = "7.7.0 (2026-11-05)"
 EYE_RES  = 60.0   # Augenauflösung [arcsec] — typischer Beobachter
 
 # ── Mehrsprachigkeit ──────────────────────────────────────────────────────────
@@ -2386,8 +2387,11 @@ STRINGS = {
                      "en": "Contrast"},
     "grp_sharpness": {"de": "Schärfe bei gewählter Vergrößerung",
                       "en": "Sharpness at selected magnification"},
-    "grp_qvis":  {"de": "Visueller Qualitätsindex Q_vis (MTF×CSF, Paraboloid = 1)",
-                  "en": "Visual quality index Q_vis (MTF×CSF, paraboloid = 1)"},
+    "grp_qvis":  {"de": "Wie wirkt sie im Bild?  Q_vis (MTF×CSF, Paraboloid = 1; photopisch, volle Öffnung)",
+                  "en": "How does it look?  Q_vis (MTF×CSF, paraboloid = 1; photopic, full aperture)"},
+    "grp_flaeche": {"de": "Wie gut ist die Fläche?", "en": "How good is the surface?"},
+    "grp_reichweite": {"de": "Bis wohin trägt sie?", "en": "How far does it carry?"},
+    "rVhalb":       {"de": "V½  (Halbwertspunkt)",    "en": "V½  (half-value point)"},
     # Karten-Labels
     "rN":           {"de": "Öffnungsverhältnis",              "en": "Focal ratio"},
     "rWp":          {"de": "W_PtV paraxial [λ]",              "en": "W_PtV paraxial [λ]"},
@@ -2405,10 +2409,10 @@ STRINGS = {
                      "en": "Resolut. loss vs. paraboloid [%]"},
     "rVerlustV":    {"de": "Verlust bei dieser Vergr. [mm]",
                      "en": "Loss at this magnif. [mm]"},
-    "rQp80":        {"de": "Q_vis  bei 30×",          "en": "Q_vis  at  30×"},
-    "rQp200":       {"de": "Q_vis  bei 80×",          "en": "Q_vis  at  80×"},
-    "rQp350":       {"de": "Q_vis  bei 160×",          "en": "Q_vis  at 160×"},
-    "rQpV":         {"de": "Q_vis  bei Slider-Vergr.", "en": "Q_vis  at slider magnif."},
+    "rQp30":        {"de": "Q_vis  bei 30×",          "en": "Q_vis  at  30×"},
+    "rQp60":        {"de": "Q_vis  bei 60×",          "en": "Q_vis  at  60×"},
+    "rQp100":       {"de": "Q_vis  bei 100×",         "en": "Q_vis  at 100×"},
+    "rQp150":       {"de": "Q_vis  bei 150×",         "en": "Q_vis  at 150×"},
     # Tab-Titel
     "grp_kern":        {"de": "Kernwerte", "en": "Key values"},
     "grp_t_grund":     {"de": "  Grundlagen  ",             "en": "  Basics  "},
@@ -2642,17 +2646,20 @@ class App(tk.Tk):
         self._karten_name_widgets = {}
 
         # v7.1.0: links nur Kernwerte, die übrigen Karten im Tab "Kennwerte"
-        karten_links = [("rS_exakt", "rS_exakt"), ("rVkrit_exakt", "rVkrit_exakt"),
-                        ("rDeff_k", "rDeff_k"), ("rQpV", "rQpV")]
+        # v7.7.0: Steckbrief (drei Fragen) sichtbar, übrige Karten unter "Details"
+        self._karten_steck = [
+            ("grp_flaeche",    [("rS_exakt", "rS_exakt"), ("rWb", "rWb")]),
+            ("grp_reichweite", [("rVkrit_exakt", "rVkrit_exakt"), ("rVhalb", "rVhalb")]),
+            ("grp_qvis",       [("rQp30", "rQp30"), ("rQp60", "rQp60"),
+                                ("rQp100", "rQp100"), ("rQp150", "rQp150")]),
+        ]
         self._karten_rest = [
-            ("grp_contrast", [("rN", "rN"), ("rWp", "rWp"), ("rWb", "rWb"),
-                              ("rWrms", "rWrms"), ("rS", "rS"),
+            ("grp_contrast", [("rN", "rN"), ("rWp", "rWp"), ("rWrms", "rWrms"), ("rS", "rS"),
+                              ("rDeff_k", "rDeff_k"),
                               ("rVkrit_naeh", "rVkrit_naeh"),
                               ("rVkrit_blur", "rVkrit_blur")]),
             ("grp_sharpness", [("rAuflVerlust", "rAuflVerlust"),
                                ("rVerlustV", "rVerlustV")]),
-            ("grp_qvis", [("rQp80", "rQp80"), ("rQp200", "rQp200"),
-                          ("rQp350", "rQp350")]),
         ]
         # v7.2.1: Kernwerte + Urteil stehen jetzt oben im Tab Grundlagen > Kennwerte;
         # links bleiben nur Parameter und die Tab-Knöpfe (s. _baue_navigation).
@@ -2725,26 +2732,13 @@ class App(tk.Tk):
                 self._baue_grundlagen(frm)
             elif attr == "_tab_kennwerte":
                 kr = 0
-                grp_w = tk.Label(frm, text=T("grp_kern"),
-                                 font=("Helvetica", 11, "bold"), bg=BG)
-                grp_w.grid(row=kr, column=0, columnspan=4, sticky="w", **pad)
-                self._grp_widgets["grp_kern"] = grp_w
-                kr += 1
-                kr = self._karten_grid(frm, karten_links, kr, self._res,
-                                       self._karten_name_widgets, pad)
                 self.lbl_verdict = tk.Label(frm, text="", bg=BG,
                                             font=("Helvetica", 10),
                                             wraplength=620, justify="left")
                 self.lbl_verdict.grid(row=kr, column=0, columnspan=4,
-                                      sticky="w", padx=10, pady=(8, 2))
+                                      sticky="w", padx=10, pady=(4, 2))
                 kr += 1
-                self.lbl_vkrit = tk.Label(frm, text="", bg=BG,
-                                          font=("Helvetica", 11, "bold"),
-                                          wraplength=620, justify="left")
-                self.lbl_vkrit.grid(row=kr, column=0, columnspan=4,
-                                    sticky="w", padx=10, pady=(0, 8))
-                kr += 1
-                for grp_key, karten in self._karten_rest:
+                for grp_key, karten in self._karten_steck:
                     grp_w = tk.Label(frm, text=T(grp_key),
                                      font=("Helvetica", 11, "bold"), bg=BG)
                     grp_w.grid(row=kr, column=0, columnspan=4, sticky="w", **pad)
@@ -2752,8 +2746,41 @@ class App(tk.Tk):
                     kr += 1
                     kr = self._karten_grid(frm, karten, kr, self._res,
                                            self._karten_name_widgets, pad)
+                tk.Label(frm, text="Q_vis hier: photopisch, volle Öffnung, ohne Seeing und Fangspiegel – die strengste Bewertung der Fläche; "
+                              "an dunklen Objekten und mit Augenpupille wirkt der Spiegel besser (Tab Wahrnehmung).",
+                         bg=BG, fg="#666", font=("Helvetica", 8), wraplength=620, justify="left"
+                         ).grid(row=kr, column=0, columnspan=4, sticky="w", padx=10, pady=(2, 0))
+                kr += 1
+                self.lbl_vkrit = tk.Label(frm, text="", bg=BG,
+                                          font=("Helvetica", 11, "bold"),
+                                          wraplength=620, justify="left")
+                self.lbl_vkrit.grid(row=kr, column=0, columnspan=4,
+                                    sticky="w", padx=10, pady=(6, 4))
+                kr += 1
+                # Details (aufklappbar)
+                det = tk.Frame(frm, bg=BG)
+                det_row = kr + 1
+                def _det_umschalten(det=det, frm=frm, det_row=det_row):
+                    if det.winfo_manager():
+                        det.grid_remove(); btn.config(text="Details ▸")
+                    else:
+                        det.grid(row=det_row, column=0, columnspan=4, sticky="ew")
+                        btn.config(text="Details ▾")
+                btn = tk.Button(frm, text="Details ▸", command=_det_umschalten,
+                                font=("Helvetica", 9), relief="flat", bg=BG2, padx=8, pady=2)
+                btn.grid(row=kr, column=0, columnspan=4, sticky="w", padx=10, pady=(2, 2))
+                dr = 0
+                for grp_key, karten in self._karten_rest:
+                    grp_w = tk.Label(det, text=T(grp_key),
+                                     font=("Helvetica", 11, "bold"), bg=BG)
+                    grp_w.grid(row=dr, column=0, columnspan=4, sticky="w", **pad)
+                    self._grp_widgets[grp_key] = grp_w
+                    dr += 1
+                    dr = self._karten_grid(det, karten, dr, self._res,
+                                           self._karten_name_widgets, pad)
                 for c in range(4):
                     frm.columnconfigure(c, weight=1, uniform="kw")
+                    det.columnconfigure(c, weight=1, uniform="kd")
             elif attr == "_tab_mtf":
                 btn_frame = tk.Frame(frm, bg=BG)
                 btn_frame.pack(side="top", fill="x", padx=8, pady=(6, 0))
@@ -3338,12 +3365,9 @@ class App(tk.Tk):
             Wb_s         = _Wb_schieber(D, f, lam, S_slide)
             Vk_slide["Vk_sph"] = v_krit_naeh(D, Wb_s)
             Vk_exakt_s   = v_krit_aus_qvis_von_Wb(D, Wb_s, lam, rel_schwelle=0.90)
-            Qp_80        = perceived_quality_exakt(D, f, lam, 30.0)
-            Qp_200       = perceived_quality_exakt(D, f, lam, 80.0)
-            Qp_350       = perceived_quality_exakt(D, f, lam, 160.0)
-            Qp_V         = perceived_quality_exakt(D, f, lam, 150.0)
-            Qp_s         = tuple(_qvis_schieber(D, f, lam, S_slide, v)
-                                 for v in (30.0, 80.0, 160.0, 150.0))
+            _Q_V         = (30.0, 60.0, 100.0, 150.0)
+            Qp_30, Qp_60, Qp_100, Qp_150 = (perceived_quality_exakt(D, f, lam, v) for v in _Q_V)
+            Qp_s         = tuple(_qvis_schieber(D, f, lam, S_slide, v) for v in _Q_V)
 
             if self._compute_cancel:
                 return
@@ -3354,7 +3378,7 @@ class App(tk.Tk):
                        rv=rv, Vk_naeh=Vk_naeh, Vk_blur=Vk_blur,
                        Vk_exakt=Vk_exakt, Vk_halb=Vk_halb,
                        Vk_exakt_s=Vk_exakt_s,
-                       Qp_80=Qp_80, Qp_200=Qp_200, Qp_350=Qp_350, Qp_V=Qp_V,
+                       Qp_30=Qp_30, Qp_60=Qp_60, Qp_100=Qp_100, Qp_150=Qp_150,
                        Qp_s=Qp_s)
             self.after(0, lambda r=res: self._aktualisieren(r))
         except Exception:
@@ -3811,8 +3835,8 @@ class App(tk.Tk):
         Vk_exakt    = res["Vk_exakt"]
         Vk_halb     = res["Vk_halb"]
         Vk_exakt_s  = res["Vk_exakt_s"]
-        Qp_80, Qp_200, Qp_350, Qp_V = res["Qp_80"], res["Qp_200"], res["Qp_350"], res["Qp_V"]
-        Qs_80, Qs_200, Qs_350, Qs_V = res["Qp_s"]
+        Qp_30, Qp_60, Qp_100, Qp_150 = res["Qp_30"], res["Qp_60"], res["Qp_100"], res["Qp_150"]
+        Qs_30, Qs_60, Qs_100, Qs_150 = res["Qp_s"]
         self._last_params = res
         # ── Info-Labels neben den Eingabefeldern ──────────────────────────
         r = r_real
@@ -3861,6 +3885,7 @@ class App(tk.Tk):
             text=f"{Vk_naeh:.0f}×  →  {Vk_naeh_s:.0f}×"
                  f"  |  V½ exakt: {Vk_halb:.0f}×",
             fg=col_naeh)
+        rv2["rVhalb"].config(text=f"{Vk_halb:.0f}×")
         rv2["rVkrit_blur"].config(
             text=(f"{Vk_blur:.0f}×  (α_blur={D**3/(128*f**2)/f*206265:.1f}\"  — unabh. von S)"
                   if Vk_blur > 1 else "< 1×  — Blur dominiert immer"),
@@ -3887,10 +3912,10 @@ class App(tk.Tk):
 
         def _qcolor(q):
             return "#2e7d32" if q >= 0.90 else "#e65100" if q >= 0.70 else "#c62828"
-        rv2["rQp80"].config( text=f"{Qp_80:.3f}  →  {Qs_80:.3f}",  fg=_qcolor(Qs_80))
-        rv2["rQp200"].config(text=f"{Qp_200:.3f}  →  {Qs_200:.3f}", fg=_qcolor(Qs_200))
-        rv2["rQp350"].config(text=f"{Qp_350:.3f}  →  {Qs_350:.3f}", fg=_qcolor(Qs_350))
-        rv2["rQpV"].config(  text=f"{Qp_V:.3f}  →  {Qs_V:.3f}  (bei 150×)", fg=_qcolor(Qs_V))
+        rv2["rQp30"].config( text=f"{Qp_30:.3f}  →  {Qs_30:.3f}",  fg=_qcolor(Qs_30))
+        rv2["rQp60"].config(text=f"{Qp_60:.3f}  →  {Qs_60:.3f}", fg=_qcolor(Qs_60))
+        rv2["rQp100"].config(text=f"{Qp_100:.3f}  →  {Qs_100:.3f}", fg=_qcolor(Qs_100))
+        rv2["rQp150"].config(  text=f"{Qp_150:.3f}  →  {Qs_150:.3f}", fg=_qcolor(Qs_150))
 
         # ── Diagramme ──────────────────────────────────────────────────────
         # Beim ersten Durchlauf (startup) alle Tabs zeichnen, danach nur

@@ -1,10 +1,11 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.6.2 (2026-11-05)
-Entspricht newton_spiegel_rechner.py v7.6.2
+Streamlit-Version v7.7.0 (2026-11-05)
+Entspricht newton_spiegel_rechner.py v7.7.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
+  v7.7  (2026-11-05)  Tab Kennwerte als Steckbrief (Fläche · Reichweite · Bildwirkung, Q_vis photopisch bei 30/60/100/150×), übrige Werte unter "Details"
   v7.6  (2026-11-05)  Netzhauthelligkeit (Étendue) geht in Q_vis ein; Fangspiegel-Tab: Tubus-Ø aus dem Übersichtsokular (Gittertubus); Antoniadi-Hinweis beim Seeing
   v7.5  (2026-11-03)  Ein Feld "Objekt" setzt Leuchtdichte und Augenpupille gemeinsam; Objekthelligkeiten korrigiert
   v7.4  (2026-11-03)  Q_vis berücksichtigt die Bildhelligkeit (leuchtdichteabhängige CSF)
@@ -30,7 +31,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.6.2 (2026-11-05)"
+VERSION = "7.7.0 (2026-11-05)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -2305,8 +2306,11 @@ STRINGS = {
                      "en": "Contrast"},
     "grp_sharpness": {"de": "Schärfe bei gewählter Vergrößerung",
                       "en": "Sharpness at selected magnification"},
-    "grp_qvis":  {"de": "Visueller Qualitätsindex Q_vis (MTF×CSF, Paraboloid = 1)",
-                  "en": "Visual quality index Q_vis (MTF×CSF, paraboloid = 1)"},
+    "grp_qvis":  {"de": "Wie wirkt sie im Bild?  Q_vis (MTF×CSF, Paraboloid = 1; photopisch, volle Öffnung)",
+                  "en": "How does it look?  Q_vis (MTF×CSF, paraboloid = 1; photopic, full aperture)"},
+    "grp_flaeche": {"de": "Wie gut ist die Fläche?", "en": "How good is the surface?"},
+    "grp_reichweite": {"de": "Bis wohin trägt sie?", "en": "How far does it carry?"},
+    "rVhalb":       {"de": "V½  (Halbwertspunkt)",    "en": "V½  (half-value point)"},
     # Karten-Labels
     "rN":           {"de": "Öffnungsverhältnis",              "en": "Focal ratio"},
     "rWp":          {"de": "W_PtV paraxial [λ]",              "en": "W_PtV paraxial [λ]"},
@@ -2324,10 +2328,10 @@ STRINGS = {
                      "en": "Resolut. loss vs. paraboloid [%]"},
     "rVerlustV":    {"de": "Verlust bei dieser Vergr. [mm]",
                      "en": "Loss at this magnif. [mm]"},
-    "rQp80":        {"de": "Q_vis  bei 30×",          "en": "Q_vis  at  30×"},
-    "rQp200":       {"de": "Q_vis  bei 80×",          "en": "Q_vis  at  80×"},
-    "rQp350":       {"de": "Q_vis  bei 160×",          "en": "Q_vis  at 160×"},
-    "rQpV":         {"de": "Q_vis  bei Slider-Vergr.", "en": "Q_vis  at slider magnif."},
+    "rQp30":        {"de": "Q_vis  bei 30×",          "en": "Q_vis  at  30×"},
+    "rQp60":        {"de": "Q_vis  bei 60×",          "en": "Q_vis  at  60×"},
+    "rQp100":       {"de": "Q_vis  bei 100×",         "en": "Q_vis  at 100×"},
+    "rQp150":       {"de": "Q_vis  bei 150×",         "en": "Q_vis  at 150×"},
     # Tab-Titel
     "tab_strehl":      {"de": "  Strehl vs. f/D  ",         "en": "  Strehl vs. f/D  "},
     "tab_oeff":        {"de": "  Eff. Öffnung vs. f/D  ",   "en": "  Eff. aperture vs. f/D  "},
@@ -3824,12 +3828,9 @@ def main():
     Wb_s       = _Wb_schieber(D, f, lam, S_slide)
     Vk_exakt_s = v_krit_aus_qvis_von_Wb(D, Wb_s, lam, rel_schwelle=0.90)
     Vk_halb    = v_halb_exakt(D, f, lam)
-    Qp_80      = perceived_quality_exakt(D, f, lam, 30.0)
-    Qp_200     = perceived_quality_exakt(D, f, lam, 80.0)
-    Qp_350     = perceived_quality_exakt(D, f, lam, 160.0)
-    Qp_V       = perceived_quality_exakt(D, f, lam, 150.0)
-    Qs_80, Qs_200, Qs_350, Qs_V = (_qvis_schieber(D, f, lam, S_slide, v)
-                                   for v in (30.0, 80.0, 160.0, 150.0))
+    _Q_V = (30.0, 60.0, 100.0, 150.0)
+    Qp_30, Qp_60, Qp_100, Qp_150 = (perceived_quality_exakt(D, f, lam, v) for v in _Q_V)
+    Qs_30, Qs_60, Qs_100, Qs_150 = (_qvis_schieber(D, f, lam, S_slide, v) for v in _Q_V)
 
     verdict_text, verdict_color = beurteilung(S_slide)
     if S_slide > S_real + 1e-6:
@@ -3887,31 +3888,32 @@ def main():
     rows += _row("Verlust bei 150x",     f"{rv['verlust']:.1f} mm")
     rows += _row("V_krit Paraboloid / Vmax",
                  f"{'&#8734;' if Vk['Vk_para'] >= 1e8 else format(Vk['Vk_para'], '.0f') + 'x'}  | Vmax: {Vk['Vmax']:.0f}x")
-    rows += _hdr("Q_vis (MTF&#215;CSF, Paraboloid = 1)")
-    for lbl_q, q, qs in [("Q bei  30x", Qp_80, Qs_80), ("Q bei  80x", Qp_200, Qs_200),
-                         ("Q bei 160x", Qp_350, Qs_350), ("Q bei 150x", Qp_V, Qs_V)]:
-        rows += _row(lbl_q, f"{q:.3f} &#8594; {qs:.3f}", _qc(qs))
 
     _kenn_html = f"<table style='border-collapse:collapse;width:100%;margin-bottom:4px'>{rows}</table>"
 
     # v7.2.4: Kernwerte, Beurteilung und Tabelle erscheinen nur in der Ansicht "Kennwerte".
     if _nav == "kenn":
         st.markdown(_verdict_html, unsafe_allow_html=True)
-        _k1, _k2, _k3, _k4 = st.columns(4)
+        _gap = S_slide > S_real + 1e-6
+        # Steckbrief: Wie gut ist die Fläche? · Bis wohin trägt sie? · Wie wirkt sie im Bild?
+        st.markdown("**Wie gut ist die Fläche?**")
+        _k1, _k2 = st.columns(2)
         _k1.metric("Strehl exakt", f"{S_slide:.3f}",
-                   delta=f"Sphäre {S_real:.3f}" if S_slide > S_real + 1e-6 else None,
-                   delta_color="off")
-        _k2.metric("V_krit (MTF×CSF >10 %)", _vk_ex_text(Vk_exakt_s),
-                   delta=f"Sphäre {_vk_ex_text(Vk_exakt)}" if S_slide > S_real + 1e-6 else None,
-                   delta_color="off")
-        _k3.metric("D_eff Kontrast", f"{Deff_k_sl:.0f} mm",
-                   delta=f"Sphäre {r_real['Deff_k']:.0f} mm" if S_slide > S_real + 1e-6 else None,
-                   delta_color="off")
-        _k4.metric("Q_vis bei 150×", f"{Qs_V:.3f}",
-                   delta=f"Sphäre {Qp_V:.3f}" if S_slide > S_real + 1e-6 else None,
-                   delta_color="off")
-
-        st.markdown(_kenn_html, unsafe_allow_html=True)
+                   delta=f"Sphäre {S_real:.3f}" if _gap else None, delta_color="off")
+        _k2.metric("W_PtV best focus", f"{r_real['Wb']:.3f} λ")
+        st.markdown("**Bis wohin trägt sie?**")
+        _k3, _k4 = st.columns(2)
+        _k3.metric("V_krit (MTF×CSF >10 %)", _vk_ex_text(Vk_exakt_s),
+                   delta=f"Sphäre {_vk_ex_text(Vk_exakt)}" if _gap else None, delta_color="off")
+        _k4.metric("V½ (Halbwertspunkt)", f"{Vk_halb:.0f}×")
+        st.markdown("**Wie wirkt sie im Bild?**  Q_vis, Paraboloid = 1")
+        _qk = st.columns(4)
+        for _c, _v, _qs, _qp in zip(_qk, _Q_V, (Qs_30, Qs_60, Qs_100, Qs_150), (Qp_30, Qp_60, Qp_100, Qp_150)):
+            _c.metric(f"bei {_v:.0f}×", f"{_qs:.3f}",
+                      delta=f"Sphäre {_qp:.3f}" if _gap else None, delta_color="off")
+        st.caption("Q_vis hier: photopisch, volle Öffnung, ohne Seeing und Fangspiegel, bezogen auf das Paraboloid. Das ist die strengste Bewertung der Spiegelfläche; an dunklen Objekten und mit Augenpupille sieht der Spiegel besser aus (Tab Wahrnehmung).")
+        with st.expander("Details"):
+            st.markdown(_kenn_html, unsafe_allow_html=True)
 
     # ── Lazy Tab-Rendering: Figure als PNG-Bytes im session_state ─────────────
     # Figures werden nur neu gezeichnet wenn sich die relevanten Parameter
