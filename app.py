@@ -1,10 +1,11 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v7.7.0 (2026-11-05)
-Entspricht newton_spiegel_rechner.py v7.7.0
+Streamlit-Version v7.7.1 (2026-11-06)
+Entspricht newton_spiegel_rechner.py v7.7.1
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
+  v7.7.1 (2026-11-06) Fangspiegel-Tab: Ausleuchtung des Okularfeldes (100-%-Feld, Helligkeit am Feldrand, Fangspiegel für 90/75 % am Rand); Q_vis-Kern unverändert
   v7.7  (2026-11-05)  Tab Kennwerte als Steckbrief (Fläche · Reichweite · Bildwirkung, Q_vis photopisch bei 30/60/100/150×), übrige Werte unter "Details"
   v7.6  (2026-11-05)  Netzhauthelligkeit (Étendue) geht in Q_vis ein; Fangspiegel-Tab: Tubus-Ø aus dem Übersichtsokular (Gittertubus); Antoniadi-Hinweis beim Seeing
   v7.5  (2026-11-03)  Ein Feld "Objekt" setzt Leuchtdichte und Augenpupille gemeinsam; Objekthelligkeiten korrigiert
@@ -31,7 +32,7 @@ import matplotlib.ticker as ticker
 import streamlit as st
 from functools import lru_cache
 
-VERSION = "7.7.0 (2026-11-05)"
+VERSION = "7.7.1 (2026-11-06)"
 EYE_RES = 60.0   # Augenauflösung [arcsec]
 BG  = "#f5f5f5"
 ACC = "#534AB7"
@@ -1567,6 +1568,52 @@ def tubus_aus_okular(D_mm: float, f_mm: float, buet_mm: float = 50.0, fe_mm: flo
     return dict(B=B, feld_deg=2.0 * math.degrees(th), z=z, versatz=s, d_innen=2.0 * ri)
 
 
+def fangspiegel_ausleuchtung(r_mm: float, D_mm: float, f_mm: float, A_mm: float, d_s_mm: float) -> float:
+    """Relative Helligkeit (0..1) eines Feldpunkts im Abstand r von der Achse in der Fokalebene (v7.7.1).
+
+    Der Lichtkegel (Radius R_K = D·A/(2f) am Fangspiegel) ist gegenüber dem Fangspiegel
+    (Radius R_s = d_s/2, kleine Achse) um s = r·(1 − A/f) versetzt; die Helligkeit ist der
+    Flächenanteil des Kegels, der noch auf den Fangspiegel fällt (Überlapp zweier Kreise).
+    A = Abstand Fangspiegelmitte–Fokalebene.  Nur Haupt- und Fangspiegel; Okularauszug,
+    Rohrwand und Blenden sowie die Kippung der Fokalebene sind nicht berücksichtigt."""
+    Rk = D_mm * A_mm / (2.0 * f_mm)
+    Rs = d_s_mm / 2.0
+    if Rk <= 0.0:
+        return 1.0
+    s = abs(r_mm) * (1.0 - A_mm / f_mm)
+    if s <= Rs - Rk:
+        return 1.0
+    if s >= Rs + Rk:
+        return 0.0
+    return min(1.0, _kreis_overlap(Rk, Rs, s) / (math.pi * Rk * Rk))
+
+
+def fangspiegel_feld(p: float, D_mm: float, f_mm: float, A_mm: float, d_s_mm: float) -> float:
+    """Durchmesser des Bildfelds [mm], bis zu dem die Helligkeit mindestens p (0..1) beträgt."""
+    lo, hi = 0.0, 4.0 * d_s_mm
+    if fangspiegel_ausleuchtung(hi, D_mm, f_mm, A_mm, d_s_mm) >= p:
+        return 2.0 * hi
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if fangspiegel_ausleuchtung(mid, D_mm, f_mm, A_mm, d_s_mm) >= p:
+            lo = mid
+        else:
+            hi = mid
+    return 2.0 * lo
+
+
+def fangspiegel_d_fuer_rand(p: float, r_rand_mm: float, D_mm: float, f_mm: float, A_mm: float) -> float:
+    """Kleinster Fangspiegel [mm, kleine Achse], der am Feldradius r_rand mindestens die Helligkeit p liefert."""
+    lo, hi = 1.0, 2.0 * D_mm
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if fangspiegel_ausleuchtung(r_rand_mm, D_mm, f_mm, A_mm, mid) >= p:
+            hi = mid
+        else:
+            lo = mid
+    return hi
+
+
 def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
                         tubus_mm: float = 0.0, bild_mm: float = 10.0,
                         S: float = 1.0, V: float = 150.0,
@@ -1599,6 +1646,10 @@ def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
         und abgewickelte Bogenlänge (Zuschnitt).
         B_ok = max(fe·AFOV/57,3; B)
     R_hut = hut_mm/2 (0 = Tubusradius, bei Tubus 0 also der Innen-Ø aus dem Übersichtsokular).
+
+    Ausleuchtung (v7.7.1): rand = Helligkeit am Rand der Okular-Feldblende mit d_pass, feld100/feld75 =
+    Felddurchmesser mit 100 %/75 %, d_rand90/d_rand75 = Fangspiegel für 90 %/75 % am Rand
+    (fangspiegel_ausleuchtung: Kreisüberlapp Lichtkegel ∩ Fangspiegel).
 
     Rückgabe (dict): A, d_min, d_pass (aufgerundet auf ganze mm), eps
     (=d/D), flaeche (Flächenverlust [%], ε²), D_kontrast (lineare
@@ -1652,6 +1703,11 @@ def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
                 R_hut=R_h, d_blende=d_bl, oaz_r=r_t, oaz_l=float(oaz_l_mm),
                 m_oaz=m_oaz, m_keg=m_keg, hit=hit, hit_geo=(u_geo, v_geo),
                 tub=tub,
+                rand=fangspiegel_ausleuchtung(b_ok / 2.0, D_mm, f_mm, A, dp),
+                feld100=fangspiegel_feld(0.9999, D_mm, f_mm, A, dp),
+                feld75=fangspiegel_feld(0.75, D_mm, f_mm, A, dp),
+                d_rand90=fangspiegel_d_fuer_rand(0.90, b_ok / 2.0, D_mm, f_mm, A),
+                d_rand75=fangspiegel_d_fuer_rand(0.75, b_ok / 2.0, D_mm, f_mm, A),
                 d_blende_pass=float(math.ceil(d_bl - 1e-9)),
                 d_bogen_pass=float(math.ceil(d_bogen - 1e-9)))
 
@@ -1687,6 +1743,10 @@ def fangspiegel_text(D, f, S_u, S_txt, r, V):
         f"Q_vis bei {V}× ({S_txt} S={S_u:.3f}):  ohne Fangspiegel {r['Q0']:.4f}  →  "
         f"mit {r['d_pass']:.0f} mm: {r['Q']:.4f}   (Verlust {r['Q_verlust']*100:.1f} %-Punkte)\n"
         f"Effektiver Kontrast-Ø (D − d, Näherung): {r['D_kontrast']:.0f} mm\n"
+        f"Ausleuchtung mit {r['d_pass']:.0f} mm (Okularfeldblende {r['B_ok']:.0f} mm): 100 % bis Ø {r['feld100']:.0f} mm, "
+        f"75 % bis Ø {r['feld75']:.0f} mm, am Feldrand {r['rand']*100:.0f} %\n"
+        f"   Fangspiegel für 90 % am Feldrand: ≥ {r['d_rand90']:.0f} mm, für 75 %: ≥ {r['d_rand75']:.0f} mm "
+        f"(nur Haupt- und Fangspiegel gerechnet)\n"
         f"Blende gegenüber dem OAZ (Hutring-Ø {2*r['R_hut']:.0f} mm, um den Hutring gebogen): "
         f"Fokus–Hutring-Achse {r['x_blende']:.0f} mm, Feld {r['B_ok']:.0f} mm\n"
         f"   Sichtlinie durch das OAZ-Rohr (steilster Winkel {r['w_oaz']:.0f}°); ebene Blende wäre Ø {r['d_geo']:.0f} mm, "
