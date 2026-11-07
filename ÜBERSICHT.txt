@@ -1,0 +1,159 @@
+NEWTON-SPIEGEL-RECHNER  v8.0.0 – Übersicht der Dateien
+============================================================
+
+Starten:   Desktop:  python newton_spiegel_rechner.py
+           Web:      streamlit run app.py
+Alle Dateien müssen im selben Ordner liegen.
+
+Wo ändere ich was?
+  Eine Formel / Rechenregel      → kern_optik.py, kern_foucault.py, kern_bau.py, kern_vergleich.py
+  Ein Diagramm (beide Versionen) → diagramme.py
+  Ein Text, eine Beschriftung    → texte.py (STRINGS)
+  Version, Farben                → konstanten.py
+  Aussehen/Bedienung Desktop     → newton_spiegel_rechner.py (Klasse App)
+  Aussehen/Bedienung Web         → app.py (Funktion main)
+
+Regel: Eine Rechenfunktion steht genau einmal (im Kern) – Desktop und Web importieren sie.
+       Der Kern kennt weder Tkinter noch Streamlit.
+
+Test nach jeder Änderung an der Rechnung (im Ordner tests):
+  python baseline.py pruefen     → 236 Werte gegen sollwerte_v7_11_0.json (soll: 0 Abweichungen)
+Nach einer GEWOLLTEN Änderung der Rechnung neue Sollwerte schreiben:  python baseline.py sollwerte
+
+============================================================
+
+kern_optik.py – Optik und Wahrnehmung (Wellenfront, Strehl, MTF, CSF, Q_vis, Étendue, Grenzen)
+------------------------------------------------------------
+_golden_section  – Golden-Section-Suche fuer Minimum von f auf [a, b].
+_wellenfronten  – Gemeinsame Basis: Wp, Wb, Wrms, Strehl (Maréchal).
+_strehl_exakt  – Exakter Strehl via Pupillenintegral.
+_Wb_von_S  – Wb per Bisektion so dass _strehl_exakt(Wb) == S.
+_Wb_schieber  – Wb für die Schieberstellung.  Ohne Verbesserung (S_slide = S der Kugel)
+v_krit_naeh  – Schnelle Näherungsformel für V_krit ohne MTF×CSF-Integration.
+v_wendepunkt_naeh  – Separater 'Wendepunkt' NUR für die Sigmoid-Näherungskurve
+_kennzahlen_von_S  – Effektive Öffnungen und Vergrößerungsgrenzen aus S und Wb.
+_mtf_arrays  – MTF-Arrays aus Wb und S — gemeinsame Basis für Diagramm-Funktionen.
+_lnS_geglaettet  – ln(S) am besten Fokus, für Wb > ~0.4 λ über die Strehl-Oszillation geglättet.
+berechne  – Grundlegende optische Kenngrößen (vergrößerungsunabhängig).
+berechne_vergr  – Vergrößerungsabhängige effektive Öffnung für Paraboloid und Sphäre.
+v_kritisch  – Kritische Vergrößerung: V_krit = D_mm / (13·Wb)  (s. Chat-Historie 08/2026,
+v_krit_blur_direkt  – V ab der geometrischer Blur am Auge >= Augenauflösung — direkte Berechnung.
+v_kritisch_strehl  – V_krit für beliebigen Strehl-Wert (für Schieber-Vergleich).
+v_krit_aus_qvis  – V_krit aus MTF×CSF-Integral: Vergrößerung ab der Q_vis < rel_schwelle · Q_para.
+v_krit_aus_qvis_von_Wb  – Wie v_krit_aus_qvis(), aber direkt aus Wb — für Schieber-Wert.
+v_halb_exakt  – Exaktes V½ via MTF×CSF-Integral — Analogon zur Näherung V_krit/³√(S²).
+helligkeit_praxis  – Netzhaut-Flächenhelligkeit L(V) für ausgedehnte Objekte (Mond, Planeten,
+v_min_helligkeit  – V ab der Austrittspupille <= Augenpupille — kein Lichtverlust mehr
+v_max_seeing  – Onset-Schwelle: V ab der die (vergrößerte) Seeing-Unschärfe die
+v_max_diffraktion  – Onset-Schwelle: V ab der die (vergrößerte) Beugungsscheibe (Dawes-
+v_kombiniert_blur  – Kombiniert zwei unabhängige Blur-Quellen (z.B. Seeing + Spiegelfehler),
+v_max_helligkeit  – V ab der die Netzhaut-Flächenhelligkeit unter die Wahrnehmungs-
+kurven_N  – Strehl und eff. Öffnungen als Funktion von f/D.
+mtf_para  – Analytische MTF eines beugungsbegrenzten Kreisteleskops (Paraboloid).
+mtf_para_obstr  – MTF eines Kreisteleskops mit zentraler Obstruktion ε = d_fang/D.
+d_fang_min  – Minimaler Fangspiegel-Durchmesser [mm] — geometrische Herleitung.
+mtf_sph_rel_1d  – Relative MTF eines sphärischen Spiegels (normiert: MTF(0)=1).
+mtf_sph_rel  – Relative MTF eines sphärischen Spiegels (MTF(0)=1) — EXAKT (v7.0.0-beta).
+mtf_kurven  – MTF-Kurven für Paraboloid und sphärischen Spiegel.
+mtf_kurven_von_S  – Wie mtf_kurven(), aber S direkt einsetzen statt Brennweite.
+mtf_eye  – Augen-MTF nach Barten-Näherung (fc ~30 cpd).  [Barten 1999]
+csf  – Contrast Sensitivity Function nach Mannos & Sakrison (1974).
+csf_lum  – Luminanzabhängige CSF (angelehnt an Barten 1999) — vereinfachte Skalierung.
+_csf_shift  – Frequenz-Skalierung der CSF-Spitze; L None oder ≥ L_ref -> 1 (photopisch).
+csf_L  – CSF (Mannos/Sakrison-Form) mit zu niedrigeren Frequenzen verschobener
+_L_roh  – Rohe Objekt-Leuchtdichte [cd/m²] als float > 0, sonst None (= Aus / photopisch).
+_L_eff  – Leuchtdichte auf der Netzhaut (Étendue, v7.6.0).
+csf_spitze_cpd  – Lage der CSF-Spitze [cpd] (nur zur Anzeige).
+Q_vis_blende  – Absolute visuelle Qualität mit Obstruktion, Leuchtdichte und fc-Kollaps.
+Q_vis_blende_batch  – Q_vis_blende vektorisiert über V_arr × L_arr — numpy-Broadcast.
+_qvis_schieber  – Q_vis(V) exakt (MTF×CSF, Paraboloid = 1) für die Schieberstellung; ohne Verbesserung = ech
+perceived_quality_exakt  – Q_vis exakt: MTF×CSF-Integral ohne Dämpfungsfunktion w(V).
+perceived_quality_exakt_kurven  – perceived_quality_exakt für ein Array von Vergrößerungen — vektorisiert.
+perceived_quality_exakt_von_Wb  – Q_vis exakt direkt aus Wb — für Schieber-Kurve mit beliebigem Strehl.
+perceived_quality_exakt_kurven_von_Wb  – perceived_quality_exakt_von_Wb für ein Array von Vergrößerungen — vektorisiert.
+qvis_einzelrechner  – Q_vis für EINEN einzelnen Spiegel: Öffnung D, Strehl S, Vergrößerung V
+seeing_mtf  – Langzeit-Seeing-MTF (Fried):  exp(−3,44·(λν/r0)^(5/3)),
+mtf_aus_wellenfront  – MTF aus einer rotationssymmetrischen Wellenfront W(ρ) [λ] (v7.0.0-beta).
+mtf_aus_wellenfront_pupille  – Wie mtf_aus_wellenfront, aber das Auge nutzt nur die zentrale Teilöffnung
+beurteilung
+
+kern_foucault.py – Foucault-Test (Zonen, Wellenfront, Best-Fit-ROC, Kennzahlen)
+------------------------------------------------------------
+_foucault_kanten_r2  – Zonenkanten in r² (gleichflächig). rand_geteilt: die äußerste Zone wird in zwei
+foucault_zonen  – Messradien gleichflächiger Zonen (Zonenmitte, flächengewichtet).
+foucault_zonengrenzen  – Außengrenzen der Zonen (für Zonenmaske/Ringblende).
+_foucault_wellenfront_kern  – Kernrechnung der Zonen-Wellenfront fuer gegebenen Kruemmungsradius R_c.
+foucault_wellenfront  – Rekonstruiert die Wellenfront aus Foucault-Zonenmessungen (Maskentest).
+_polyfit_bic  – Waehlt Polynomgrad fuer den Zonenfehler-Fit.
+foucault_kennzahlen  – PtV, RMS, Strehl aus Zonenwellenfronten.
+
+kern_bau.py – Bauen (Fangspiegel, Tubus aus Okular, Gitterrohr, Pfeiltiefe)
+------------------------------------------------------------
+qvis_kurve_mit_fangspiegel  – Q_vis(V) eines Spiegels mit Strehl S UND zentraler Fangspiegel-Abschattung
+_kreis_overlap  – Überlappfläche zweier Kreise (Radien R1, R2, Mittenabstand d).
+tubus_aus_okular  – Erforderlicher Tubus-Innendurchmesser aus den Daten des Übersichtsokulars (v7.6.1/7.6.2).
+fangspiegel_ausleuchtung  – Relative Helligkeit (0..1) eines Feldpunkts im Abstand r von der Achse in der Fokalebene (
+fangspiegel_feld  – Durchmesser des Bildfelds [mm], bis zu dem die Helligkeit mindestens p (0..1) beträgt.
+fangspiegel_d_fuer_rand  – Kleinster Fangspiegel [mm, kleine Achse], der am Feldradius r_rand mindestens die Helligke
+fangspiegel_rechner  – Fangspiegel-Rechner (neu in v6.12.0).
+pfeiltiefe  – Pfeiltiefe (v7.10.0): Tiefe der Spiegelmitte gegenüber dem Rand.
+gitterrohr_stangen  – Stangenlänge eines Gitterrohrs (v7.8.0).
+gitterrohr_freiraum  – Abstand der Stangen vom Lichtkegel (v7.8.0; z0 = Höhe der unteren Lochebene über dem Spieg
+gitterrohr_auto  – Vorgaben aus dem Fangspiegel-Rechner (v7.8.1, erweitert v7.9.0):
+gitterrohr_text
+plt_Rectangle
+gitterrohr_zeichnen  – Seitenansicht (links) und Draufsicht (rechts) des Gitterrohrs mit Lichtkegel (v7.8.0).
+fangspiegel_zeichnen  – Zeichnet Q_vis(V) für Mindest-Fangspiegel und +10/+20 mm in ax
+fangspiegel_text
+fangspiegel_skizze  – Draufsicht (Blick entlang der optischen Achse) auf Hutring, Fangspiegel,
+fangspiegel_d  – Nur die Geometrie: Fangspiegel-Ø aufgerundet auf ganze mm (v7.0.0).
+
+kern_vergleich.py – Spiegelvergleich (Q_abs, Karten, Break-even, Planetenbild)
+------------------------------------------------------------
+_qabs_mo
+_qabs_mtf  – Gesamt-MTF (Aberration + Ringblende) für Strehl S und Obstruktion eps,
+_qabs_basis  – Strehl-unabhängiger Teil: (x_ang [cyc/″], Gewicht) für Spiegel-Ø D.
+_rho_s  – Genutzter Anteil des Pupillenradius: min(1, V·d_pupil/D); d_pupil<=0 → 1.
+_mtf_eff  – (MTF-Array, genutzter Durchmesser) bei Vergrößerung V und Augenpupille
+qabs_zaehler  – ∫ MTF_ges(ν) · CSF(ν/V) dν  über die WINKELfrequenz (absolut).
+qabs  – Absolutes Q_abs: sichtbare Detailübertragung relativ zu einem festen
+_wf_kugel  – Wellenfront der Kugel am besten Fokus als Eingabe für qabs(wf=...).
+qvis_pupille_kurve  – Q_vis(V) MIT Abblenden durch die Augenpupille (v7.2.0).
+qabs_karte  – Q_abs auf einem D×S-Gitter; Fangspiegel aus D und f=ratio_N·D.
+qabs_breakeven_S  – Kleinstes S des Spiegels (D2, Fangspiegel d2), das Q_abs >= target hält.
+qabs_aequiv_D  – Durchmesser [mm] eines IDEALEN Spiegels ohne Fangspiegel mit Q_abs = q_ziel
+planet_objekt  – Synthetisches Planetenscheibchen (Ø 24″) mit Bändern, ovalem Fleck und
+augen_filter  – Augen-Tiefpass bei Vergrößerung V (v7.0.0-beta): CSF (Mannos/Sakrison) normiert auf ihr
+bild_mit_mtf  – Objekt mit der Gesamt-MTF (Aberration × Ringblende × Seeing) falten.
+vergleich_achsen  – Raster: oben Q_abs(V) und Karte, Mitte drei Bildfelder, optional unten
+_wf_mtf  – MTF-Gitter aus einer Foucault-Wellenfront (dict rho, W, lam) für den
+vergleich_zeichnen  – Zeichnet links Q_abs(V) für Spiegel 1/2, rechts die D×S-Karte, darunter
+
+diagramme.py – Diagramm-Methoden, von Desktop und Web gemeinsam genutzt
+------------------------------------------------------------
+class _Var
+    get
+    set
+class DiagrammMethoden
+    _diagramm_vmax_D  – Zeigt V_max(D) für PERFEKTE Optik (S=1): Beugungsgrenze (linear
+    _diagramm_vmax  – 'Sinnvolle Maximalvergrößerung' — Gegenprobe zum 2×D-Mythos.
+    _diagramm_foucault  – Foucault-Diagramm: Wellenfrontkurve + Kennzahlentafel.
+    _ax_fmt
+    _diagramm_strehl
+    _diagramm_oeffnung
+    _diagramm_deff_D
+    _diagramm_beugung
+    _diagramm_mtf
+    _diagramm_wahrnehmung  – Visueller Qualitätsindex Q_vis vs. Vergrößerung.
+    _diagramm_blende  – Blenden-Diagramm: Q̃(V) für Original und Blendenstufen + Leuchtdichte-Effekt.
+
+texte.py – Texte (de/en), Sprache
+------------------------------------------------------------
+T  – Gibt den String für den aktuellen Schlüssel in der aktiven Sprache zurück.
+set_sprache  – Aktive Sprache setzen ("de" oder "en").
+
+konstanten.py – Version, Farben
+------------------------------------------------------------
+
+newton_spiegel_rechner.py – Desktop-Oberfläche (Tkinter): Klasse App, Fenster, Eingaben, Tabs
+app.py – Web-Oberfläche (Streamlit): main(), plot_*-Funktionen

@@ -12,7 +12,7 @@
     font-size: 9pt; color: #777;
   }
   @bottom-left {
-    content: "Technische Dokumentation v7.7.0: Newton-Spiegel-Rechner";
+    content: "Technische Dokumentation v7.8.0: Newton-Spiegel-Rechner";
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 9pt; color: #777;
   }
@@ -81,7 +81,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <div class="header-banner">
   <h1>Technische Gesamtdokumentation</h1>
-  <div class="subtitle">Newton-Spiegel-Rechner v7.7.0 &mdash; Mathematisch-Physikalische Modelle, Bewertung und Bauhilfen</div>
+  <div class="subtitle">Newton-Spiegel-Rechner v7.8.0 &mdash; Mathematisch-Physikalische Modelle, Bewertung und Bauhilfen</div>
 </div>
 
 <p>Diese Dokumentation beschreibt den aktuellen Stand des Programms <code>newton_spiegel_rechner.py</code> (Desktop, tkinter) und der Web-App <code>app.py</code> (Streamlit). Beide Versionen verwenden dieselben Rechenkerne. Das Programm bewertet Newton-Spiegel &mdash; vor allem sph&auml;rische, aber auch beliebig gut polierte &mdash; nach Wellenfrontfehler, Strehl-Quotient, MTF und einem wahrnehmungsbezogenen Qualit&auml;tsindex, hilft beim Auswerten des Foucault-Tests und beim Auslegen von Fangspiegel und Blende, und vergleicht verschiedene Spiegel miteinander, auch wenn sie unterschiedlich gro&szlig; sind.</p>
@@ -96,7 +96,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
   <tbody>
     <tr><td><strong>Grundlagen</strong></td><td>Unterreiter <em>Diagramme</em> (2&times;2-&Uuml;bersicht), <em>Kennwerte</em> und <em>Grenzen</em> (sinnvolle Maximalvergr&ouml;&szlig;erung; V<sub>max</sub> &uuml;ber &Ouml;ffnung und Seeing)</td><td>3, 8.4</td></tr>
     <tr><td><strong>Bildqualit&auml;t</strong></td><td>Unterreiter <em>Wahrnehmung</em> (Q<sub>vis</sub>(V)), <em>MTF</em>, <em>Vergleich (Beta)</em> (absoluter Vergleich zweier Spiegel)</td><td>4, 5, 6</td></tr>
-    <tr><td><strong>Bauen</strong></td><td>Unterreiter <em>Foucault-Test</em> (Auswertung), <em>Fangspiegel</em> (Mindestgr&ouml;&szlig;e gegen&uuml;ber dem Okularauszug) und <em>Blende</em> (Abblenden des Spiegels)</td><td>7, 8.2, 8.3</td></tr>
+    <tr><td><strong>Bauen</strong></td><td>Unterreiter <em>Foucault-Test</em> (Auswertung), <em>Fangspiegel</em> (Mindestgr&ouml;&szlig;e gegen&uuml;ber dem Okularauszug), <em>Blende</em> (Abblenden des Spiegels) und <em>Gitterrohr</em> (Stangenl&auml;nge)</td><td>7, 8.2, 8.3</td></tr>
   </tbody>
 </table>
 
@@ -396,7 +396,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
-<h2>7. Bauen: Fangspiegel und Blende</h2>
+<h2>7. Bauen: Fangspiegel, Blende und Gitterrohr</h2>
 
 <h3>7.1 Fangspiegel-Mindestgr&ouml;&szlig;e</h3>
 <p>Der Strahlkegel hat den &Ouml;ffnungswinkel D/f. Am Fangspiegel muss er die Strahlen des gesamten Hauptspiegels plus das Bildfeld &uuml;berdecken:</p>
@@ -418,6 +418,16 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 </ul>
 <p>Beispiele (Okularauszug 50&nbsp;mm): 200/1000: Innen-&Oslash; 231&nbsp;mm; 150/750: 180&nbsp;mm; 300/1200: 330&nbsp;mm. Gibt man bei &bdquo;Tubus-&Oslash;&ldquo; <strong>0</strong> ein, wird dieser Wert verwendet: Er bestimmt den Abstand A, damit die Fangspiegelgr&ouml;&szlig;e, und den Hutring, an dem die Streulichtblende innen sitzt (ebenso in den Rechnungen der Tabs Grenzen und Vergleich). Ein von Hand eingetragener Wert &uuml;berschreibt das. Nicht ber&uuml;cksichtigt sind Taukappen, Streulichtblenden im Tubus und die Fangspiegel-Abschattung selbst.</p>
 
+<h3>7.1b Ausleuchtung des Okularfeldes</h3>
+<p>Die Mindestgr&ouml;&szlig;e aus 7.1 sichert nur ein zu 100&nbsp;% ausgeleuchtetes Bildfeld B (voreingestellt 10&nbsp;mm). Ein Weitwinkel-Okular sieht mehr: Seine Feldblende (30&nbsp;mm, 70&deg; &rarr; 36,7&nbsp;mm) reicht weit in den abgeschatteten Bereich. Der Tab rechnet deshalb zus&auml;tzlich die Helligkeit &uuml;ber das Feld.</p>
+<ul>
+  <li>Der Lichtkegel eines Feldpunkts im Abstand r von der Achse hat am Fangspiegel den Radius R<sub>K</sub> = D&middot;A/(2f) und ist gegen&uuml;ber dem Fangspiegel (Radius R<sub>s</sub> = d<sub>s</sub>/2, kleine Achse) um s = r&middot;(1 &minus; A/f) versetzt.</li>
+  <li>Die Helligkeit ist der Fl&auml;chenanteil des Kegels, der noch auf den Fangspiegel f&auml;llt (&Uuml;berlapp zweier Kreise): 100&nbsp;% f&uuml;r s &le; R<sub>s</sub> &minus; R<sub>K</sub>, 0&nbsp;% f&uuml;r s &ge; R<sub>s</sub> + R<sub>K</sub>, dazwischen A<sub>&Uuml;berlapp</sub>/(&pi;R<sub>K</sub>&sup2;).</li>
+  <li>Ausgegeben werden der Durchmesser des 100-%-Feldes und des 75-%-Feldes, die Helligkeit am Rand der Okular-Feldblende und der Fangspiegel, der am Rand 90&nbsp;% bzw. 75&nbsp;% liefert.</li>
+</ul>
+<p>Beispiel 200/1000, Okularauszug 50&nbsp;mm, Gittertubus, &Uuml;bersichtsokular 30&nbsp;mm/70&deg;: Mit dem Mindest-Fangspiegel von 44&nbsp;mm ist das Feld bis &Oslash;&nbsp;13&nbsp;mm voll, bis &Oslash;&nbsp;32&nbsp;mm zu 75&nbsp;% ausgeleuchtet, am Rand der Feldblende sind es 67&nbsp;%. F&uuml;r 90&nbsp;% am Rand braucht man 55&nbsp;mm (Obstruktion 27&nbsp;%), f&uuml;r 75&nbsp;% etwa 48&nbsp;mm. Das ist die Abw&auml;gung zwischen kleiner Obstruktion und gleichm&auml;&szlig;igem Weitwinkelfeld; ab wann ein Helligkeitsabfall am Feldrand st&ouml;rt, ist eine Frage des Beobachters (Faustregel: wenige Zehntel Prozent bis etwa 25&nbsp;% fallen kaum auf; nicht gemessen).</p>
+<p>Gerechnet wird nur die Geometrie von Haupt- und Fangspiegel. Okularauszug, Rohrwand, Blenden und die Kippung der Fokalebene sind nicht ber&uuml;cksichtigt; die Werte sind daher auf einige Prozent genau. Der Q<sub>vis</sub>-Kern ist davon unber&uuml;hrt.</p>
+
 <h3>7.2 Blende gegen&uuml;ber dem Okularauszug (Gittertubus)</h3>
 <p>Beim Gittertubus liegen Okularauszug und Fangspiegel frei. Das Okular k&ouml;nnte dann am Fangspiegel vorbei in den hellen Himmel oder auf die Gegenseite des Hutrings blicken. Eine Blende am Hutring gegen&uuml;ber dem Okularauszug ersetzt dort den Tubus.</p>
 
@@ -437,6 +447,18 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h3>7.3 Gitterrohr: Stangenl&auml;nge</h3>
+<p>Der Tab <em>Gitterrohr</em> berechnet die L&auml;nge der Stangen eines Gitterrohrs, bei dem zwei Ringe durch schr&auml;g gespannte Stangen verbunden sind. Jeder Ring hat n gleichm&auml;&szlig;ig verteilte Anschlusspunkte auf dem Teilkreis (Radius r). Jede Stange verbindet einen Punkt des unteren Rings mit dem um k Teilungen versetzten Punkt des oberen Rings; der Versatzwinkel ist &Delta;&phi; = k&middot;360&deg;/n. Die Stange ist die Hypotenuse aus der H&ouml;he h und der Sehne s&nbsp;=&nbsp;2&middot;r&middot;sin(&Delta;&phi;/2):</p>
+<p class="math" style="text-align:center">x = &radic;( h&sup2; + (2&middot;r&middot;sin(&Delta;&phi;/2))&sup2; )&nbsp;&nbsp;&nbsp;(Bohrungsmitte &ndash; Bohrungsmitte)</p>
+<ul>
+  <li>Beispiel n&nbsp;=&nbsp;6, k&nbsp;=&nbsp;1: &Delta;&phi;&nbsp;=&nbsp;60&deg;, die Sehne ist gleich r, also x&nbsp;=&nbsp;&radic;(h&sup2;&nbsp;+&nbsp;r&sup2;). k&nbsp;=&nbsp;0 ergibt senkrechte Stangen (x&nbsp;=&nbsp;h).</li>
+  <li>Mit der Option <em>Kreuz</em> kommen die gegenl&auml;ufigen Stangen (Versatz &minus;k) hinzu; sie kreuzen die ersten in halber H&ouml;he. Bei 2k&nbsp;=&nbsp;n sind beide Richtungen dieselbe Stange.</li>
+  <li>Zuschnitt = x + 2&middot;Zugabe (&Uuml;berstand oder Gewinde je Ende).</li>
+  <li><strong>Vorgaben aus dem Fangspiegel-Tab:</strong> H&ouml;he h = f&nbsp;&minus;&nbsp;A (Hutring auf H&ouml;he des Fangspiegels, A wie in Kapitel&nbsp;7.1), Teilkreis-&Oslash; = Tubus-Innen-&Oslash; aus dem &Uuml;bersichtsokular (Kapitel&nbsp;7.1a). Beides l&auml;sst sich &uuml;berschreiben. Der untere Ring liegt in der Spiegelebene.</li>
+  <li><strong>Freiraum zum Lichtkegel:</strong> Eine Stange l&auml;uft geradlinig, ihr Achsabstand ist &rho;(t) = r&middot;&radic;((1&minus;t)&sup2; + t&sup2; + 2t(1&minus;t)&middot;cos&Delta;&phi;), am kleinsten in halber H&ouml;he (r&middot;cos(&Delta;&phi;/2)). Der Lichtkegel eines Feldrandpunkts hat in der H&ouml;he z den Radius D/2&middot;(1&nbsp;&minus;&nbsp;z/f) + z&middot;tan&theta;. Der Tab gibt den kleinsten Abstand und die H&ouml;he an und warnt, wenn eine Stange den Kegel schneidet. Beispiel 200/1000, n&nbsp;=&nbsp;6: bei k&nbsp;=&nbsp;1 bleiben 15&nbsp;mm Abstand (am unteren Ring), bei k&nbsp;=&nbsp;2 schneidet die Stange den Kegel (&minus;12&nbsp;mm in etwa 330&nbsp;mm H&ouml;he).</li>
+</ul>
+<p>Nicht ber&uuml;cksichtigt sind Stangendicke, Ringbreite, die Lage der Anschlussbohrungen im Ring und das Durchh&auml;ngen der Stangen. Die Zahlen sind Geometrie, keine Festigkeitsberechnung.</p>
+
 <h2>8. Beschreibung der Tabs</h2>
 
 <h3>8.1 Grundlagen</h3>
@@ -634,7 +656,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 </ul>
 
 <div class="footer-note">
-  Technische Gesamtdokumentation v7.6 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 7.7.0).
+  Technische Gesamtdokumentation v7.6 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 7.8.0).
 </div>
 
 </body>
