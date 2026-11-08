@@ -5,7 +5,7 @@ Streamlit-Version v8.3.0 (2026-11-08)
 Entspricht newton_spiegel_rechner.py v8.3.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
-  v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"
+  v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"; Web: Wahrnehmungs-Diagramm größer gezeichnet (12×6,6 Zoll) und alle Diagramme mit 130 dpi, dadurch feiner
   v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
   v8.2.0 (2026-11-08) Gitterrohr: maßstäbliche 3D-Ansicht (neues Modul ansicht3d.py; Seite, gedreht, Draufsicht; OAZ zwischen zwei Spinnenbeinen, Streulichtblende aus Fangspiegel-Rechner), Schalter in Web und Desktop
   v8.1.0 (2026-11-07) Gitterrohr: Eingabe "Spiegel unter Ring-Oberkante" (Spiegelversatz verkürzt h und Stangenlänge); Prüffälle 8" Zigzag und 14" TripleX
@@ -167,7 +167,7 @@ def plot_mtf(D, f, lam, S_slide, paraxial=False, objekte="planeten",
 
 
 def plot_wahrnehmung(D, f, lam, S_slide, S_real, V_cur=None, d_fang=0.0, d_pup=0.0, L_obj=0.0):
-    fig, ax = _neue_figur((8, 5))
+    fig, ax = _neue_figur((12, 6.6))
     d = _Diagramme(); d._tab_wahrnehmung = (fig, ax, _FakeCanvas())
     d._wn_V = V_cur
     d._wn_fang = d_fang
@@ -416,7 +416,7 @@ def main():
 
     def _fig_to_png(fig):
         buf = _io.BytesIO()
-        fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
+        fig.savefig(buf, format="png", dpi=130, bbox_inches="tight")
         plt.close(fig)
         buf.seek(0)
         return buf.getvalue()
