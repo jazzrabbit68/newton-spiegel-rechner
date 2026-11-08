@@ -17,7 +17,7 @@ Regel: Eine Rechenfunktion steht genau einmal (im Kern) – Desktop und Web impo
        Der Kern kennt weder Tkinter noch Streamlit.
 
 Test nach jeder Änderung an der Rechnung (im Ordner tests):
-  python baseline.py pruefen     → 236 Werte gegen sollwerte_v7_11_0.json (soll: 0 Abweichungen)
+  python baseline.py pruefen     → 236 Werte gegen sollwerte.json (soll: 0 Abweichungen)
 Nach einer GEWOLLTEN Änderung der Rechnung neue Sollwerte schreiben:  python baseline.py sollwerte
 
 ============================================================

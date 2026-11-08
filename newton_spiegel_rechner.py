@@ -1,7 +1,9 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v8.0.0 (2026-11-07)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v8.2.0 (2026-11-08)
 ============================================================================================
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
+  v8.2.0 (2026-11-08) Gitterrohr: maßstäbliche 3D-Ansicht (neues Modul ansicht3d.py; Seite, gedreht, Draufsicht; OAZ zwischen zwei Spinnenbeinen, Streulichtblende aus Fangspiegel-Rechner), Schalter in Web und Desktop
+  v8.1.0 (2026-11-07) Gitterrohr: Eingabe "Spiegel unter Ring-Oberkante" (Spiegelversatz verkürzt h und Stangenlänge); Prüffälle 8" Zigzag und 14" TripleX
   v8.0.0 (2026-11-07) Programm in Module aufgeteilt (kern_optik, kern_foucault, kern_bau, kern_vergleich, diagramme, texte, konstanten); Rechenwerte und Diagramme unverändert (Regressionstest)
   v7.11.0 (2026-11-07) Gitterrohr: Ring-Innen-Ø aus dem Fangspiegel-Rechner, überschreibbar; Achse 40 mm über dem Hutring; Seitenansicht mit Ringen, Fangspiegel und Okularauszug
   v7.10.0 (2026-11-07) Kennwerte: Pfeiltiefe (Mitte–Rand, Kugel R = 2f und Paraboloid) im Steckbrief
@@ -94,6 +96,7 @@ from diagramme import DiagrammMethoden
 from kern_bau import (fangspiegel_rechner, fangspiegel_skizze, fangspiegel_text,
     fangspiegel_zeichnen, gitterrohr_auto, gitterrohr_freiraum, gitterrohr_stangen, gitterrohr_text,
     gitterrohr_zeichnen, pfeiltiefe, qvis_kurve_mit_fangspiegel)
+from ansicht3d import gitter3d_zeichnen
 from kern_foucault import (foucault_kennzahlen, foucault_wellenfront, foucault_zonen,
     foucault_zonengrenzen)
 from kern_optik import (ANTONIADI_HINWEIS, OBJEKT_HELLIGKEITEN, OBJEKT_PUPILLE, _L_eff, _L_roh,
@@ -837,11 +840,12 @@ class App(DiagrammMethoden, tk.Tk):
                         ("Ringbreite", "b", "50", "mm"),
                         ("Ringdicke", "rd", "15", "mm"),
                         ("Loch–Ringfläche", "lr", "25", "mm"),
+                        ("Spiegel unter Ring-OK", "st", "0", "mm (0 = bündig)"),
                         ("Achse über Hutring", "a", "40", "mm"),
                         ("Ring-Innen-Ø", "di", "0", "mm (0 = Fangspiegel-Rechner)"),
                         ("Lochabstand h", "h", "0", "mm (0 = auto)"),
                         ("Teilkreis-Ø", "d", "0", "mm (0 = Innen-Ø + Ringbreite)"),
-                        ("Punkte je Ring n", "n", "6", ""),
+                        ("Punkte je Ring n", "n", "3", ""),
                         ("Versatz k", "k", "1", "(0 senkrecht, 1 Nachbar)"),
                         ("Abzug je Ende", "z", "25", "mm (Gabelkopf)")]:
                     tk.Label(gtr, text=lbl, bg=BG, fg="#6a1b9a",
@@ -856,6 +860,11 @@ class App(DiagrammMethoden, tk.Tk):
                              font=("Helvetica", 8)).pack(side="left", padx=(2, 10))
                 self._gt_kreuz = tk.BooleanVar(value=True)
                 tk.Checkbutton(frm, text="gegenläufige Stangen zusätzlich (Kreuz)", variable=self._gt_kreuz,
+                               bg=BG, fg="#6a1b9a", activebackground=BG, selectcolor=BG2,
+                               font=("Helvetica", 9, "bold"), command=self._gitter_neu
+                               ).pack(side="top", anchor="w", padx=8)
+                self._gt_3d = tk.BooleanVar(value=False)
+                tk.Checkbutton(frm, text="3D-Ansicht (maßstäblich; Spinne, Blende, OAZ geschätzt)", variable=self._gt_3d,
                                bg=BG, fg="#6a1b9a", activebackground=BG, selectcolor=BG2,
                                font=("Helvetica", 9, "bold"), command=self._gitter_neu
                                ).pack(side="top", anchor="w", padx=8)
@@ -1274,7 +1283,7 @@ class App(DiagrammMethoden, tk.Tk):
 
     def _gt_eingaben(self):
         """Eingaben des Gitterrohr-Tabs (Komma/Punkt, Fallback bei Fehler)."""
-        std = dict(b=50.0, rd=15.0, lr=25.0, a=40.0, di=0.0, h=0.0, d=0.0, n=6, k=1, z=25.0)
+        std = dict(b=50.0, rd=15.0, lr=25.0, st=0.0, a=40.0, di=0.0, h=0.0, d=0.0, n=6, k=1, z=25.0)
         out = {}
         for key, v in self._gt_vars.items():
             try:
@@ -1308,24 +1317,31 @@ class App(DiagrammMethoden, tk.Tk):
         """Gitterrohr-Rechner: Stangenlänge, Freiraum zum Lichtkegel, Skizze (neu in v7.8.0)."""
         fig, ax, canvas = self._tab_gitter
         fig.clf()
-        ax1 = fig.add_subplot(1, 2, 1); ax1.set_facecolor(BG)
-        ax2 = fig.add_subplot(1, 2, 2); ax2.set_facecolor(BG)
-        self._tab_gitter = (fig, ax1, canvas)
+        _3d = bool(self._gt_3d.get()) if hasattr(self, "_gt_3d") else False
+        if not _3d:
+            ax1 = fig.add_subplot(1, 2, 1); ax1.set_facecolor(BG)
+            ax2 = fig.add_subplot(1, 2, 2); ax2.set_facecolor(BG)
+            self._tab_gitter = (fig, ax1, canvas)
         e = self._gt_eingaben()
         fs = getattr(self, "_fs_vars", None)
         buet = float(fs["buet"].get()) if fs else 50.0
         fe = float(fs["fe"].get()) if fs else 30.0
         afov = float(fs["afov"].get()) if fs else 70.0
-        ga = gitterrohr_auto(D, f, buet, fe, afov, e["b"], e["a"], e["rd"], e["lr"], e["di"])
+        ga = gitterrohr_auto(D, f, buet, fe, afov, e["b"], e["a"], e["rd"], e["lr"], e["di"], e["st"])
         h = e["h"] if e["h"] > 0 else ga["h"]
         d = e["d"] if e["d"] > 0 else ga["d_teil"]
         g = gitterrohr_stangen(h, d / 2.0, e["n"], e["k"], -e["z"], bool(self._gt_kreuz.get()),
                                self._gt_bau.get())
-        fr = gitterrohr_freiraum(h, d / 2.0, g["dphi"], D, f, ga["feld_halb"], e["lr"])
+        fr = gitterrohr_freiraum(h, d / 2.0, g["dphi"], D, f, ga["feld_halb"], ga["z0"])
         self._gt_readout.config(text=gitterrohr_text(D, f, g, fr, h, d))
-        gitterrohr_zeichnen(ax1, ax2, D, f, g, h, d / 2.0, fr, e["lr"],
+        if _3d:
+            gitter3d_zeichnen(fig, D, f, ga, g, h, d / 2.0, e["b"], e["rd"], e["lr"], self._gt_bau.get(),
+                              dict(buet=buet, fe=fe, afov=afov))
+            canvas.draw_idle()
+            return
+        gitterrohr_zeichnen(ax1, ax2, D, f, g, h, d / 2.0, fr, ga["z0"],
                           (ga["d_innen"] / 2.0, ga["d_innen"] / 2.0 + e["b"]),
-                          dict(rt=e["rd"], z_sec=ga["z_sec"], A=ga["A"], d_fang=ga["d_fang"]))
+                          dict(rt=e["rd"], z_sec=ga["z_sec"], A=ga["A"], d_fang=ga["d_fang"], tief=ga["tief"]))
         fig.tight_layout()
         canvas.draw_idle()
 

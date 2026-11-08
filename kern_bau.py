@@ -294,7 +294,8 @@ def gitterrohr_freiraum(h_mm: float, r_mm: float, dphi_deg: float, D_mm: float, 
 def gitterrohr_auto(D_mm: float, f_mm: float, buet_mm: float = 50.0, fe_mm: float = 30.0,
                     afov_deg: float = 70.0, ring_breite_mm: float = 50.0,
                     achse_mm: float = 30.0, ring_dicke_mm: float = 15.0,
-                    loch_ring_mm: float = 25.0, d_innen_mm: float = 0.0) -> dict:
+                    loch_ring_mm: float = 25.0, d_innen_mm: float = 0.0,
+                    spiegel_tief_mm: float = 0.0) -> dict:
     """Vorgaben aus dem Fangspiegel-Rechner (v7.8.1, erweitert v7.9.0):
     Ring-Innen-Ø = Tubus-Ø aus dem Okular (Gittertubus), Teilkreis der Befestigungspunkte =
     Innen-Ø + Ringbreite (Loch in Ringmitte), Höhe zwischen den Lochebenen
@@ -302,13 +303,26 @@ def gitterrohr_auto(D_mm: float, f_mm: float, buet_mm: float = 50.0, fe_mm: floa
     Fangspiegelmitte (= optische Achse des Okularauszugs) liegt 'achse_mm' über der Oberkante des
     Hutrings; Ringe gleich dick.
     v7.9.0: Die Lochmitte der Gegenstücke liegt 'loch_ring_mm' von der Ringfläche entfernt (innen, zwischen
-    den Ringen) -> Lochabstand h = (f − A − Achshöhe) − Ringdicke − 2·loch_ring; untere Lochebene z0 = loch_ring."""
+    den Ringen) -> Lochabstand h = (f − A − Achshöhe) − Ringdicke − 2·loch_ring; untere Lochebene z0 = loch_ring.
+    v8.1.0: 'spiegel_tief_mm' = Spiegeloberfläche liegt so viel UNTER der Oberkante des unteren Rings; die Fangspiegelmitte
+    liegt dann entsprechend näher am unteren Ring (h und Stangenlänge kleiner); z0 (Lochebene über dem Spiegel) = loch_ring + tief."""
     tub = tubus_aus_okular(D_mm, f_mm, buet_mm, fe_mm, afov_deg)
     di = d_innen_mm if d_innen_mm > 0 else tub["d_innen"]      # v7.11.0: Innen-Ø aus dem Fangspiegel-Rechner, überschreibbar
     A = di / 2.0 + max(buet_mm, 0.0)
     return dict(d_innen=di, d_innen_auto=tub["d_innen"], d_teil=di + ring_breite_mm,
-                d_fang=fangspiegel_d(D_mm, f_mm, buet_mm, di, 10.0, fe_mm, afov_deg), z_sec=f_mm - A, h=f_mm - A - achse_mm - ring_dicke_mm - 2.0 * loch_ring_mm,
-                A=A, feld_halb=tub["feld_deg"] / 2.0, z0=loch_ring_mm, h_ring=f_mm - A - achse_mm - ring_dicke_mm)
+                d_fang=fangspiegel_d(D_mm, f_mm, buet_mm, di, 10.0, fe_mm, afov_deg), z_sec=f_mm - A, h=f_mm - A - achse_mm - ring_dicke_mm - 2.0 * loch_ring_mm - spiegel_tief_mm,
+                A=A, feld_halb=tub["feld_deg"] / 2.0, z0=loch_ring_mm + spiegel_tief_mm, tief=spiegel_tief_mm,
+                h_ring=f_mm - A - achse_mm - ring_dicke_mm - spiegel_tief_mm)
+
+
+def fangspiegel_versatz(A_mm: float, D_mm: float, f_mm: float) -> dict:
+    """Versatz des Fangspiegels (v8.1.1): Der Lichtkegel trifft die 45°-Fläche unten breiter als oben; die Spiegelmitte
+    muss daher von der Schnittstelle der optischen Achse aus um 'quer' vom Okularauszug WEG und um denselben Betrag
+    Richtung Hauptspiegel verschoben werden.  T = tan(Halbwinkel) = D/(2f);  quer = A·T²/(1 − T²)  (A = Fangspiegel–Fokus).
+    Rückgabe: quer (mm, in x vom OAZ weg), tiefer (gleicher Wert in z), T."""
+    T = (D_mm / 2.0) / f_mm
+    q = A_mm * T * T / (1.0 - T * T)
+    return dict(quer=q, tiefer=q, T=T)
 
 
 def gitterrohr_text(D, f, g, fr, h, d_teil) -> str:
@@ -332,6 +346,7 @@ def gitterrohr_zeichnen(ax1, ax2, D, f, g, h, r, fr, z0=0.0, ring=None, kon=None
     """Seitenansicht (links) und Draufsicht (rechts) des Gitterrohrs mit Lichtkegel (v7.8.0)."""
     n, k = g["n"], g["k"]
     ph = [2 * math.pi * i / n for i in range(n)]
+    _tief = (kon or {}).get("tief", 0.0); _lr = z0 - _tief   # z0 = Lochebene über dem Spiegel, _lr = Lochmitte bis Ringfläche
     ax1.clear(); ax2.clear()
     tx = g.get("bauart") == "triplex"
     zg = g.get("bauart") == "zigzag"
@@ -341,13 +356,13 @@ def gitterrohr_zeichnen(ax1, ax2, D, f, g, h, r, fr, z0=0.0, ring=None, kon=None
             x0 = r * math.cos(ph[i]); x1 = r * math.cos(ph[i] + sgn * dphi_r)
             ax1.plot([x0, x1], [z0, z0 + h], color="#1565c0", lw=1.2, alpha=0.8)
     ax1.plot([-D / 2, D / 2], [0, 0], color="#444", lw=3)
-    zz = np.linspace(0, z0 + h + z0, 50)
+    zz = np.linspace(0, z0 + h + _lr, 50)
     ax1.fill_betweenx(zz, -(D / 2 * (1 - zz / f)), (D / 2 * (1 - zz / f)), color="#ffe082", alpha=0.6, lw=0)
-    ax1.axhline(0, color="#888", lw=2); ax1.axhline(z0 + h + z0, color="#888", lw=2)   # Ring-Innenflächen
+    ax1.axhline(_tief, color="#888", lw=2); ax1.axhline(z0 + h + _lr, color="#888", lw=2)   # Ring-Innenflächen
     if kon and ring:   # v7.11.0: Ringe, Fangspiegel und Okularauszug andeuten (kon: rt, z_sec, A, d_fang)
-        ri, ro = ring; rt = kon["rt"]; zs = kon["z_sec"]; A = kon["A"]; dfs = kon["d_fang"]; zo = z0 + h + z0   # zo = Unterkante Hutring
+        ri, ro = ring; rt = kon["rt"]; zs = kon["z_sec"]; A = kon["A"]; dfs = kon["d_fang"]; zo = z0 + h + _lr   # zo = Unterkante Hutring
         for sg in (-1, 1):
-            for z_a in (-rt, zo):
+            for z_a in (_tief - rt, zo):
                 ax1.add_patch(plt_Rectangle((min(sg * ri, sg * ro), z_a), ro - ri, rt, fc="#cfd4dc", ec="#555", lw=0.8))
         ax1.add_patch(plt_Rectangle((-D / 2, -4), D, 4, fc="#7fb7d6", ec="#444", lw=0.8))                 # Hauptspiegel
         zz2 = np.linspace(0, zs, 50)

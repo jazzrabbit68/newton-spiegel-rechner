@@ -1,10 +1,12 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v8.0.0 (2026-11-07)
-Entspricht newton_spiegel_rechner.py v8.0.0
+Streamlit-Version v8.2.0 (2026-11-08)
+Entspricht newton_spiegel_rechner.py v8.2.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
+  v8.2.0 (2026-11-08) Gitterrohr: maßstäbliche 3D-Ansicht (neues Modul ansicht3d.py; Seite, gedreht, Draufsicht; OAZ zwischen zwei Spinnenbeinen, Streulichtblende aus Fangspiegel-Rechner), Schalter in Web und Desktop
+  v8.1.0 (2026-11-07) Gitterrohr: Eingabe "Spiegel unter Ring-Oberkante" (Spiegelversatz verkürzt h und Stangenlänge); Prüffälle 8" Zigzag und 14" TripleX
   v8.0.0 (2026-11-07) Programm in Module aufgeteilt (kern_optik, kern_foucault, kern_bau, kern_vergleich, diagramme, texte, konstanten); Rechenwerte und Diagramme unverändert (Regressionstest)
   v7.11.0 (2026-11-07) Gitterrohr: Ring-Innen-Ø aus dem Fangspiegel-Rechner, überschreibbar; Achse 40 mm über dem Hutring; Seitenansicht mit Ringen, Fangspiegel und Okularauszug
   v7.10.0 (2026-11-07) Kennwerte: Pfeiltiefe (Mitte–Rand, Kugel R = 2f und Paraboloid) im Steckbrief
@@ -53,6 +55,7 @@ from diagramme import DiagrammMethoden
 from kern_bau import (fangspiegel_rechner, fangspiegel_skizze, fangspiegel_text,
     fangspiegel_zeichnen, gitterrohr_auto, gitterrohr_freiraum, gitterrohr_stangen, gitterrohr_text,
     gitterrohr_zeichnen, pfeiltiefe, tubus_aus_okular)
+from ansicht3d import gitter3d_zeichnen
 from kern_foucault import (foucault_kennzahlen, foucault_wellenfront, foucault_zonen,
     foucault_zonengrenzen)
 from kern_optik import (ANTONIADI_HINWEIS, OBJEKT_HELLIGKEITEN, OBJEKT_PUPILLE, _Wb_schieber,
@@ -828,15 +831,17 @@ def main():
         g_rb  = bc2.number_input("Ringbreite [mm]", min_value=0.0, value=50.0, step=5.0, key="gt_rb")
         g_rt  = bc3.number_input("Ringdicke [mm]", min_value=0.0, value=15.0, step=1.0, key="gt_rt")
         g_ach = bc4.number_input("opt. Achse über Hutring-OK [mm]", min_value=0.0, value=40.0, step=1.0, key="gt_ach")
-        hc1, hc2, hc3 = st.columns(3)
+        hc1, hc2, hc3, hc4 = st.columns(4)
         _di_auto = tubus_aus_okular(D, f, st.session_state.get("fs_buet", 50), st.session_state.get("fs_fe", 30),
                                     st.session_state.get("fs_afov", 70))["d_innen"]
         g_di  = hc3.number_input(f"Ring-Innen-Ø [mm] (0 = aus Fangspiegel-Rechner: {_di_auto:.1f})", min_value=0.0, value=0.0, step=5.0, key="gt_di")
+        g_st  = hc4.number_input("Spiegel unter Ring-Oberkante [mm]", min_value=0.0, value=0.0, step=1.0, key="gt_st",
+                                 help="0 = Spiegeloberfläche bündig mit der Oberkante des unteren Rings; sitzt der Spiegel tiefer, hier den Versatz nach unten eintragen.")
         g_lr  = hc1.number_input("Lochmitte bis Ringfläche [mm]", min_value=0.0, value=25.0, step=1.0, key="gt_lr")
         g_z   = hc2.number_input("Abzug je Ende [mm] (Gabelkopf: Lochmitte bis Stangenende)", min_value=0.0, value=25.0, step=1.0, key="gt_z")
         _tx = (g_bau == "TripleX"); _zz = (g_bau == "Zigzag"); _bk = {"Zigzag": "zigzag", "TripleX": "triplex", "frei": "frei"}[g_bau]
         _ga = gitterrohr_auto(D, f, st.session_state.get("fs_buet", 50), st.session_state.get("fs_fe", 30),
-                              st.session_state.get("fs_afov", 70), g_rb, g_ach, g_rt, g_lr, g_di)
+                              st.session_state.get("fs_afov", 70), g_rb, g_ach, g_rt, g_lr, g_di, g_st)
         gc1, gc2, gc3, gc4 = st.columns(4)
         g_h   = gc1.number_input("Lochabstand h [mm] (0 = automatisch)", min_value=0.0, value=0.0, step=10.0, key="gt_h")
         g_d   = gc2.number_input("Teilkreis-Ø [mm] (0 = Innen-Ø + Ringbreite)", min_value=0.0, value=0.0, step=10.0, key="gt_d")
@@ -847,16 +852,26 @@ def main():
         _h_use = g_h if g_h > 0 else _ga["h"]
         _d_use = g_d if g_d > 0 else _ga["d_teil"]
         _g  = gitterrohr_stangen(_h_use, _d_use / 2.0, int(g_n), int(g_k), -g_z, g_kr, _bk)
-        _fr = gitterrohr_freiraum(_h_use, _d_use / 2.0, _g["dphi"], D, f, _ga["feld_halb"], g_lr)
+        _fr = gitterrohr_freiraum(_h_use, _d_use / 2.0, _g["dphi"], D, f, _ga["feld_halb"], _ga["z0"])
         st.markdown("  \n".join(gitterrohr_text(D, f, _g, _fr, _h_use, _d_use).split("\n")))
         def _plot_gitter():
             fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 5.2))
-            gitterrohr_zeichnen(a1, a2, D, f, _g, _h_use, _d_use / 2.0, _fr, g_lr,
+            gitterrohr_zeichnen(a1, a2, D, f, _g, _h_use, _d_use / 2.0, _fr, _ga["z0"],
                                 (_ga["d_innen"] / 2.0, _ga["d_innen"] / 2.0 + g_rb),
-                                dict(rt=g_rt, z_sec=_ga["z_sec"], A=_ga["A"], d_fang=_ga["d_fang"]))
+                                dict(rt=g_rt, z_sec=_ga["z_sec"], A=_ga["A"], d_fang=_ga["d_fang"], tief=_ga["tief"]))
             fig.tight_layout()
             return fig
-        _show_cached("fig_gitter", _plot_gitter, (D, f, _h_use, _d_use, g_n, g_k, g_z, g_kr, g_bau, g_lr, g_rb, g_rt, g_ach, g_di))
+        _show_cached("fig_gitter", _plot_gitter, (D, f, _h_use, _d_use, g_n, g_k, g_z, g_kr, g_bau, g_lr, g_rb, g_rt, g_ach, g_di, g_st))
+        if st.checkbox("3D-Ansicht (maßstäblich; Spinne, Blendenhöhe, OAZ-Winkel geschätzt)", value=False, key="gt_3d"):
+            def _plot_gitter3d():
+                fig = plt.figure(figsize=(14, 7.4))
+                gitter3d_zeichnen(fig, D, f, _ga, _g, _h_use, _d_use / 2.0, g_rb, g_rt, g_lr, _bk,
+                                  dict(buet=st.session_state.get("fs_buet", 50), fe=st.session_state.get("fs_fe", 30),
+                                       afov=st.session_state.get("fs_afov", 70)))
+                return fig
+            _show_cached("fig_gitter3d", _plot_gitter3d, (D, f, _h_use, _d_use, g_n, g_k, g_z, g_kr, g_bau, g_lr, g_rb, g_rt, g_ach, g_di, g_st,
+                                                          st.session_state.get("fs_buet", 50), st.session_state.get("fs_fe", 30),
+                                                          st.session_state.get("fs_afov", 70)))
 
     if _nav == "vergleich":
         # v7.2.1: Spiegel 1 = Hauptspiegel (Seitenleiste, S = Schieberwert), f/D vom Hauptspiegel;
