@@ -1,0 +1,58 @@
+Hallo,
+
+vor einiger zeit hatte ich mich hier an anderer stelle mal mit der visuellen eindruck von schlechten spiegeln beschäftigt - das tool dazu hatte einen etwas kontroversen start. 
+natülich hane ich das im hintergrune immer weiter gepflegt und inzwischen ist es zu "einem schweizer taschenmesser" für's DIY-Teleskop-basteln geworden.
+
+Zusätzlch zur Beurteilung von Spiegeln bei verschiedenen Verglßerungen und Leuchtdichten (ja in der aktuellen version hab eich auch das Abblende der Augenpupille berücksichtgt, gegendie ich mich ange Zeit gesteubt hatte) ich wollte ja schlechten spigel mit gutem vergleichen und nicht und irendwie abblenden dadurch dann ein ander speigel entstend (aus einer schlechten sphäre mit 200/1000 wird dann halt ein 150/1000 der eben ber se schon besser ist).
+Da ein ziel war die visuelle Abbildung zu bewerten musste ich das aber berücksichtigen und so habe ich beide Weltern zusammen gebracht: das abblenden der Augenpupille bei hellen Objekten und die Kontrastverscheibung durch die MTF x CSF Rechnung bie lichtschwächeren Objekten. Auch eine vor das Teleskop geschobenen Blende kann inzwischen berücksichtigt werden.
+Der versuch einer beschreibung, was wie und warum gerechnet wird, ist im beiliegenen whitepapaer dargestellt.
+
+Auch eine Vergleichssimulation zweier Spiegel habe ich versucht, hier kann groß gegen klein, gut gegen schlecht oder der Seeingeinfluß verglichen werden.
+
+Und da ich ja immer wieder am Basteln bin, habe ich auch einge Teile hizugenommen - alles was ich zum rechenne meiner Dobsons brauche wurde schritt fürs schritt hizugenommen: Foucault-Auswertung für den schnellen Spiegeltest zwischendurch, Fangspiegel- und Streulichtblendenrechner.
+Und auch die Strebenlägen für meine Gittertubuskonsturktion wird berechnet....
+
+Wer lust und zeit hat darf das geren mal testen - oder auch zusätzliche erweiterungen einbringen....
+
+viele Grüße, Martin
+
+
+
+
+Der Ton gefällt mir: ehrlich, ohne Werbung, und mit dem Eingeständnis zur Augenpupille nimmst du den Kritikern den Wind aus den Segeln. Drei Dinge würde ich ändern:
+
+- **Der Absatz zur Pupille ist schwer zu lesen.** Der Gedanke ist gut (nicht abblenden, weil dann ein anderer Spiegel entsteht), aber er steht in einem langen Satz. Ich habe ihn in zwei Schritte geteilt.
+- **Der Hinweis auf die Fehler fehlt.** Im alten Thread gab es berechtigte Kritik, und der Kern wurde seither korrigiert. Ein Satz dazu schützt dich vor „aber damals hast du doch…“.
+- **Link und Bilder fehlen.** Ohne Link zur Web-App und ein, zwei Bilder (Q_vis-Diagramm, 3D-Gittertubus) bleibt der Beitrag abstrakt.
+
+Hier eine geglättete Fassung in deiner Stimme:
+
+---
+
+**Betreff: Newton-Rechner: aus dem Spiegelbewertungs-Tool ist ein „Schweizer Taschenmesser“ für den Teleskopbau geworden**
+
+Hallo,
+
+vor einiger Zeit habe ich mich hier mit dem visuellen Eindruck schlechter Spiegel beschäftigt. Das Tool dazu hatte einen etwas kontroversen Start. Ich habe im Hintergrund weitergearbeitet, und es ist inzwischen deutlich mehr geworden.
+
+**Spiegelbewertung:** Q_vis(V) bewertet einen sphärischen Spiegel bei verschiedenen Vergrößerungen und Helligkeiten, bezogen auf einen Paraboloid gleicher Größe (MTF × Kontrastempfindlichkeit des Auges). Ich hatte mich lange dagegen gesträubt, die Augenpupille einzubeziehen, weil ich einen schlechten mit einem guten Spiegel vergleichen wollte und nicht einen abgeblendeten. Aus einer 200/1000-Kugel wird dann ja ein besserer 150/1000. Da es aber um die visuelle Abbildung geht, musste ich das berücksichtigen. Jetzt sind beide Welten drin: das Abblenden durch die Pupille bei hellen Objekten und die Kontrastverschiebung bei lichtschwächeren. Auch eine Blende vor dem Teleskop lässt sich rechnen.
+
+Die Rechenwege stehen im beiliegenden Whitepaper. In früheren Fassungen gab es Fehler, die inzwischen behoben sind; Zahlen aus älteren Beiträgen können deshalb abweichen.
+
+**Vergleich:** zwei Spiegel gegeneinander (groß gegen klein, gut gegen schlecht), auch mit Seeing.
+
+**Bauen:** Weil ich ständig am Basteln bin, kam dazu, was ich für meine Dobsons brauche: Foucault-Auswertung für den schnellen Test zwischendurch, Fangspiegel- und Streulichtblendenrechner, Pfeiltiefe und die Stangenlängen für meine Gittertuben (Zigzag und TripleX, mit 3D-Ansicht). Die Stangenlängen habe ich an zwei gebauten Teleskopen nachgemessen; sie stimmen.
+
+Wer Lust und Zeit hat, darf das gern testen. Rückmeldungen, Fehlerberichte und Erweiterungen sind willkommen: [Link zur Web-App]
+
+Viele Grüße
+Martin
+
+---
+
+Fragen und Hinweise:
+- **„Stangenlängen nachgemessen; sie stimmen“:** Das stimmt für den 8"-Zigzag (nachgemessen) und beim 14"-TripleX mit 1000,4 gegen 1000 mm. Wenn du magst, schreib „beim 8"-Zigzag nachgemessen“, das ist genauer.
+- **Bilder:** Zwei bis drei reichen. Das Q_vis-Diagramm und die 3D-Ansicht zeigen am besten, worum es geht.
+- **Ton gegenüber den alten Kritikern:** Ich habe sie nicht genannt. Das würde ich so lassen.
+
+Wenn du die Datei-Links oder die Streamlit-Adresse hast, setze ich sie ein.

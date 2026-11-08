@@ -1,3 +1,5 @@
+v9.0.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py)
+
 Vollständige Änderungshistorie (aus dem Programmkopf bis v7.6.2)
 
 Änderungshistorie (jüngste zuerst):

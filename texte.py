@@ -74,6 +74,7 @@ STRINGS = {
     "tab_vmax_D":      {"de": "  Vmax vs. Ø / Seeing  ",        "en": "  Vmax vs. D/seeing  "},
     "tab_fangspiegel": {"de": "  Fangspiegel  ",              "en": "  Secondary mirror  "},
     "tab_gitter":      {"de": "  Gitterrohr  ",               "en": "  Truss tube  "},
+    "tab_zelle":       {"de": "  Spiegelzelle  ",             "en": "  Mirror cell  "},
     "tab_vergleich":   {"de": "  Vergleich (Beta)  ",         "en": "  Comparison (beta)  "},
     # MTF-Beschriftungen
     "mtf_fokus_lbl":   {"de": "Fokusebene:",     "en": "Focus plane:"},

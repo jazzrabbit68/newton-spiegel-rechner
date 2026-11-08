@@ -1,7 +1,9 @@
 """
-Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v8.2.1 (2026-11-08)
+Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"
+  v9.0.0 (2026-11-08)
 ============================================================================================
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
+  v9.0.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py)
   v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
   v8.2.0 (2026-11-08) Gitterrohr: maßstäbliche 3D-Ansicht (neues Modul ansicht3d.py; Seite, gedreht, Draufsicht; OAZ zwischen zwei Spinnenbeinen, Streulichtblende aus Fangspiegel-Rechner), Schalter in Web und Desktop
   v8.1.0 (2026-11-07) Gitterrohr: Eingabe "Spiegel unter Ring-Oberkante" (Spiegelversatz verkürzt h und Stangenlänge); Prüffälle 8" Zigzag und 14" TripleX
@@ -98,9 +100,10 @@ from kern_bau import (fangspiegel_rechner, fangspiegel_skizze, fangspiegel_text,
     fangspiegel_zeichnen, gitterrohr_auto, gitterrohr_freiraum, gitterrohr_stangen, gitterrohr_text,
     gitterrohr_zeichnen, pfeiltiefe, qvis_kurve_mit_fangspiegel)
 from ansicht3d import gitter3d_zeichnen
+from kern_zelle import MATERIALIEN, OPT, OPT_OHNE, zelle_rechner, zelle_text, zelle_zeichnen
 from kern_foucault import (foucault_kennzahlen, foucault_wellenfront, foucault_zonen,
     foucault_zonengrenzen)
-from kern_optik import (ANTONIADI_HINWEIS, OBJEKT_HELLIGKEITEN, OBJEKT_PUPILLE, _L_eff, _L_roh,
+from kern_optik import (ANTONIADI_HINWEIS, OBJEKT_HELLIGKEITEN, OBJEKT_PUPILLE, WAHRNEHMUNG_OBJEKTE, _L_eff, _L_roh,
     _Wb_schieber, _qvis_schieber, _strehl_exakt, _wellenfronten, berechne, berechne_vergr,
     beurteilung, csf_spitze_cpd, d_fang_min, perceived_quality_exakt, qvis_einzelrechner,
     v_halb_exakt, v_krit_aus_qvis, v_krit_aus_qvis_von_Wb, v_krit_blur_direkt, v_krit_naeh,
@@ -303,6 +306,7 @@ class App(DiagrammMethoden, tk.Tk):
             ("_tab_fangspiegel",  "tab_fangspiegel"),
             ("_tab_blende",       "tab_blende"),
             ("_tab_gitter",       "tab_gitter"),
+            ("_tab_zelle",        "tab_zelle"),
         ]
         self._tab_keys = [k for _, k in tab_attrs]
         # v7.1.0: Gruppen (oberste Reiter); Gruppen mit mehreren Diagrammen
@@ -310,7 +314,7 @@ class App(DiagrammMethoden, tk.Tk):
         self._tab_gruppen = [
             ("grp_t_grund",     ["tab_grund", "tab_kennwerte", "tab_vmax"]),   # tab_vmax_D teilt sich den Tab (rechte Hälfte)
             ("grp_t_bild",      ["tab_wahrnehmung", "tab_mtf", "tab_vergleich"]),
-            ("grp_t_bauen",     ["tab_foucault", "tab_fangspiegel", "tab_blende", "tab_gitter"]),
+            ("grp_t_bauen",     ["tab_foucault", "tab_fangspiegel", "tab_blende", "tab_gitter", "tab_zelle"]),
         ]
         self._tab_nb = {}      # tab_key -> (Notebook, Frame)
         self._grp_nb = []      # pro Gruppe: (Gruppen-Frame, Unter-Notebook | None)
@@ -485,9 +489,9 @@ class App(DiagrammMethoden, tk.Tk):
                 wn3.pack(side="top", fill="x", padx=8, pady=(2, 0))
                 tk.Label(wn3, text="Objekt:", bg=BG, fg="#111",
                          font=("Helvetica", 9, "bold")).pack(side="left")
-                self._wn_obj_var = tk.StringVar(value="Jupiter")
+                self._wn_obj_var = tk.StringVar(value="Heller Planet (Jupiter)")
                 _cb = ttk.Combobox(wn3, textvariable=self._wn_obj_var, width=15, state="readonly",
-                                   values=["Aus (photopisch)"] + [n for n, _ in OBJEKT_HELLIGKEITEN] + ["Frei"])
+                                   values=["Aus (photopisch)"] + [n for n, _, _ in WAHRNEHMUNG_OBJEKTE] + ["Frei"])
                 _cb.pack(side="left", padx=(3, 14))
                 _cb.bind("<<ComboboxSelected>>", self._wn_objekt_gewaehlt)
                 tk.Label(wn3, text="Leuchtdichte L =", bg=BG, fg="#2e7d32",
@@ -887,6 +891,39 @@ class App(DiagrammMethoden, tk.Tk):
                 canvas.get_tk_widget().pack(fill="both", expand=True)
                 setattr(self, attr, (fig, ax, canvas))
 
+            elif attr == "_tab_zelle":
+                zr = tk.Frame(frm, bg=BG); zr.pack(side="top", fill="x", padx=8, pady=(6, 0))
+                self._zl_n = tk.IntVar(value=6)
+                tk.Label(zr, text="Auflagepunkte:", bg=BG, fg="#6a1b9a", font=("Helvetica", 9, "bold")).pack(side="left")
+                for _n in (3, 6, 9, 18):
+                    tk.Radiobutton(zr, text=str(_n), value=_n, variable=self._zl_n, bg=BG, fg="#6a1b9a",
+                                   activebackground=BG, selectcolor=BG2, font=("Helvetica", 9),
+                                   command=self._zelle_neu).pack(side="left", padx=(4, 0))
+                self._zl_t = tk.StringVar(value="25")
+                self._zl_r = tk.StringVar(value="0")
+                for _lbl, _var, _hint in (("Dicke", self._zl_t, "mm (Standard 25)"), ("Radius r/R", self._zl_r, "(0 = Optimum, nur 3/6)")):
+                    tk.Label(zr, text=_lbl, bg=BG, fg="#6a1b9a", font=("Helvetica", 9, "bold")).pack(side="left", padx=(12, 3))
+                    _e = tk.Entry(zr, textvariable=_var, width=6, font=("Helvetica", 9)); _e.pack(side="left")
+                    _e.bind("<Return>", self._zelle_neu); _e.bind("<FocusOut>", self._zelle_neu)
+                    tk.Label(zr, text=_hint, bg=BG, fg="#666", font=("Helvetica", 8)).pack(side="left", padx=(2, 4))
+                zr2 = tk.Frame(frm, bg=BG); zr2.pack(side="top", fill="x", padx=8, pady=(2, 0))
+                tk.Label(zr2, text="Material:", bg=BG, fg="#6a1b9a", font=("Helvetica", 9, "bold")).pack(side="left")
+                self._zl_mat = tk.StringVar(value=list(MATERIALIEN.keys())[0])
+                _cb = ttk.Combobox(zr2, textvariable=self._zl_mat, values=list(MATERIALIEN.keys()), state="readonly", width=26)
+                _cb.pack(side="left", padx=(4, 12)); _cb.bind("<<ComboboxSelected>>", self._zelle_neu)
+                self._zl_ref = tk.BooleanVar(value=True)
+                tk.Checkbutton(zr2, text="Brennweitenänderung abziehen (Refokus)", variable=self._zl_ref, bg=BG, fg="#6a1b9a",
+                               activebackground=BG, selectcolor=BG2, font=("Helvetica", 9, "bold"),
+                               command=self._zelle_neu).pack(side="left")
+                fig = plt.figure(figsize=(11.0, 5.2), dpi=96)
+                fig.patch.set_facecolor(BG)
+                ax = fig.add_subplot(1, 1, 1)
+                canvas = FigureCanvasTkAgg(fig, master=frm)
+                self._zl_text = tk.Text(frm, height=9, bg=BG, fg="#222", font=("Courier", 9), wrap="none", relief="flat")
+                self._zl_text.pack(side="bottom", fill="x", padx=8, pady=(0, 4))
+                canvas.get_tk_widget().pack(fill="both", expand=True)
+                setattr(self, attr, (fig, ax, canvas))
+
             else:
                 fs = (7.5, 4.8) if attr == "_tab_beugung" else (5.6, 4.2)
                 fig, ax = plt.subplots(figsize=fs, dpi=96)
@@ -1172,6 +1209,8 @@ class App(DiagrammMethoden, tk.Tk):
             self._diagramm_fangspiegel(D, f, lam, S_slide, S_real)
         elif tab_key == "tab_gitter":
             self._diagramm_gitter(D, f)
+        elif tab_key == "tab_zelle":
+            self._diagramm_zelle(D, lam)
         elif tab_key == "tab_vergleich":
             self._diagramm_vergleich(lam)
 
@@ -1313,6 +1352,38 @@ class App(DiagrammMethoden, tk.Tk):
         except Exception:
             import traceback
             self._zeige_fehler(traceback.format_exc())
+
+    def _zelle_neu(self, *_):
+        res = getattr(self, "_last_params", None)
+        if res is None:
+            return
+        try:
+            self._diagramm_fuer_tab("tab_zelle", res)
+        except Exception:
+            import traceback
+            self._zeige_fehler(traceback.format_exc())
+
+    def _diagramm_zelle(self, D, lam):
+        """Spiegelzelle: Auflagepunkte 3/6/9/18, Durchbiegung, Vergleich (neu in v9.0.0)."""
+        fig, ax, canvas = self._tab_zelle
+        def _zahl(v, std):
+            try:
+                x = float(v.get().replace(",", ".").strip())
+                return x if x >= 0 else std
+            except ValueError:
+                return std
+        n = int(self._zl_n.get()); t = _zahl(self._zl_t, 25.0)
+        t = t if t > 0 else 25.0
+        mat = self._zl_mat.get(); ref = bool(self._zl_ref.get())
+        p = None
+        if n in (3, 6):
+            rr = _zahl(self._zl_r, 0.0)
+            if 0.1 <= rr <= 0.92:
+                p = dict(r=rr)
+        d = zelle_zeichnen(fig, D, t, n, mat, ref, lam, p)
+        self._zl_text.config(state="normal"); self._zl_text.delete("1.0", "end")
+        self._zl_text.insert("1.0", zelle_text(d, t, mat)); self._zl_text.config(state="disabled")
+        canvas.draw_idle()
 
     def _diagramm_gitter(self, D, f):
         """Gitterrohr-Rechner: Stangenlänge, Freiraum zum Lichtkegel, Skizze (neu in v7.8.0)."""
@@ -1532,6 +1603,7 @@ class App(DiagrammMethoden, tk.Tk):
             ("_tab_vmax_D",      "tab_vmax_D"),
             ("_tab_fangspiegel", "tab_fangspiegel"),
             ("_tab_gitter",      "tab_gitter"),
+            ("_tab_zelle",       "tab_zelle"),
             ("_tab_vergleich",   "tab_vergleich"),
         ]]
         startup = not getattr(self, "_first_draw_done", False)
@@ -1840,8 +1912,10 @@ class App(DiagrammMethoden, tk.Tk):
         n = self._wn_obj_var.get()
         if n.startswith("Aus"):
             self._wn_L_var.set("0"); self._wn_pup_var.set("0")
-        elif n in OBJEKT_PUPILLE:
-            self._wn_L_var.set(f"{dict(OBJEKT_HELLIGKEITEN)[n]:g}"); self._wn_pup_var.set(f"{OBJEKT_PUPILLE[n]:g}")
+        else:
+            for _n, _l, _p in WAHRNEHMUNG_OBJEKTE:
+                if _n == n:
+                    self._wn_L_var.set(f"{_l:g}"); self._wn_pup_var.set(f"{_p:g}")
         self._wahrnehmung_neu()
 
     def _wahrnehmung_neu(self, *_):

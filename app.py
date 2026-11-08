@@ -1,10 +1,11 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v8.3.0 (2026-11-08)
-Entspricht newton_spiegel_rechner.py v8.3.0
+Streamlit-Version v9.0.0 (2026-11-08)
+Entspricht newton_spiegel_rechner.py v9.0.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
+  v9.0.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py)
   v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"; Web: Wahrnehmungs-Diagramm größer gezeichnet (12×6,6 Zoll) und alle Diagramme mit 130 dpi, dadurch feiner
   v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
   v8.2.0 (2026-11-08) Gitterrohr: maßstäbliche 3D-Ansicht (neues Modul ansicht3d.py; Seite, gedreht, Draufsicht; OAZ zwischen zwei Spinnenbeinen, Streulichtblende aus Fangspiegel-Rechner), Schalter in Web und Desktop
@@ -58,6 +59,7 @@ from kern_bau import (fangspiegel_rechner, fangspiegel_skizze, fangspiegel_text,
     fangspiegel_zeichnen, gitterrohr_auto, gitterrohr_freiraum, gitterrohr_stangen, gitterrohr_text,
     gitterrohr_zeichnen, pfeiltiefe, tubus_aus_okular)
 from ansicht3d import gitter3d_zeichnen
+from kern_zelle import MATERIALIEN, OPT, OPT_OHNE, zelle_rechner, zelle_text, zelle_zeichnen
 from kern_foucault import (foucault_kennzahlen, foucault_wellenfront, foucault_zonen,
     foucault_zonengrenzen)
 from kern_optik import (ANTONIADI_HINWEIS, OBJEKT_HELLIGKEITEN, OBJEKT_PUPILLE, WAHRNEHMUNG_OBJEKTE, _Wb_schieber,
@@ -280,7 +282,7 @@ def main():
     st.sidebar.markdown("---")
     _NAV = [("Grundlagen", [("grund", "Diagramme"), ("kenn", "Kennwerte"), ("grenzen", "Grenzen (max. Vergr.)")]),
             ("Bildqualität", [("wahr", "Wahrnehmung"), ("mtf", "MTF"), ("vergleich", "Vergleich (Beta)")]),
-            ("Bauen", [("messen", "Foucault-Test"), ("bauen", "Fangspiegel"), ("blende", "Blende"), ("gitter", "Gitterrohr")]),
+            ("Bauen", [("messen", "Foucault-Test"), ("bauen", "Fangspiegel"), ("blende", "Blende"), ("gitter", "Gitterrohr"), ("zelle", "Spiegelzelle")]),
             ("", [("doku", "ℹ️ Dokumentation")])]
     if "nav" not in st.session_state:
         st.session_state["nav"] = "grund"
@@ -874,6 +876,32 @@ def main():
             _show_cached("fig_gitter3d", _plot_gitter3d, (D, f, _h_use, _d_use, g_n, g_k, g_z, g_kr, g_bau, g_lr, g_rb, g_rt, g_ach, g_di, g_st,
                                                           st.session_state.get("fs_buet", 50), st.session_state.get("fs_fe", 30),
                                                           st.session_state.get("fs_afov", 70)))
+
+    if _nav == "zelle":
+        # v9.0.0: Spiegelzelle – Auflagepunkte 3/6/9/18
+        st.subheader("Spiegelzelle: Lage der Auflagepunkte")
+        st.caption("Spiegel unter Eigengewicht (Zenit), dünne Platte, Punktlager; Wippen und Dreiecke tragen alle Punkte gleich. "
+                   "Die Radien sind das berechnete Optimum für kleinste Oberflächenverformung (nach Abzug von Kippung und Brennweitenänderung).")
+        zc1, zc2, zc3, zc4 = st.columns(4)
+        z_n = int(zc1.radio("Auflagepunkte", [3, 6, 9, 18], index=1, horizontal=True, key="zl_n"))
+        z_t = zc2.number_input("Spiegeldicke [mm]", min_value=1.0, value=25.0, step=1.0, key="zl_t")
+        z_mat = zc3.selectbox("Material", list(MATERIALIEN.keys()), key="zl_mat")
+        z_ref = zc4.checkbox("Brennweitenänderung abziehen", value=True, key="zl_ref",
+                             help="Aus: klassische Werte (3 Punkte 0,645·R, 6 Punkte 0,68·R). An: Refokussieren ist beim Newton möglich, das Optimum liegt weiter innen.")
+        _tz = z_t
+        _zp = None
+        if z_n in (3, 6):
+            _r0 = (OPT if z_ref else OPT_OHNE)[z_n]["r"]
+            _rin = st.number_input(f"Radius des Punktkreises r/R (Optimum {_r0:.3f})", min_value=0.1, max_value=0.92,
+                                   value=float(round(_r0, 3)), step=0.01, key=f"zl_r_{z_n}_{int(z_ref)}")
+            _zp = dict(r=float(_rin))
+        def _plot_zelle():
+            fig = plt.figure(figsize=(12, 6.6)); fig.patch.set_facecolor(BG)
+            zelle_zeichnen(fig, D, _tz, z_n, z_mat, z_ref, lam, _zp)
+            return fig
+        _show_cached("fig_zelle", _plot_zelle, (D, _tz, z_n, z_mat, z_ref, lam, str(_zp)))
+        _zd = zelle_rechner(D, _tz, z_n, z_mat, z_ref, lam, _zp)
+        st.code(zelle_text(_zd, _tz, z_mat), language=None)
 
     if _nav == "vergleich":
         # v7.2.1: Spiegel 1 = Hauptspiegel (Seitenleiste, S = Schieberwert), f/D vom Hauptspiegel;
