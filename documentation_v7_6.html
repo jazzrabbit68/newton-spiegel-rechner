@@ -12,7 +12,7 @@
     font-size: 9pt; color: #777;
   }
   @bottom-left {
-    content: "Technische Dokumentation v7.8.0: Newton-Spiegel-Rechner";
+    content: "Technische Dokumentation v8.2.0: Newton-Spiegel-Rechner";
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 9pt; color: #777;
   }
@@ -81,7 +81,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <div class="header-banner">
   <h1>Technische Gesamtdokumentation</h1>
-  <div class="subtitle">Newton-Spiegel-Rechner v7.8.0 &mdash; Mathematisch-Physikalische Modelle, Bewertung und Bauhilfen</div>
+  <div class="subtitle">Newton-Spiegel-Rechner v8.2.0 &mdash; Mathematisch-Physikalische Modelle, Bewertung und Bauhilfen</div>
 </div>
 
 <p>Diese Dokumentation beschreibt den aktuellen Stand des Programms <code>newton_spiegel_rechner.py</code> (Desktop, tkinter) und der Web-App <code>app.py</code> (Streamlit). Beide Versionen verwenden dieselben Rechenkerne. Das Programm bewertet Newton-Spiegel &mdash; vor allem sph&auml;rische, aber auch beliebig gut polierte &mdash; nach Wellenfrontfehler, Strehl-Quotient, MTF und einem wahrnehmungsbezogenen Qualit&auml;tsindex, hilft beim Auswerten des Foucault-Tests und beim Auslegen von Fangspiegel und Blende, und vergleicht verschiedene Spiegel miteinander, auch wenn sie unterschiedlich gro&szlig; sind.</p>
@@ -96,7 +96,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
   <tbody>
     <tr><td><strong>Grundlagen</strong></td><td>Unterreiter <em>Diagramme</em> (2&times;2-&Uuml;bersicht), <em>Kennwerte</em> und <em>Grenzen</em> (sinnvolle Maximalvergr&ouml;&szlig;erung; V<sub>max</sub> &uuml;ber &Ouml;ffnung und Seeing)</td><td>3, 8.4</td></tr>
     <tr><td><strong>Bildqualit&auml;t</strong></td><td>Unterreiter <em>Wahrnehmung</em> (Q<sub>vis</sub>(V)), <em>MTF</em>, <em>Vergleich (Beta)</em> (absoluter Vergleich zweier Spiegel)</td><td>4, 5, 6</td></tr>
-    <tr><td><strong>Bauen</strong></td><td>Unterreiter <em>Foucault-Test</em> (Auswertung), <em>Fangspiegel</em> (Mindestgr&ouml;&szlig;e gegen&uuml;ber dem Okularauszug), <em>Blende</em> (Abblenden des Spiegels) und <em>Gitterrohr</em> (Stangenl&auml;nge)</td><td>7, 8.2, 8.3</td></tr>
+    <tr><td><strong>Bauen</strong></td><td>Unterreiter <em>Foucault-Test</em> (Auswertung), <em>Fangspiegel</em> (Mindestgr&ouml;&szlig;e gegen&uuml;ber dem Okularauszug), <em>Blende</em> (Abblenden des Spiegels) und <em>Gitterrohr</em> (Stangenl&auml;nge, 3D-Ansicht)</td><td>7, 8.2, 8.3</td></tr>
   </tbody>
 </table>
 
@@ -215,7 +215,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <p>F&uuml;r die gestrichelte N&auml;herungskurve (Kapitel&nbsp;5.2) wird ein eigener &bdquo;Wendepunkt&ldquo; verwendet:</p>
 <div class="math-block"><span class="math">V<sub>Wende</sub> = V<sub>krit</sub> &middot; S<sup>&minus;2/3</sup></span> &emsp; (Faktor auf 20 begrenzt)</div>
-<p>V<sub>Wende</sub> dient ausschlie&szlig;lich der N&auml;herungskurve und ist nicht dasselbe wie die 10&nbsp;%-Schwelle V<sub>krit</sub>.</p>
+<p>In einer fr&uuml;hen Fassung war V<sub>Wende</sub> = V<sub>krit</sub>; f&uuml;r schnelle Kugeln war die Kurve dann zu steil. Beide Gr&ouml;&szlig;en h&auml;ngen nur von W<sub>b</sub> ab (S ist selbst eine Funktion von W<sub>b</sub>). V<sub>Wende</sub> dient ausschlie&szlig;lich der N&auml;herungskurve und ist nicht dasselbe wie die 10&nbsp;%-Schwelle V<sub>krit</sub>.</p>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <h2>4. MTF-Modell</h2>
@@ -448,16 +448,46 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <h3>7.3 Gitterrohr: Stangenl&auml;nge</h3>
-<p>Der Tab <em>Gitterrohr</em> berechnet die L&auml;nge der Stangen eines Gitterrohrs, bei dem zwei Ringe durch schr&auml;g gespannte Stangen verbunden sind. Jeder Ring hat n gleichm&auml;&szlig;ig verteilte Anschlusspunkte auf dem Teilkreis (Radius r). Jede Stange verbindet einen Punkt des unteren Rings mit dem um k Teilungen versetzten Punkt des oberen Rings; der Versatzwinkel ist &Delta;&phi; = k&middot;360&deg;/n. Die Stange ist die Hypotenuse aus der H&ouml;he h und der Sehne s&nbsp;=&nbsp;2&middot;r&middot;sin(&Delta;&phi;/2):</p>
-<p class="math" style="text-align:center">x = &radic;( h&sup2; + (2&middot;r&middot;sin(&Delta;&phi;/2))&sup2; )&nbsp;&nbsp;&nbsp;(Bohrungsmitte &ndash; Bohrungsmitte)</p>
+<p>Der Tab <em>Gitterrohr</em> berechnet die Stangenl&auml;nge eines Gitterrohrs, bei dem zwei Ringe durch schr&auml;g gespannte Stangen verbunden sind. Die Stange ist die Hypotenuse aus der H&ouml;he h der beiden Lochebenen und der Sehne s&nbsp;=&nbsp;2&middot;r&middot;sin(&Delta;&phi;/2) zwischen den Ankerpunkten auf dem Teilkreis (Radius r):</p>
+<p class="math" style="text-align:center">x = &radic;( h&sup2; + (2&middot;r&middot;sin(&Delta;&phi;/2))&sup2; )&nbsp;&nbsp;&nbsp;(Lochmitte &ndash; Lochmitte)&nbsp;&nbsp;&nbsp;&nbsp;Zuschnitt = x &minus; 2&middot;Abzug</p>
+
+<p><strong>Bauarten</strong> (Auswahl <em>Bauart</em>):</p>
 <ul>
-  <li>Beispiel n&nbsp;=&nbsp;6, k&nbsp;=&nbsp;1: &Delta;&phi;&nbsp;=&nbsp;60&deg;, die Sehne ist gleich r, also x&nbsp;=&nbsp;&radic;(h&sup2;&nbsp;+&nbsp;r&sup2;). k&nbsp;=&nbsp;0 ergibt senkrechte Stangen (x&nbsp;=&nbsp;h).</li>
-  <li>Mit der Option <em>Kreuz</em> kommen die gegenl&auml;ufigen Stangen (Versatz &minus;k) hinzu; sie kreuzen die ersten in halber H&ouml;he. Bei 2k&nbsp;=&nbsp;n sind beide Richtungen dieselbe Stange.</li>
-  <li>Zuschnitt = x + 2&middot;Zugabe (&Uuml;berstand oder Gewinde je Ende).</li>
-  <li><strong>Vorgaben aus dem Fangspiegel-Tab:</strong> H&ouml;he h = f&nbsp;&minus;&nbsp;A (Hutring auf H&ouml;he des Fangspiegels, A wie in Kapitel&nbsp;7.1), Teilkreis-&Oslash; = Tubus-Innen-&Oslash; aus dem &Uuml;bersichtsokular (Kapitel&nbsp;7.1a). Beides l&auml;sst sich &uuml;berschreiben. Der untere Ring liegt in der Spiegelebene.</li>
-  <li><strong>Freiraum zum Lichtkegel:</strong> Eine Stange l&auml;uft geradlinig, ihr Achsabstand ist &rho;(t) = r&middot;&radic;((1&minus;t)&sup2; + t&sup2; + 2t(1&minus;t)&middot;cos&Delta;&phi;), am kleinsten in halber H&ouml;he (r&middot;cos(&Delta;&phi;/2)). Der Lichtkegel eines Feldrandpunkts hat in der H&ouml;he z den Radius D/2&middot;(1&nbsp;&minus;&nbsp;z/f) + z&middot;tan&theta;. Der Tab gibt den kleinsten Abstand und die H&ouml;he an und warnt, wenn eine Stange den Kegel schneidet. Beispiel 200/1000, n&nbsp;=&nbsp;6: bei k&nbsp;=&nbsp;1 bleiben 15&nbsp;mm Abstand (am unteren Ring), bei k&nbsp;=&nbsp;2 schneidet die Stange den Kegel (&minus;12&nbsp;mm in etwa 330&nbsp;mm H&ouml;he).</li>
+  <li><strong>Zigzag:</strong> 3 Ankerpunkte je Ring, der obere Ring ist um 60&deg; verdreht. An jedem Punkt enden zwei Stangen, insgesamt 6 Stangen im Zickzack.</li>
+  <li><strong>TripleX:</strong> 6 Ankerpunkte je Ring, jede Stange hat eigene Punkte. Benachbarte Punkte werden mit gekreuzten Stangen verbunden; je Paar liegen beide Stangen in einer senkrechten Ebene, 3 gekreuzte Paare, 6 Stangen. Die Kreuzung ist nur verspannt (Schnur, Schlauchst&uuml;ck), nicht befestigt.</li>
+  <li><strong>frei:</strong> n Punkte je Ring, Versatz k Teilungen (&Delta;&phi; = k&middot;360&deg;/n), optional gegenl&auml;ufige Stangen (Kreuz). k&nbsp;=&nbsp;0 ergibt senkrechte Stangen.</li>
 </ul>
-<p>Nicht ber&uuml;cksichtigt sind Stangendicke, Ringbreite, die Lage der Anschlussbohrungen im Ring und das Durchh&auml;ngen der Stangen. Die Zahlen sind Geometrie, keine Festigkeitsberechnung.</p>
+<p>Zigzag und TripleX haben denselben Sehnenwinkel &Delta;&phi; = 60&deg;. Sie liefern daher <strong>dieselbe Stangenl&auml;nge</strong> und denselben kleinsten Achsabstand r&middot;cos&nbsp;30&deg;; sie unterscheiden sich nur in Anordnung und Montage.</p>
+
+<p><strong>Gabelkopf und Lochlage:</strong> Die Stangen enden in Gabelk&ouml;pfen (z.&nbsp;B. M6-Normteil), die auf die Stange aufgesetzt sind. Der Abzug je Ende (Voreinstellung 25&nbsp;mm) ist der Abstand Lochmitte&ndash;Stangenende; der Zuschnitt ist also um 2&middot;25&nbsp;mm k&uuml;rzer als das Lochmittenma&szlig; x. Die Gegenst&uuml;cke auf den Ringen (Block mit festem Mittelsteg statt Gabel) haben dieselben Ma&szlig;e: die Lochmitte liegt 25&nbsp;mm von der Ringfl&auml;che, im Raum zwischen den Ringen.</p>
+
+<p><strong>Eingaben</strong> (alle &uuml;berschreibbar, 0 = automatisch):</p>
+<table>
+  <tr><th>Feld</th><th>Bedeutung</th></tr>
+  <tr><td>Ringbreite, Ringdicke</td><td>Breite (radial) und Dicke (axial) der Tubusringe. Der Teilkreis liegt auf der Ringmitte: Teilkreis-&Oslash; = Innen-&Oslash; + Ringbreite.</td></tr>
+  <tr><td>Ring-Innen-&Oslash;</td><td>0 = Wert aus dem Fangspiegel-Rechner (Kapitel&nbsp;7.1a), sonst der eingetragene Wert (der Zirkel der Oberfr&auml;se ist nur grob gestuft).</td></tr>
+  <tr><td>optische Achse &uuml;ber Hutring-OK</td><td>Abstand der optischen Achse von der Oberkante des oberen Rings (Voreinstellung 40&nbsp;mm). Er legt die H&ouml;he des Fangspiegels &uuml;ber dem Ring fest. Der Abstand Fangspiegel&ndash;Fokus A = Innen-&Oslash;/2 + Okularauszug (Fokus &uuml;ber Tubus, Fangspiegel-Tab) ist davon getrennt.</td></tr>
+  <tr><td>Spiegel unter Ring-Oberkante</td><td>0 = Spiegeloberfl&auml;che b&uuml;ndig mit der Oberkante des unteren Rings; sitzt der Spiegel tiefer, verk&uuml;rzt der Versatz die H&ouml;he h und damit die Stange.</td></tr>
+  <tr><td>Lochmitte bis Ringfl&auml;che, Abzug je Ende</td><td>Lage der Bohrung (Voreinstellung 25&nbsp;mm) und Gabelkopfma&szlig; (Voreinstellung 25&nbsp;mm); siehe oben.</td></tr>
+  <tr><td>Lochabstand h, Teilkreis-&Oslash;</td><td>0 = berechnet; sonst Handeingabe.</td></tr>
+</table>
+<p><strong>H&ouml;he h:</strong> Der obere Ring liegt so, dass die optische Achse um die eingegebene H&ouml;he &uuml;ber seiner Oberkante verl&auml;uft. Die untere Lochebene liegt z<sub>0</sub> = Lochlage + Spiegelversatz &uuml;ber der Spiegeloberfl&auml;che; daraus folgt <span class="math">h = f &minus; A &minus; Achse &minus; Ringdicke &minus; 2&middot;Lochlage &minus; Spiegelversatz</span>.</p>
+
+<p><strong>Freiraum zum Lichtkegel:</strong> Eine Stange l&auml;uft geradlinig, ihr Achsabstand ist &rho;(t) = r&middot;&radic;((1&minus;t)&sup2; + t&sup2; + 2t(1&minus;t)&middot;cos&Delta;&phi;), am kleinsten in halber H&ouml;he (r&middot;cos(&Delta;&phi;/2)). Der Lichtkegel eines Feldrandpunkts hat in der H&ouml;he z den Radius D/2&middot;(1&nbsp;&minus;&nbsp;z/f) + z&middot;tan&theta;. Der Tab gibt den kleinsten Abstand zum Kegel und die zugeh&ouml;rige H&ouml;he an und warnt, wenn eine Stange den Kegel schneidet.</p>
+
+<div class="callout-green">
+  <div class="callout-title">Pr&uuml;ff&auml;lle (gebaute Teleskope)</div>
+  <strong>8&Prime; f/4,7, Zigzag:</strong> Die nachgemessenen Stangenl&auml;ngen stimmen mit der Rechnung &uuml;berein.<br>
+  <strong>14&Prime; f/4 (353/1420), TripleX:</strong> Ring 400/500&nbsp;mm, Ringdicke 15&nbsp;mm, Achse 45&nbsp;mm &uuml;ber dem Hutring, Spiegel 6&nbsp;mm unter der Ring-Oberkante, Okularauszug 78&nbsp;mm &rarr; h&nbsp;=&nbsp;1026&nbsp;mm, Teilkreis 450&nbsp;mm, x&nbsp;=&nbsp;1050,4&nbsp;mm, Zuschnitt <strong>1000,4&nbsp;mm</strong>; geliefert und verbaut wurden Rohre von 1000&nbsp;mm. Der Okularauszug-Wert (78&nbsp;mm) ist aus der Stangenl&auml;nge zur&uuml;ckgerechnet; die Messung des Abstands Ring-Innenkante&ndash;Fokus steht noch aus. Der kleinste Achsabstand der Stangen zum Lichtkegel betr&auml;gt hier 52&nbsp;mm.
+</div>
+<p>Nicht ber&uuml;cksichtigt sind Stangendicke, Gabelkopfbreite, Durchh&auml;ngen und Festigkeit. Die Zahlen sind Geometrie, keine Festigkeitsberechnung.</p>
+
+<h3>7.4 Fangspiegelversatz</h3>
+<p>Der Lichtkegel ist am unteren Ende des Fangspiegels breiter als am oberen. Seine Mitte liegt daher etwas tiefer als die optische Achse; au&szlig;erdem muss der Fangspiegel von oben frei sein, weil die Spinne &uuml;ber ihm zusammenl&auml;uft. Der Fangspiegel wird deshalb um den Versatz <span class="math">&Delta; = A&middot;T&sup2;/(1 &minus; T&sup2;)</span>, T = D/(2f), vom Okularauszug weg und zum Hauptspiegel hin verschoben (beide Richtungen gleich gro&szlig;). 14&Prime; f/4 mit A&nbsp;=&nbsp;278&nbsp;mm: 4,4&nbsp;mm. Die 3D-Ansicht zeichnet den Fangspiegel mit diesem Versatz.</p>
+
+<h3>7.5 3D-Ansicht des Gittertubus</h3>
+<p>Der Schalter <em>3D-Ansicht</em> im Tab Gitterrohr zeichnet das Gittertubus-Modell ma&szlig;st&auml;blich aus den Eingaben: Ringe, Spiegel, Stangen mit Gabelk&ouml;pfen, Lichtkegel, Fangspiegel mit Versatz, Spinne, Okularauszug und Streulichtblende in drei Ansichten (Seite, 90&deg; gedreht, Draufsicht). Der Okularauszug liegt zwischen zwei Spinnenbeinen, das dritte Bein liegt in seiner Verl&auml;ngerung auf der Gegenseite; die Streulichtblende sitzt gegen&uuml;ber dem Okularauszug und reicht &uuml;ber und unter den Hutring. Ihre Bogenbreite kommt aus dem Fangspiegel-Rechner (Kapitel&nbsp;7.2).</p>
+<p><strong>Berechnet:</strong> Ringe, Teilkreis, Stangenlage und -l&auml;nge, Lage von Fangspiegel, Spiegel und Lichtkegel, Blendenbreite. <strong>Gesch&auml;tzt:</strong> Spiegeldicke (D/8), Spinnenbleche, Winkel am Okularauszug, H&ouml;he der Streulichtblende (0,74&middot;D oben, 0,45&middot;D unten). Die 3D-Ansicht ist eine Veranschaulichung und ersetzt keine Konstruktionszeichnung.</p>
 
 <h2>8. Beschreibung der Tabs</h2>
 
@@ -476,6 +506,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <div class="diagram-box">
   <div class="diagram-title">Kennwerte</div>
   <p>Der Tab ist seit 7.7 ein <strong>Steckbrief aus drei Fragen</strong>, jeweils Kugel &rarr; Schieber: <em>Wie gut ist die Fl&auml;che?</em> (Strehl exakt, W<sub>PtV</sub> best focus), <em>Bis wohin tr&auml;gt sie?</em> (V<sub>krit</sub> aus MTF&times;CSF, V<sub>&frac12;</sub>) und <em>Wie wirkt sie im Bild?</em> (Q<sub>vis</sub> bei 30, 60, 100, 150&times;, photopisch, volle &Ouml;ffnung, Kapitel&nbsp;5.5). Dazu kommt eine farbige Beurteilung (gr&uuml;n S&nbsp;&ge;&nbsp;0,95, orange 0,80&ndash;0,95, rot S&nbsp;&lt;&nbsp;0,80) und eine Zeile mit V<sub>krit</sub> real, mit Schieber, f&uuml;r das Paraboloid und V<sub>max</sub> (= D/0,5). Unter <em>Details</em> (aufklappbar) stehen die &uuml;brigen Werte: f/D, W<sub>p</sub>, W<sub>rms</sub>, Strehl nach Mar&eacute;chal, D<sub>eff</sub>, die N&auml;herung V<sub>krit</sub> = D/(13&middot;W<sub>b</sub>), V<sub>krit,Blur</sub>, Aufl&ouml;sungsverlust und der Verlust bei 150&times;.</p>
+  <p><strong>Pfeiltiefe</strong> (wichtig f&uuml;rs Schleifen): Tiefe der Spiegelmitte gegen&uuml;ber dem Rand, f&uuml;r die Kugel (R&nbsp;=&nbsp;2f) s&nbsp;=&nbsp;R&nbsp;&minus;&nbsp;&radic;(R&sup2;&nbsp;&minus;&nbsp;(D/2)&sup2;), f&uuml;r das Paraboloid s&nbsp;=&nbsp;D&sup2;/(16f); dazu der Unterschied in &micro;m, den die Parabolisierung abtr&auml;gt. Beispiel 200/1000: Kugel 2,502&nbsp;mm, Paraboloid 2,500&nbsp;mm, Unterschied 1,6&nbsp;&micro;m.</p>
 </div>
 
 <h3>8.2 Bildqualit&auml;t</h3>
@@ -656,7 +687,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 </ul>
 
 <div class="footer-note">
-  Technische Gesamtdokumentation v7.6 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 7.8.0).
+  Technische Gesamtdokumentation v8.2 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 8.2.0).
 </div>
 
 </body>
