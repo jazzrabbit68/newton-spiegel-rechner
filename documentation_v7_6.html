@@ -12,7 +12,7 @@
     font-size: 9pt; color: #777;
   }
   @bottom-left {
-    content: "Technische Dokumentation v8.2.0: Newton-Spiegel-Rechner";
+    content: "Technische Dokumentation v8.3.0: Newton-Spiegel-Rechner";
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 9pt; color: #777;
   }
@@ -81,7 +81,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <div class="header-banner">
   <h1>Technische Gesamtdokumentation</h1>
-  <div class="subtitle">Newton-Spiegel-Rechner v8.2.0 &mdash; Mathematisch-Physikalische Modelle, Bewertung und Bauhilfen</div>
+  <div class="subtitle">Newton-Spiegel-Rechner v8.3.0 &mdash; Mathematisch-Physikalische Modelle, Bewertung und Bauhilfen</div>
 </div>
 
 <p>Diese Dokumentation beschreibt den aktuellen Stand des Programms <code>newton_spiegel_rechner.py</code> (Desktop, tkinter) und der Web-App <code>app.py</code> (Streamlit). Beide Versionen verwenden dieselben Rechenkerne. Das Programm bewertet Newton-Spiegel &mdash; vor allem sph&auml;rische, aber auch beliebig gut polierte &mdash; nach Wellenfrontfehler, Strehl-Quotient, MTF und einem wahrnehmungsbezogenen Qualit&auml;tsindex, hilft beim Auswerten des Foucault-Tests und beim Auslegen von Fangspiegel und Blende, und vergleicht verschiedene Spiegel miteinander, auch wenn sie unterschiedlich gro&szlig; sind.</p>
@@ -315,7 +315,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <p><strong>N&auml;herungskurve</strong> (gestrichelt im Diagramm, schnell zu berechnen):</p>
 <div class="math-block"><span class="math">w = 1 / [1 + (V<sub>Wende</sub> / V)<sup>2</sup>], &emsp; Q&#771;(V) = S + (1 &minus; S) &middot; (1 &minus; w)</span></div>
-<p>Das Diagramm zeigt die gr&ouml;&szlig;te Abweichung zwischen N&auml;herung und exakter Kurve an. Die N&auml;herung gilt photopisch; sobald die Netzhautleuchtdichte L<sub>eff</sub> im Plotbereich unter 100&nbsp;cd/m&sup2; f&auml;llt (Kapitel&nbsp;5.5), werden die Q&#771;-Kurven ausgeblendet.</p>
+<p>Das Diagramm zeigt die gr&ouml;&szlig;te Abweichung zwischen N&auml;herung und exakter Kurve an. Die N&auml;herung gilt photopisch und ist immer eingezeichnet. Die Fl&auml;che &bdquo;Abweichung exakt &harr; N&auml;herung&ldquo; wird nur dort gezeigt, wo die Netzhautleuchtdichte L<sub>eff</sub> mindestens 100&nbsp;cd/m&sup2; betr&auml;gt (Kapitel&nbsp;5.5); bei dunkleren Objekten steht in der Legende &bdquo;photopisch&ldquo;, und eine graue Linie zeigt die exakte photopische Kurve, der die N&auml;herung folgt.</p>
 
 <p><strong>Q<sub>vis</sub> in den Kennwerten:</strong> Die Kennwerte zeigen Q<sub>vis</sub> exakt bei 30&times;, 60&times;, 100&times; und 150&times;, jeweils Kugel &rarr; Schieber, und zwar bewusst <em>photopisch mit voller &Ouml;ffnung</em> (ohne Helligkeit, Augenpupille, Seeing und Fangspiegel). Das ist eine Eigenschaft der Spiegelfl&auml;che und die strengste Bewertung: In allen gerechneten F&auml;llen (sechs Objekte, sechs Spiegel von 114/900 bis 400/1600, V&nbsp;=&nbsp;30&hellip;250) liegt Q<sub>vis</sub> mit Objekthelligkeit und Pupille h&ouml;her oder gleich. Wie der Spiegel an einem bestimmten Objekt wirkt, zeigt der Wahrnehmungs-Tab; dort h&auml;ngt Q<sub>vis</sub>(V) vom Objekt ab. F&uuml;r den Vergleich verschieden gro&szlig;er Spiegel ist Q<sub>abs</sub> (Kapitel&nbsp;6) zu verwenden.</p>
 
@@ -328,7 +328,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 <p><em>N&auml;herung:</em> Die Aberrations-MTF wird unver&auml;ndert mit der Ring-MTF multipliziert; die Abschattung &auml;ndert in Wirklichkeit die Wellenfront-Statistik geringf&uuml;gig.</p>
 
 <h3>5.5 Objekt, Leuchtdichte und Augenpupille im Wahrnehmungsdiagramm</h3>
-<p>Die Auswahl <em>Objekt</em> setzt die Bildhelligkeit L (Kapitel&nbsp;5.1) und die Augenpupille d<sub>p</sub> gemeinsam:</p>
+<p>Die Auswahl <em>Objekt</em> setzt die Bildhelligkeit L (Kapitel&nbsp;5.1) und die Augenpupille d<sub>p</sub> gemeinsam. Im Wahrnehmungs-Tab stehen <strong>Mond</strong> (3500&nbsp;cd/m&sup2;, 2,5&nbsp;mm), <strong>Heller Planet</strong> (Jupiter, 600, 3&nbsp;mm), <strong>DSO (hell)</strong> (5, 6&nbsp;mm), <em>Aus</em> und <em>Frei</em> zur Wahl. Die folgende Tabelle enth&auml;lt die vollst&auml;ndige Liste, die in den Tabs Max. Vergr&ouml;&szlig;erung und Blende verwendet wird (Saturn, Mars und schwaches DSO sind im Wahrnehmungs-Tab &uuml;ber <em>Frei</em> einstellbar):</p>
 <table>
   <thead><tr><th>Objekt</th><th>Leuchtdichte L [cd/m&sup2;]</th><th>Augenpupille d<sub>p</sub> [mm]</th></tr></thead>
   <tbody>
@@ -517,7 +517,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
     <li>Q<sub>vis</sub>(V) von 30&times; bis 400&times; f&uuml;r Sph&auml;re und Paraboloid (exakt, durchgezogen) sowie N&auml;herungskurven (gestrichelt) mit angezeigter gr&ouml;&szlig;ter Abweichung.</li>
     <li>Schieberkurve (exakt und N&auml;herung), schattierter Verlustbereich zwischen Paraboloid und Sph&auml;re.</li>
     <li>Ablese-Cursor mit exakten Werten (Kapitel&nbsp;5.3), optionales Fangspiegel-Feld (Kapitel&nbsp;5.4).</li>
-    <li>Objekt (Voreinstellung Jupiter): setzt Leuchtdichte L und Augenpupille d<sub>p</sub> gemeinsam (Kapitel&nbsp;5.5). Bei L&nbsp;&lt;&nbsp;100&nbsp;cd/m&sup2; verschiebt sich die CSF-Spitze (Kapitel&nbsp;5.1), und die Q&#771;-Kurven entfallen. Zus&auml;tzliche strichpunktierte Kurven mit Abblenden und markierte Abblendgrenze V = D/d<sub>p</sub>.</li>
+    <li>Objekt (Voreinstellung Heller Planet): setzt Leuchtdichte L und Augenpupille d<sub>p</sub> gemeinsam (Kapitel&nbsp;5.5). Bei L&nbsp;&lt;&nbsp;100&nbsp;cd/m&sup2; verschiebt sich die CSF-Spitze (Kapitel&nbsp;5.1), und die Q&#771;-Kurven entfallen. Zus&auml;tzliche strichpunktierte Kurven mit Abblenden und markierte Abblendgrenze V = D/d<sub>p</sub>.</li>
     <li>Eingeblendet: V<sub>krit</sub>, V<sub>Wende</sub>, V<sub>&frac12;</sub> (photopisch); Q = 0,90 (sehr gut) und Q = 0,70 (sp&uuml;rbar). Bei Leuchtdichte unter 100&nbsp;cd/m&sup2; am Auge zeigt der Infokasten L<sub>eff</sub> bei 400&times; und die Lage der CSF-Spitze.</li>
   </ul>
 </div>
@@ -638,7 +638,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
     <tr><td><strong>Brennweite f</strong></td><td>200 &ndash; 4000 mm (Web: bis 3000 mm)</td><td>Bestimmt N = f/D und damit den Wellenfrontfehler.</td></tr>
     <tr><td><strong>Strehl (Schieber)</strong></td><td>0 &ndash; 100 %</td><td>Ziel-Strehl in Prozent; bis zum Strehl der Kugel (0) = reale Kugel, 100 % = Paraboloid; simuliert Figurierungsfortschritt und blendet Schieberkurven ein.</td></tr>
     <tr><td><strong>Blende D</strong> (Tab Blende)</td><td>50 mm &ndash; D</td><td>Abgeblendeter Durchmesser f&uuml;r den Blenden-Tab, Voreinstellung D/2.</td></tr>
-    <tr><td><strong>Objekt</strong> (Wahrnehmungs-Tab)</td><td>Aus / Mond / Jupiter / Saturn / Mars / Helles DSO / Schwaches DSO / Frei</td><td>Setzt Leuchtdichte L und Augenpupille d<sub>p</sub> gemeinsam (Voreinstellung Jupiter); bei L &lt; 100 cd/m&sup2; verschiebt sich die CSF-Spitze. Bei <em>Frei</em>: L (0 &ndash; 20000 cd/m&sup2;) und d<sub>p</sub> (0 &ndash; 9 mm) selbst eingeben.</td></tr>
+    <tr><td><strong>Objekt</strong> (Wahrnehmungs-Tab)</td><td>Aus / Mond / Heller Planet (Jupiter) / DSO (hell) / Frei</td><td>Setzt Leuchtdichte L und Augenpupille d<sub>p</sub> gemeinsam (Voreinstellung Heller Planet); bei L &lt; 100 cd/m&sup2; verschiebt sich die CSF-Spitze. Bei <em>Frei</em>: L (0 &ndash; 20000 cd/m&sup2;) und d<sub>p</sub> (0 &ndash; 9 mm) selbst eingeben.</td></tr>
     <tr><td><strong>Augenpupille d<sub>p</sub></strong> (Vergleich-Tab)</td><td>0 &ndash; 9 mm</td><td>Eigenes Feld im Vergleich-Tab (Voreinstellung aus).</td></tr>
     <tr><td><strong>Vergr&ouml;&szlig;erung V</strong></td><td>ab 1&times;</td><td>Ablese-Cursor im Wahrnehmungs-Tab, Q-Wert im Fangspiegel-Tab, Vergleich.</td></tr>
     <tr><td><strong>Fangspiegel-Eingaben</strong></td><td>mm</td><td>Okularausz&uuml;g (Fokus &uuml;ber Tubus), Tubus-Au&szlig;en-&Oslash;, Bildfeld; f&uuml;r die Blende zus&auml;tzlich Hutring-&Oslash;, Okular-f und -AFOV, OAZ-Rohr Innen-&Oslash; und L&auml;nge.</td></tr>
@@ -687,7 +687,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 </ul>
 
 <div class="footer-note">
-  Technische Gesamtdokumentation v8.2 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 8.2.0).
+  Technische Gesamtdokumentation v8.2 &middot; Beschreibt den aktuellen Stand von <code>newton_spiegel_rechner.py</code> und <code>app.py</code> (Version 8.3.0).
 </div>
 
 </body>

@@ -1,0 +1,279 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{ragged2e}
+\hyphenpenalty=10000 \exhyphenpenalty=10000
+\renewcommand{\figurename}{Abbildung}
+\renewcommand{\tablename}{Tabelle}
+\renewcommand{\abstractname}{Zusammenfassung}
+\renewcommand{\refname}{Literatur}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{microtype}
+\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,pdftitle={Visueller Qualitätsindex für sphärische Newton-Spiegel},pdfauthor={Martin Weber}]{hyperref}
+\setlist{itemsep=2pt,topsep=3pt}
+\renewcommand{\arraystretch}{1.1}
+\newcommand{\Qvis}{Q_{\mathrm{vis}}}
+\newcommand{\Vkrit}{V_{\mathrm{krit}}}
+
+\title{Ein vergrößerungsabhängiger visueller\\Qualitätsindex für sphärische Newton-Spiegel\\[4pt]
+\large Herleitung, Validierung und Grenzen von $\Qvis(V)$}
+\author{Martin Weber}
+\date{Stand: Programmversion 8.3.0 \quad$\cdot$\quad 8.\ November 2026}
+
+\sloppy\emergencystretch=3em
+\begin{document}
+\RaggedRight
+\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}
+\maketitle
+
+\begin{abstract}\RaggedRight
+Ein Newton-Teleskop mit sphärischem Hauptspiegel erzeugt sphärische Aberration, deren visuelle Auswirkung stark von der Vergrößerung abhängt. Strehl-Quotient $S$ und MTF-Formverlust sind vergrößerungsunabhängig und sagen nicht, was der Beobachter wahrnimmt. Der Index $\Qvis(V)$ verknüpft die exakte MTF des sphärischen Spiegels mit der Kontrastempfindlichkeitsfunktion (CSF) des Auges und bezieht das Ergebnis auf den idealen Parabolspiegel gleicher Öffnung. Berücksichtigt werden die Abblendung durch die Augenpupille und die Bildhelligkeit einschließlich der Abnahme der Netzhauthelligkeit bei hoher Vergrößerung (Étendue). Das Papier beschreibt Herleitung und Modell, nennt die Fehler, die bei Prüfungen gefunden und behoben wurden, und führt die Grenzen des Modells offen auf.
+\end{abstract}
+
+\section{Wellenfront und Strehl}
+Ein sphärischer Spiegel ($D,f,\lambda$) erzeugt am paraxialen Fokus den PtV-Wellenfrontfehler $W_p = D^4/(512\,f^3\lambda)$ (Wellenfront, doppelt so groß wie die Oberflächenabweichung). Am besten Fokus (optimale Defokussierung) bleibt
+\begin{equation}
+W_b=\frac{W_p}{4}=\frac{D^4}{2048\,f^3\lambda},\qquad W(\rho)=4\,W_b(\rho^4-\rho^2),\qquad W_{\mathrm{rms}}=\frac{W_b}{1{,}5\sqrt5}.
+\end{equation}
+Der exakte Strehl-Quotient folgt aus dem Pupillenintegral ($W_c=W-\langle W\rangle$, $W$ in Wellenlängen):
+\begin{equation}
+S_{\mathrm{exakt}}=\Big|\,2\int_0^1 e^{\,i2\pi W_c(\rho)}\,\rho\,d\rho\,\Big|^2 .
+\end{equation}
+Die Maréchal-Näherung $S_{\mathrm{Mar}}\approx\exp[-(2\pi W_{\mathrm{rms}})^2]$ ist nur für $S\gtrsim0{,}6$ brauchbar. Bei schnellen Kugeln versagt sie völlig (200/1000\,mm: $S_{\mathrm{Mar}}=0{,}0008$ gegen $S_{\mathrm{exakt}}=0{,}123$) und wird deshalb nur noch als Vergleichsanzeige geführt.
+
+\paragraph{Nicht eindeutig bei starker Aberration.} Für $W_b\gtrsim0{,}9\lambda$ pendelt $S_{\mathrm{exakt}}(W_b)$ nicht mehr monoton (Energie wandert zwischen Kern und Halo). Ein Strehl von 0,12 gehört dort zu mehreren Wellenfronten; die Umkehrung $S\to W_b$ ist nur bis $S\approx0{,}09$ eindeutig. Für solche Spiegel rechnet das Programm immer aus $D,f$ (nie aus $S$ zurück).
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{lrrrrrr}
+\toprule
+Spiegel & $f/D$ & $W_p$ & $W_b$ & $S_{\mathrm{Mar}}$ & $S_{\mathrm{exakt}}$ & $\Vkrit$ (Näh.)\\
+\midrule
+114/900 & 7,9 & 0,82\,$\lambda$ & 0,21\,$\lambda$ & 0,862 & 0,861 & 43$\times$\\
+150/750 & 5,0 & 4,26\,$\lambda$ & 1,07\,$\lambda$ & 0,019 & 0,101 & 11$\times$\\
+200/1000 & 5,0 & 5,68\,$\lambda$ & 1,42\,$\lambda$ & 0,0008 & 0,123 & 11$\times$\\
+200/1200 & 6,0 & 3,29\,$\lambda$ & 0,82\,$\lambda$ & 0,093 & 0,094 & 19$\times$\\
+\bottomrule
+\end{tabular}
+\caption{Vier typische Newton-Kugeln ($\lambda=550$\,nm).}
+\end{table}
+
+\section{MTF des sphärischen Spiegels}
+Die MTF des beugungsbegrenzten Parabolspiegels ist
+\begin{equation}
+m_p(\nu)=\tfrac{2}{\pi}\big(\arccos\nu-\nu\sqrt{1-\nu^2}\big),\qquad \nu=f_{\mathrm{ang}}/f_c\in[0,1],\quad f_c=\frac{D}{\lambda}.
+\end{equation}
+Die \emph{exakte} MTF des aberrierten Spiegels ist der Betrag der Autokorrelation der komplexen Pupille~\cite{born} $P(\mathbf r)=\mathbb 1_{|\mathbf r|\le1}\,e^{i2\pi W(|\mathbf r|)}$:
+\begin{equation}
+\mathrm{OTF}(\nu)=\frac{\int P(\mathbf r)\,P^*(\mathbf r+\boldsymbol\nu)\,d^2r}{\int|P|^2d^2r},\qquad m_{sr}(\nu)=\frac{|\mathrm{OTF}(\nu)|}{m_p(\nu)}.
+\end{equation}
+Das Programm wertet das mit einer FFT-Autokorrelation (Gitter $192^2$, Nullauffüllung) aus; es wird je $W_b$ einmal berechnet und zwischengespeichert. Dabei ist $m_{sr}(0)=1$; der Strehl steckt bereits in der Kurvenform.
+
+\paragraph{Konsistenzprüfung.} Nach dem Parseval-Satz ist das Volumen der vorzeichenbehafteten OTF gleich dem Strehl: $S=\int\mathrm{OTF}\,\nu\,d\nu\,/\!\int m_p\,\nu\,d\nu$. Das Programm erfüllt das auf vier Stellen (Tab.~2). Bei stärkerer Aberration wird die OTF stellenweise leicht negativ (Kontrastumkehr; Minimum $-0{,}023$ bei 200/1200); die MTF ist per Definition der Betrag $|\mathrm{OTF}|$, das Programm verwendet ihn.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{lccccc}
+\toprule
+Spiegel & 114/900 & 150/750 & 200/1000 & 200/1200 & 200/2000\\
+\midrule
+$S_{\mathrm{exakt}}$ (Pupillenintegral) & 0,8607 & 0,1010 & 0,1232 & 0,0935 & 0,8945\\
+OTF-Volumen (FFT) & 0,8607 & 0,1010 & 0,1232 & 0,0935 & 0,8945\\
+\bottomrule
+\end{tabular}
+\caption{Strehl aus dem Pupillenintegral und aus dem Volumen der 2D-OTF (Werte aus dem Programm).}
+\end{table}
+
+\section{Der visuelle Qualitätsindex \texorpdfstring{$\Qvis(V)$}{Qvis(V)}}
+\subsection{Kontrastempfindlichkeit des Auges}
+Das Auge hat ein bandpassförmiges Empfindlichkeitsprofil mit Maximum bei etwa 5--10 Zyklen/Grad. Verwendet wird die analytische Form von Mannos und Sakrison (1974)~\cite{mannos}:
+\begin{equation}
+\mathrm{CSF}_0(f)=2{,}6\,(0{,}0192+0{,}114f)\,\exp\!\big[-(0{,}114f)^{1{,}1}\big],\qquad f\ \text{in cpd}.
+\end{equation}
+Die Teleskopfrequenz wird über die Vergrößerung umgerechnet: $f_{\mathrm{cpd}}=\nu\,f_c'\,3600/V$ mit $f_c'=D/(\lambda\cdot206265)$ in Zyklen pro Bogensekunde. Bei kleiner Vergrößerung liegen alle Teleskopfrequenzen weit jenseits des CSF-Maximums -- das Auge kann die Aberration nicht auflösen. Bei $V\approx\Vkrit$ wandern sie in den empfindlichsten Bereich.
+
+\subsection{Bildhelligkeit}
+Bei wenig Licht sinkt die Kontrastempfindlichkeit, und ihre Spitze wandert zu niedrigeren Ortsfrequenzen (Barten 1999~\cite{barten}): Das Auge bewertet dann vor allem grobe Strukturen. Das Modell verschiebt die Spitze der Basis-CSF mit der Leuchtdichte $L$ [cd/m$^2$] des Bildes:
+\begin{equation}
+s(L)=\min\!\Big(1,\Big(\frac{L}{L_{\mathrm{ref}}}\Big)^{0{,}25}\Big),\qquad \mathrm{CSF}(f,L)=\mathrm{CSF}_0\!\big(f/s(L)\big),\qquad L_{\mathrm{ref}}=100\ \mathrm{cd/m^2}.
+\end{equation}
+Die Spitze liegt bei $7{,}9\,s(L)$ cpd: 7,9 cpd für $L\ge100$ (photopisch), 3,7 cpd bei 5\,cd/m$^2$ und 2,1 cpd bei 0,5\,cd/m$^2$ (Abb.~1, links). Im relativen Maß $\Qvis$ kürzt sich die Amplitude der CSF heraus; nur die Verschiebung der Spitze wirkt.
+
+\paragraph{Wie belastbar ist das?} Die \emph{Richtung} der Verschiebung (Spitze zu niedrigen Frequenzen bei wenig Licht) ist durch Barten gut belegt. Der Potenzansatz mit Exponent 0,25 ist eine vereinfachte, an die Spitzenlagen angelehnte Anpassung und kein Messwert. Für die 200/1000-Kugel bei $30\times$ und $L=0{,}5$\,cd/m$^2$ ergeben die Exponenten $0{,}1\,/\,0{,}25\,/\,0{,}4$ die Werte $\Qvis=0{,}55\,/\,0{,}79\,/\,0{,}93$. Die Aussage \emph{``bei dunklem Hintergrund und kleiner Vergrößerung wirkt eine schlechte Kugel deutlich besser, als der photopische Wert sagt''} ist daher robust, der genaue Zahlenwert nicht.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.98\textwidth]{abb_helligkeit.pdf}
+\caption{Links: Verschiebung der CSF-Spitze mit der Leuchtdichte (jeweils auf das Maximum normiert). Rechts: $\Qvis(V)$ der Kugel 200/1000\,mm bei drei Leuchtdichten; der Abstand zum Paraboloid ($\Qvis=1$) schrumpft bei wenig Licht.}
+\end{figure}
+
+\subsection{Definition}
+\begin{equation}
+\Qvis(V,L)=\frac{\displaystyle\int_0^1 m_{sr}(\nu)\,m_p(\nu)\,\mathrm{CSF}\!\big(\nu f_c'\tfrac{3600}{V},L\big)\,d\nu}{\displaystyle\int_0^1 m_p(\nu)\,\mathrm{CSF}\!\big(\nu f_c'\tfrac{3600}{V},L\big)\,d\nu}.
+\end{equation}
+Ohne Leuchtdichteangabe (Voreinstellung, Kennwerte) gilt $L\ge100$\,cd/m$^2$, die CSF ist also die photopische Basis-CSF. Drei Eigenschaften folgen aus der Definition:
+\begin{enumerate}
+\item $\Qvis\to1$ bei kleiner Vergrößerung: Es dominieren niedrige Frequenzen, dort ist $m_{sr}(0)=1$.
+\item $\Qvis(V\to\text{groß})\to S_{\mathrm{exakt}}$ (näherungsweise): Bei sehr hoher Vergrößerung nähert sich der Index dem CSF-gewichteten MTF-Formverlust.
+\item \textbf{Kein Strehl-Vorfaktor.} Der Strehl-Effekt steckt in $m_{sr}$; ein zusätzlicher Faktor $S$ würde die Qualitätsminderung doppelt zählen.
+\end{enumerate}
+$\Qvis$ ist ein \emph{relatives} Maß: der Bezug ist der Parabolspiegel gleicher Öffnung ($\Qvis=1$).
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{llccc}
+\toprule
+Spiegel & Leuchtdichte $L$ & $V=30\times$ & $60\times$ & $150\times$\\
+\midrule
+200/1000 ($S\approx0{,}12$) & photopisch & 0,369 & 0,207 & 0,138\\
+ & 5\,cd/m$^2$ & 0,624 & 0,387 & 0,185\\
+ & 0,5\,cd/m$^2$ & 0,792 & 0,584 & 0,288\\
+\addlinespace
+130/650 ($S\approx0{,}08$) & photopisch & 0,384 & 0,200 & 0,114\\
+ & 5\,cd/m$^2$ & 0,645 & 0,403 & 0,172\\
+ & 0,5\,cd/m$^2$ & 0,808 & 0,605 & 0,296\\
+\addlinespace
+114/900 ($S\approx0{,}86$) & photopisch & 0,925 & 0,886 & 0,865\\
+ & 5\,cd/m$^2$ & 0,966 & 0,929 & 0,879\\
+ & 0,5\,cd/m$^2$ & 0,984 & 0,960 & 0,907\\
+\bottomrule
+\end{tabular}
+\caption{$\Qvis$ bei verschiedenen Leuchtdichten. Der Effekt ist dort groß, wo die Aberration groß ist; ein fast guter Spiegel (114/900) ändert sich kaum.}
+\end{table}
+
+\subsection{Kritische Vergrößerung und Näherungskurve \texorpdfstring{$\tilde Q(V)$}{Q(V)}}
+\paragraph{Kritische Vergrößerung.} $\Vkrit$ ist die Vergrößerung, ab der $\Qvis(V)$ unter 0,9 fällt, der Kontrastverlust gegenüber dem Paraboloid also mehr als 10\,\% beträgt. Das Programm bestimmt sie numerisch aus dem exakten $\Qvis$ (photopisch, Suchbereich $30\times$ bis $2D$ [mm]). Für schnelle Abschätzungen dient die Faustformel
+\begin{equation}
+\Vkrit\approx\frac{D\,[\mathrm{mm}]}{13\,W_b\,[\lambda]},
+\end{equation}
+ein Potenzfit gegen die exakte Schwelle für $D=80$--$400$\,mm und $f/4$--$f/10$ (mittlerer Fehler etwa 12\,\%, Median 7\,\%, im schlechtesten Fall bis etwa 85\,\%). Eingabe ist $W_b$, nicht $S$, weil $S$ bei starker Aberration nicht monoton ist. Die 10\,\%-Schwelle ist eine Festlegung, keine Naturkonstante.
+
+\paragraph{Näherungskurve.} Für den ganzen Verlauf interpoliert eine sigmoide Funktion zwischen den beiden Grenzfällen: bei kleiner Vergrößerung $\Qvis\to1$ (das Auge löst die Aberration nicht auf, bei hellen Objekten blendet zusätzlich die Pupille ab), bei hoher Vergrößerung $\Qvis\to S_{\mathrm{exakt}}$ (die volle Öffnung wirkt):
+\begin{gather}
+w(V)=\frac{1}{1+(V_W/V)^2},\qquad \tilde Q(V)=S_{\mathrm{exakt}}+(1-S_{\mathrm{exakt}})\big(1-w(V)\big),\\
+V_W=\Vkrit\,S^{-2/3}\quad(\text{Faktor auf }20\text{ begrenzt}).
+\end{gather}
+Die Näherung verbindet damit die beiden Bereiche: Sie folgt bei kleinem $V$ der Kurve mit Pupillenabblendung (Abschnitt~4) und läuft bei großem $V$ in die exakte Rechnung mit voller Öffnung ein (Abb.~2).
+
+\paragraph{$\Vkrit$ und $V_W$ sind zwei verschiedene Größen.} $V_W$ ist der Wendepunkt der Näherungskurve ($w=\tfrac12$), $\Vkrit$ die 10\,\%-Schwelle der exakten Kurve. In einer frühen Programmfassung wurde $V_W=\Vkrit$ gesetzt. Das trifft die exakte Kurve bei gut korrigierten Spiegeln, bei schnellen Kugeln ist die Sigmoide dann aber zu steil und zu schmal für den lang auslaufenden wirklichen Verlauf (mittlerer Fehler bis etwa 0,27 bei $f/6$). Mit dem größeren, strehlabhängigen $V_W=\Vkrit S^{-2/3}$ sinkt der Fehler auf etwa 0,07--0,12. Beispiel 200/1000 ($S=0{,}12$): $\Vkrit\approx11\times$, $V_W\approx44\times$. Beide Größen hängen letztlich nur von $W_b$ ab: $S_{\mathrm{exakt}}$ ist selbst eine Funktion von $W_b$ (Gl.~(2)), $V_W=\frac{D}{13W_b}\,S_{\mathrm{exakt}}(W_b)^{-2/3}$ ist also ebenfalls aus $D$ und $W_b$ bestimmt; $S$ steht nur deshalb in der Formel, weil es den Verlauf der Kurve physikalisch anschaulich macht (die Kurve läuft ja gegen $S$). Weil $S(W_b)$ bei starker Aberration nicht monoton ist, wird der Faktor auf 20 begrenzt. $V_W$ ist ein reiner Anpassungsparameter der Näherungskurve und kein Messwert; für alle anderen Zwecke (Kennwerte, Maximalvergrößerung) gilt $\Vkrit$.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{cccc}
+\toprule
+Vergrößerung & $\Qvis$ (exakt) & $\tilde Q$ (Näherung) & Differenz\\
+\midrule
+$V=50\times$ & 0,972 & 0,992 & $+0{,}020$\\
+$V=100\times$ & 0,943 & 0,974 & $+0{,}031$\\
+$V=200\times$ & 0,916 & 0,942 & $+0{,}026$\\
+$V=400\times$ & 0,904 & 0,915 & $+0{,}011$\\
+\bottomrule
+\end{tabular}
+\caption{Beispiel $S=0{,}90$, $D=355$\,mm (entspricht etwa $f/12$).}
+\end{table}
+Im Programm sind beide Kurven überlagert (exakt durchgezogen, Näherung gestrichelt). Die Näherung überschätzt die wahrgenommene Qualität im mittleren Bereich systematisch (hier um bis zu 0,03), weil die bandpassförmige CSF nicht modelliert wird. Sie gilt photopisch; bei einer Leuchtdichte unter 100\,cd/m$^2$ blendet das Programm sie aus.
+
+\section{Abblenden durch die Augenpupille; Objekt-Auswahl}
+Ist die Austrittspupille $D/V$ größer als die Pupille des Auges $d_p$, nutzt das Auge nur eine zentrale Teilöffnung des Spiegels:
+\begin{equation}
+\rho_s=\min\!\big(1,\,V d_p/D\big),\qquad V_{\mathrm{Abblend}}=D/d_p .
+\end{equation}
+Die Aberration wird nur über diese Teilöffnung gerechnet (mit Nachfokussierung des Auges); bezogen wird auf einen idealen Spiegel, der von derselben Pupille abgeblendet wird.
+
+\paragraph{Netzhauthelligkeit und Étendue.} Die Leuchtdichte auf der Netzhaut ist nur dann gleich der Objektleuchtdichte $L$, solange die Austrittspupille $D/V$ mindestens so groß ist wie die Augenpupille. Wird $D/V$ kleiner als $d_p$, gelangt nur noch ein Teil des Lichts ins Auge:
+\begin{equation}
+L_{\mathrm{eff}}(V)=L\cdot\min\!\Big(1,\Big(\frac{D}{V\,d_p}\Big)^{2}\Big).
+\end{equation}
+Das Programm setzt $L_{\mathrm{eff}}(V)$ in die helligkeitsabhängige CSF ein, für jede Vergrößerung einzeln. Ein Beispiel: helles Deep-Sky ($5$\,cd/m$^2$, $d_p=6$\,mm) bei $150\times$ und 200\,mm hat eine Austrittspupille von 1,3\,mm und damit $L_{\mathrm{eff}}\approx0{,}25$\,cd/m$^2$. Die CSF-Spitze liegt dann bei etwa 1,8 statt 3,7\,cpd; die Kugel wird entsprechend milder bewertet (0,33 statt 0,18). Der umgekehrte Ansatz $L\rho_s^2$ (Abblenden verdunkelt) wäre falsch: Beim Abblenden ist die Austrittspupille \emph{größer} als die Augenpupille, die Netzhaut bekommt die volle Leuchtdichte.
+
+\paragraph{Objekt-Auswahl.} Pupille und Bildhelligkeit gehören zusammen: Bei hellen Objekten ist die Pupille eng, bei dunklen weit offen. Das Programm setzt beide mit einer Auswahl gemeinsam (Richtwerte; \emph{Frei} erlaubt eigene Eingaben):
+\begin{table}[ht]
+\centering
+\begin{tabular}{lrr}
+\toprule
+Objekt & $L$ [cd/m$^2$] & $d_p$ [mm]\\
+\midrule
+Mond & 3500 & 2,5\\
+Jupiter & 600 & 3\\
+Saturn & 200 & 4\\
+Mars (Opposition) & 2000 & 4\\
+Helles Deep-Sky & 5 & 6\\
+Schwaches Deep-Sky & 0,5 & 7\\
+\bottomrule
+\end{tabular}
+\caption{Voreingestellte Objekte. Die Flächenhelligkeit der Planeten folgt aus dem Sonnenlicht pro Fläche mal Albedo bzw.\ aus Magnitude pro Quadratbogensekunde (Größenordnung $\pm30$\,\%); die $d_p$-Werte sind Praxis-Richtwerte. Im Wahrnehmungs-Tab des Programms sind Mond, Heller Planet (Jupiter) und helles Deep-Sky voreingestellt; die übrigen Objekte stehen bei Maximalvergrößerung und Blende zur Verfügung, im Wahrnehmungs-Tab über die freie Eingabe.}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+$\Qvis$, Kugel 200/1000 & $30\times$ & $60\times$ & $100\times$ & $150\times$\\
+\midrule
+volle Öffnung, photopisch & 0,369 & 0,207 & 0,155 & 0,138\\
+\addlinespace
+Mond (3500\,cd/m$^2$, 2,5\,mm) & 0,998 & 0,608 & 0,154 & 0,137\\
+Jupiter (600, 3\,mm) & 0,992 & 0,270 & 0,154 & 0,137\\
+Mars (2000, 4\,mm) & 0,942 & 0,207 & 0,154 & 0,137\\
+Saturn (200, 4\,mm) & 0,942 & 0,207 & 0,167 & 0,152\\
+Helles Deep-Sky (5\,cd/m$^2$, 6\,mm) & 0,740 & 0,485 & 0,395 & 0,333\\
+Schwaches Deep-Sky (0,5\,cd/m$^2$, 7\,mm) & 0,795 & 0,698 & 0,614 & 0,547\\
+\bottomrule
+\end{tabular}
+\caption{Kugel 200/1000\,mm mit Augenpupille und Helligkeit des jeweiligen Objekts, mit Étendue. Unterhalb von $D/d_p$ wird die Kugel durch das Auge abgeblendet und wirkt deutlich besser als der Wert bei voller Öffnung; oberhalb davon wirkt nur noch die Helligkeit, und die nimmt mit $V$ ab. Schwache Objekte profitieren dadurch bis in hohe Vergrößerungen, bei Saturn (200\,cd/m$^2$) zeigt sich der Effekt ab etwa $100\times$ schwach.}
+\end{table}
+
+Zwei verschiedene Gründe, warum eine Kugel bei kleiner Vergrößerung gut aussieht, lassen sich so trennen:
+\begin{itemize}
+\item \textbf{Helle Objekte (Mond, Planeten):} Die Pupille ist eng und blendet den Spiegel ab. Der Gewinn kommt aus der \emph{Pupille}; er endet bei $V_{\mathrm{Abblend}}=D/d_p$ ($67\times$ bei 200\,mm und 3\,mm).
+\item \textbf{Dunkle Objekte (Deep-Sky):} Die Pupille ist weit offen (6--7\,mm), bei $30\times$ wird kaum abgeblendet. Der Gewinn kommt aus der \emph{Helligkeit}: Die CSF-Spitze liegt bei groben Strukturen, und dort überträgt die Kugel noch gut. Er reicht bis zu höheren Vergrößerungen als bei Planeten.
+\end{itemize}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.82\textwidth]{abb_pupille.pdf}
+\caption{$\Qvis(V)$ einer Kugel 200/1000\,mm (photopisch): exakt bei voller Öffnung, Näherung $\tilde Q$ (gestrichelt) und mit Augenpupille 3\,mm. Die senkrechte Linie markiert die Abblendgrenze $D/d_p$.}
+\end{figure}
+
+Das erklärt eine oft berichtete Beobachtung: Bei Mond und Planeten in kleiner bis mittlerer Vergrößerung zeigt eine Kugel kaum einen Unterschied zu einem guten Spiegel, weil das Auge nur die Mitte nutzt; bei dunklem Hintergrund trägt zusätzlich die Bildhelligkeit. Für planetentypische Vergrößerungen ($V\ge100\times$) wird die volle Öffnung genutzt, die Kurve ohne Pupille gilt dort uneingeschränkt.
+
+\paragraph{Wichtig: Bezug der Pupillenkurven.} Die Kurven mit Augenpupille sind auf einen gleich abgeblendeten Paraboloid bezogen. $\Qvis$ bleibt damit ein relatives Maß: Der \emph{Öffnungsverlust} durch das Abblenden steckt nicht darin, sondern in $Q_{\mathrm{abs}}$ (Abschnitt~5). Ein Wert von 0,99 bei $30\times$ heißt ``der abgeblendete Rest des Spiegels ist fast perfekt'', nicht ``der Spiegel ist fast perfekt''.
+
+\section{Absoluter Vergleich verschiedener Spiegel (\texorpdfstring{$Q_{\mathrm{abs}}$}{Qabs})}
+$\Qvis$ vergleicht einen Spiegel nur mit dem Ideal gleicher Größe. Für die Frage ``kleiner und perfekt oder größer und weniger perfekt?'' integriert $Q_{\mathrm{abs}}$ über die Winkelfrequenz am Himmel (größere Spiegel haben eine höhere Grenzfrequenz) und bezieht auf einen festen Referenzspiegel (Voreinstellung im Programm: ein idealer Spiegel fester Größe). Die MTF des Gesamtsystems ist das Produkt aus Aberration, Ringblende (Fangspiegel, über die Ringpupille exakt) und optional dem Langzeit-Seeing nach Fried~\cite{fried}, $\exp[-3{,}44(\lambda\nu/r_0)^{5/3}]$ mit $r_0=0{,}98\lambda/\mathrm{FWHM}$. Das Seeing ist als Langzeitwert eher pessimistisch, weil das Auge ruhige Momente nutzt. $Q_{\mathrm{abs}}$ rechnet mit der photopischen CSF; die Helligkeitsabhängigkeit gibt es im Wahrnehmungs-Tab ($\Qvis$) und im Blenden-Tab.
+
+\section{Abblendfunktion (Blende vor dem Spiegel)}
+Reduziert man die effektive Öffnung auf $D_{\mathrm{bl}}<D$, wirken zwei gegenläufige Effekte: $W_p\propto D^4/f^3$ sinkt stark (der Strehl steigt, $\Vkrit$ verschiebt sich nach oben), aber das Obstruktionsverhältnis $\varepsilon=d_{\mathrm{Fang}}/D_{\mathrm{bl}}$ wächst (mehr Kontrastverlust durch den größeren Beugungsfleck), und die Grenzfrequenz sinkt mit $D_{\mathrm{bl}}$. Das Programm stellt beides im Blendendiagramm dar, mit helligkeitsabhängiger CSF (inklusive Amplitude $a(L)=(L/L_{\mathrm{ref}})^{0{,}5}$) für fünf Objektklassen. Ob Abblenden netto nützt, hängt von Vergrößerung und Objekt ab. Beispiel 200/1000-Kugel, auf 140\,mm abgeblendet: Der Gewinn beträgt bei hellen Objekten ($\ge100$\,cd/m$^2$) 2,2 / 2,5 / 2,5 / 2,3 bei $60/100/150/250\times$, bei $L=0{,}5$\,cd/m$^2$ dagegen nur 0,9 / 1,2 / 1,6 / 2,1: Bei schwachen Objekten lohnt Abblenden bei kleiner bis mittlerer Vergrößerung kaum, weil grobe Strukturen dominieren, die die Kugel ohnehin gut überträgt.
+
+\section{Validierung und Prüfung}
+\paragraph{Interne Konsistenz.} Strehl aus Pupillenintegral und aus dem Volumen der 2D-OTF stimmen auf vier Stellen überein (Tab.~2); die MTF ist auf $m_{sr}(0)=1$ normiert; $\Qvis\to1$ bei kleiner Vergrößerung; die Kurven sind gegen die Konvergenz des numerischen Gitters geprüft (bei wenig Licht liegt die CSF-Spitze bei sehr kleinem $\nu$; 200 Frequenzpunkte, Restabweichung unter 0,005). Ein automatischer Regressionstest vergleicht 236 Rechenwerte mit gespeicherten Sollwerten, damit sich bei Programmänderungen kein Kernwert unbemerkt verschiebt.
+
+\paragraph{Externe Prüfung.} Der Quellcode wurde von einem unabhängigen KI-System durchgesehen; gefundene Fehler wurden nachgerechnet und behoben. Das vollständige Änderungsprotokoll liegt dem Programm bei (\texttt{CHANGELOG\_vollstaendig.txt}). Zahlen aus Beiträgen vor November 2026 stammen aus älteren Programmständen und können abweichen.
+
+\paragraph{Noch offen.} Die Rechnung ist intern konsistent und gegen Parseval geprüft. Ein unabhängiger Referenzvergleich (z.\,B.\ mit optischer Raytracing-Software oder veröffentlichten Tabellen) und eine psychophysische Validierung (Beobachtertest) stehen aus. Die Beobachtungen im Forum stützen die Tendenz (Kugeln wirken bei kleiner Vergrößerung unauffällig, auch bei dunklem Himmel), sind aber qualitativ.
+
+\section{Gültigkeitsbereich und Grenzen}
+\begin{itemize}
+\item $\Qvis(V)$ ist sinnvoll im Bereich $V\approx30$--$400\times$. Außerhalb dieses Bereichs wurde der Index nicht systematisch geprüft.
+\item Berücksichtigt wird nur sphärische Aberration vierter Ordnung bei 550\,nm. Koma, Astigmatismus, Chromasie, Kollimationsfehler und Tubusseeing fehlen. Der Fangspiegel geht in $\Qvis$ nur über die Zusatzkurve ein.
+\item Die CSF ist ein Mittelwertmodell; individuelle Sehschärfe und Dunkeladaption weichen ab. Die Helligkeitsabhängigkeit ist ein Potenzansatz mit Exponent 0,25 (Richtung belegt, Zahlenwert nicht gemessen). Das Maß gilt für \emph{ausgedehnte} Details; für Sterne (Punktquellen) zählen Kern und Halo (eingeschlossene Energie), die der Index nicht erfasst. Dunkle Sternfelder bildet die Rechnung daher nur grob ab.
+\item $\Vkrit\approx D/(13W_b)$ ist ein Fit (Abschnitt~3.4); die Seeing-Grenze der Maximalvergrößerung verwendet eine empirisch gewählte Augenauflösung von $150''$. Beides sind Praxiswerte, keine Naturkonstanten. $\Vkrit$, $\tilde Q$ und $Q_{\mathrm{abs}}$ rechnen photopisch.
+\item Pupille und Leuchtdichte sind feste Richtwerte je Objekt (die Pupille hängt real auch vom Umfeld und vom Beobachter ab). Die Étendue ist ein reines Geometriemodell ohne Dunkeladaption. Kennwerte, $\Vkrit$ und $\tilde Q$ rechnen mit der photopischen CSF und gelten für volle Öffnung; im Wahrnehmungsdiagramm bleiben $\tilde Q$ und $\Vkrit$ photopisch: $\tilde Q$ ist immer eingezeichnet, die Abweichungsfläche zur exakten Kurve nur dort, wo $L_{\mathrm{eff}}\ge100$\,cd/m$^2$ gilt.
+\item Bei $S<0{,}2$ ist der Strehl nicht mehr eindeutig an eine Wellenfront gekoppelt (Abschnitt~1).
+\end{itemize}
+
+\section{Fazit}
+$\Qvis(V)$ ermöglicht eine vergrößerungsabhängige Bewertung des Qualitätsverlusts sphärischer Newton-Spiegel -- im Gegensatz zu vergrößerungsunabhängigen Maßen wie Strehl oder MTF-Formverlust. Der Strehl ist dabei nicht verworfen: Er ist der Grenzwert für hohe Vergrößerung. Zwei Effekte erklären, warum eine Kugel bei kleiner Vergrößerung besser aussieht, als der Strehl vermuten lässt: Bei hellen Objekten blendet die enge Augenpupille den Spiegel ab; bei dunklen Objekten wandert die Empfindlichkeit des Auges zu groben Strukturen, die die Kugel noch gut überträgt. Bei planetentypischer Vergrößerung ($\ge100\times$) zählt dagegen die volle Öffnung, und der Fehler wird sichtbar. Die Näherungskurve $\tilde Q(V)$ verbindet beide Bereiche und eignet sich für Abschätzungen; sie überschätzt im mittleren Bereich um etwa 13\,\%. Offen bleiben ein unabhängiger Referenzvergleich, ein Beobachtertest und die Kalibrierung des Exponenten der Helligkeitsabhängigkeit.
+
+\begin{thebibliography}{9}
+\bibitem{mannos} J.\,L. Mannos, D.\,J. Sakrison: \emph{The effects of a visual fidelity criterion on the encoding of images.} IEEE Trans.\ Inf.\ Theory 20(4), 525--536 (1974).
+\bibitem{barten} P.\,G.\,J. Barten: \emph{Contrast Sensitivity of the Human Eye and its Effects on Image Quality.} SPIE Optical Engineering Press (1999).
+\bibitem{fried} D.\,L. Fried: \emph{Optical resolution through a randomly inhomogeneous medium for very long and very short exposures.} J.\ Opt.\ Soc.\ Am.\ 56, 1372--1379 (1966).
+\bibitem{born} M. Born, E. Wolf: \emph{Principles of Optics.} Cambridge University Press.
+\end{thebibliography}
+\end{document}

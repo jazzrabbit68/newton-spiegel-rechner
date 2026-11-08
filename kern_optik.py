@@ -586,6 +586,13 @@ OBJEKT_HELLIGKEITEN = [
     ("Schwaches DSO",     0.5),
 ]
 
+# v8.3.0: reduzierte Auswahl für den Wahrnehmungs-Tab (die volle Liste bleibt für Max. Vergrößerung / Blende)
+WAHRNEHMUNG_OBJEKTE = [
+    ("Mond",                    3500.0, 2.5),
+    ("Heller Planet (Jupiter)",  600.0, 3.0),
+    ("DSO (hell)",                 5.0, 6.0),
+]
+
 # Augenpupille d_p [mm] je Objekt (v7.5.0, Richtwerte aus der Praxis)
 OBJEKT_PUPILLE = {"Mond": 2.5, "Jupiter": 3.0, "Saturn": 4.0, "Mars": 4.0,
                   "Helles DSO": 6.0, "Schwaches DSO": 7.0}

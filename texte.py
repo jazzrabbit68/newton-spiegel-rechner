@@ -25,10 +25,10 @@ STRINGS = {
                      "en": "Contrast"},
     "grp_sharpness": {"de": "Schärfe bei gewählter Vergrößerung",
                       "en": "Sharpness at selected magnification"},
-    "grp_qvis":  {"de": "Wie wirkt sie im Bild?  Q_vis (MTF×CSF, Paraboloid = 1; photopisch, volle Öffnung)",
+    "grp_qvis":  {"de": "Wie wirkt er im Bild?  Q_vis (MTF×CSF, Paraboloid = 1; photopisch, volle Öffnung)",
                   "en": "How does it look?  Q_vis (MTF×CSF, paraboloid = 1; photopic, full aperture)"},
-    "grp_flaeche": {"de": "Wie gut ist die Fläche?", "en": "How good is the surface?"},
-    "grp_reichweite": {"de": "Bis wohin trägt sie?", "en": "How far does it carry?"},
+    "grp_flaeche": {"de": "Wie gut ist der Spiegel?", "en": "How good is the mirror?"},
+    "grp_reichweite": {"de": "Wie weit trägt er?", "en": "How far does it carry?"},
     "rVhalb":       {"de": "V½  (Halbwertspunkt)",    "en": "V½  (half-value point)"},
     # Karten-Labels
     "rN":           {"de": "Öffnungsverhältnis",              "en": "Focal ratio"},

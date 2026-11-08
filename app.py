@@ -1,10 +1,12 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v8.2.0 (2026-11-08)
-Entspricht newton_spiegel_rechner.py v8.2.0
+Streamlit-Version v8.3.0 (2026-11-08)
+Entspricht newton_spiegel_rechner.py v8.3.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
+  v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"
+  v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
   v8.2.0 (2026-11-08) Gitterrohr: maßstäbliche 3D-Ansicht (neues Modul ansicht3d.py; Seite, gedreht, Draufsicht; OAZ zwischen zwei Spinnenbeinen, Streulichtblende aus Fangspiegel-Rechner), Schalter in Web und Desktop
   v8.1.0 (2026-11-07) Gitterrohr: Eingabe "Spiegel unter Ring-Oberkante" (Spiegelversatz verkürzt h und Stangenlänge); Prüffälle 8" Zigzag und 14" TripleX
   v8.0.0 (2026-11-07) Programm in Module aufgeteilt (kern_optik, kern_foucault, kern_bau, kern_vergleich, diagramme, texte, konstanten); Rechenwerte und Diagramme unverändert (Regressionstest)
@@ -58,7 +60,7 @@ from kern_bau import (fangspiegel_rechner, fangspiegel_skizze, fangspiegel_text,
 from ansicht3d import gitter3d_zeichnen
 from kern_foucault import (foucault_kennzahlen, foucault_wellenfront, foucault_zonen,
     foucault_zonengrenzen)
-from kern_optik import (ANTONIADI_HINWEIS, OBJEKT_HELLIGKEITEN, OBJEKT_PUPILLE, _Wb_schieber,
+from kern_optik import (ANTONIADI_HINWEIS, OBJEKT_HELLIGKEITEN, OBJEKT_PUPILLE, WAHRNEHMUNG_OBJEKTE, _Wb_schieber,
     _qvis_schieber, _strehl_exakt, _wellenfronten, berechne, berechne_vergr, beurteilung,
     d_fang_min, perceived_quality_exakt, v_halb_exakt, v_krit_aus_qvis, v_krit_aus_qvis_von_Wb,
     v_krit_blur_direkt, v_krit_naeh, v_kritisch, v_kritisch_strehl)
@@ -382,8 +384,8 @@ def main():
     if _nav == "kenn":
         st.markdown(_verdict_html, unsafe_allow_html=True)
         _gap = S_slide > S_real + 1e-6
-        # Steckbrief: Wie gut ist die Fläche? · Bis wohin trägt sie? · Wie wirkt sie im Bild?
-        st.markdown("**Wie gut ist die Fläche?**")
+        # Steckbrief: Wie gut ist der Spiegel? · Wie weit trägt er? · Wie wirkt er im Bild?
+        st.markdown("**Wie gut ist der Spiegel?**")
         _k1, _k2, _k5 = st.columns(3)
         _k1.metric("Strehl exakt", f"{S_slide:.3f}",
                    delta=f"Sphäre {S_real:.3f}" if _gap else None, delta_color="off")
@@ -393,12 +395,12 @@ def main():
                    delta=f"Paraboloid {_pf['s_parabel']:.3f} mm", delta_color="off",
                    help=f"Kugel R = 2f = {_pf['R']:.0f} mm: s = R − √(R² − (D/2)²). Paraboloid: s = D²/(16 f). "
                         f"Unterschied {_pf['diff_um']:.1f} µm.")
-        st.markdown("**Bis wohin trägt sie?**")
+        st.markdown("**Wie weit trägt er?**")
         _k3, _k4 = st.columns(2)
         _k3.metric("V_krit (MTF×CSF >10 %)", _vk_ex_text(Vk_exakt_s),
                    delta=f"Sphäre {_vk_ex_text(Vk_exakt)}" if _gap else None, delta_color="off")
         _k4.metric("V½ (Halbwertspunkt)", f"{Vk_halb:.0f}×")
-        st.markdown("**Wie wirkt sie im Bild?**  Q_vis, Paraboloid = 1")
+        st.markdown("**Wie wirkt er im Bild?**  Q_vis, Paraboloid = 1")
         _qk = st.columns(4)
         for _c, _v, _qs, _qp in zip(_qk, _Q_V, (Qs_30, Qs_60, Qs_100, Qs_150), (Qp_30, Qp_60, Qp_100, Qp_150)):
             _c.metric(f"bei {_v:.0f}×", f"{_qs:.3f}",
@@ -483,16 +485,16 @@ def main():
         wc1, wc2, wc3 = st.columns([3, 1.3, 1.9])
         _opt_aus  = "Aus (photopisch, ohne Abblenden)"
         _opt_frei = "Frei (L und d_p selbst)"
-        _obj_namen = [n for n, _ in OBJEKT_HELLIGKEITEN]
+        _obj_namen = [n for n, _, _ in WAHRNEHMUNG_OBJEKTE]
         _wahl = wc3.selectbox(
             "Objekt  (Helligkeit + Augenpupille)", [_opt_aus] + _obj_namen + [_opt_frei],
             index=2, key="wn_obj",
             help="Ein Feld setzt Bildhelligkeit L [cd/m²] UND Augenpupille d_p zusammen: "
-                 "Mond 3500 / 2,5 mm · Jupiter 600 / 3 · Saturn 200 / 4 · Mars 2000 / 4 · "
-                 "helles DSO 5 / 6 · schwaches DSO 0,5 / 7. Bei wenig Licht wandert die Spitze der "
+                 "Mond 3500 / 2,5 mm · heller Planet (Jupiter) 600 / 3 · "
+                 "DSO (hell) 5 / 6. Eigene Werte unter „Frei“. Bei wenig Licht wandert die Spitze der "
                  "Kontrastempfindlichkeit zu groben Strukturen, ein schlechter Spiegel wirkt dann "
                  "besser. Ab L ≥ 100 cd/m² gilt photopisch. Q̃-Kurven, V_krit und V½ bleiben "
-                 "photopisch (Q̃ wird bei L < 100 ausgeblendet). Pupillenkurven sind auf einen "
+                 "photopisch (Q̃ ist immer eingezeichnet; die Abweichungsfläche nur, wo L ≥ 100 cd/m² gilt). Pupillenkurven sind auf einen "
                  "gleich abgeblendeten Paraboloid normiert; der Öffnungsverlust steckt in Q_abs.")
         if _wahl == _opt_aus:
             L_obj, d_pup = 0.0, 0.0
@@ -503,7 +505,7 @@ def main():
             d_pup = fr2.number_input("Augenpupille d_p [mm]  (0 = aus)", min_value=0.0, max_value=9.0,
                                      value=6.0, step=0.5, key="wn_pup")
         else:
-            L_obj, d_pup = float(dict(OBJEKT_HELLIGKEITEN)[_wahl]), float(OBJEKT_PUPILLE[_wahl])
+            L_obj, d_pup = [(float(l), float(p)) for n, l, p in WAHRNEHMUNG_OBJEKTE if n == _wahl][0]
             wc3.caption(f"L = {L_obj:g} cd/m²  ·  d_p = {d_pup:g} mm")
         d_fs = wc2.number_input(
             "Fangspiegel Ø d [mm]  (0 = aus)", min_value=0, max_value=int(D * 0.9),

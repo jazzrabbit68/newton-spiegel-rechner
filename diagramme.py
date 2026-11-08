@@ -734,6 +734,16 @@ class DiagrammMethoden:
         # v7.6.0: kleinste Netzhautleuchtdichte im Plotbereich (Étendue, bei V_max); Q̃/V_krit/V½ gelten nur photopisch
         L_min = None if L_obj is None else _L_eff(L_obj, D, V_max_plot, d_pup)
         L_phot = L_min is None
+        # v8.2.1: Q̃ nur dort zeigen, wo die Netzhautleuchtdichte photopisch ist (L_eff >= 100 cd/m²), statt die Kurve ganz auszublenden
+        if L_obj is None:
+            _phot_mask = np.ones_like(V_arr, dtype=bool)
+        else:
+            _Leff_arr = L_obj * (np.minimum(1.0, (D / (np.maximum(V_arr, 1e-9) * d_pup)) ** 2) if d_pup > 0 else 1.0)
+            _phot_mask = np.asarray(_Leff_arr >= 100.0) * np.ones_like(V_arr, dtype=bool)
+        _q_zeigen = bool(_phot_mask.any())
+        _V_phot_ende = float(V_arr[_phot_mask].max()) if _q_zeigen else None
+        def _mk(a):
+            a = np.array(a, dtype=float); a[~_phot_mask] = np.nan; return a
         L_min_val = L_obj if L_min is None else L_min
         strehl_label = f"Sphäre f/{f/D:.1f}  S={S_exakt:.3f} (exakt)"
         if not L_phot:
@@ -746,26 +756,30 @@ class DiagrammMethoden:
                 Qp_slide = qvis_pupille_kurve(D, S_slide, V_arr, d_pup, lam,
                                               wf=_wf_kugel(Wb_s, lam), L=L_obj)   # v7.5.1: wf statt S->Wb-Inversion
 
-        if L_phot:      # Q̃-Näherung gilt nur photopisch
-            ax.fill_between(V_arr, Qe_sph, Qn_sph,
+        _alle_phot = bool(_phot_mask.all())
+        _qlab = "" if _alle_phot else ", photopisch"
+        if _q_zeigen:      # v8.3.0: Q̃ immer als Kurve; Fläche Abweichung nur, wo L_eff >= 100 cd/m² (Q̃ gilt photopisch)
+            ax.fill_between(V_arr, Qe_sph, _mk(Qn_sph), where=_phot_mask,
                             color="#534AB7", alpha=0.12, label="Abweichung exakt ↔ Näherung")
         ax.fill_between(V_arr, Qe_sph, Qe_para,
                         color=COR, alpha=0.10, label="Wahrnehmungsverlust")
         ax.plot(V_arr, Qe_para, color=GRN, lw=2.0, ls="-",  label="Paraboloid  exakt")
-        if L_phot:
-            ax.plot(V_arr, Qn_para, color=GRN, lw=1.0, ls="--", alpha=0.4)
+        ax.plot(V_arr, Qn_para, color=GRN, lw=1.0, ls="--", alpha=0.4)
         ax.plot(V_arr, Qe_sph,  color=COR, lw=2.2, ls="-",
                 label=f"{strehl_label}  exakt")
-        if L_phot:
-            ax.plot(V_arr, Qn_sph,  color=COR, lw=1.5, ls="--", alpha=0.75,
-                    label=f"Sphäre  Näherung Q̃  (S={S_exakt:.3f})")
+        ax.plot(V_arr, Qn_sph,  color=COR, lw=1.5, ls="--", alpha=0.75,
+                label=f"Sphäre  Näherung Q̃  (S={S_exakt:.3f}{_qlab})")
+
+        if not _alle_phot:      # v8.3.0: photopische exakte Referenz, wo das Objekt dunkler ist (Q̃ folgt ihr)
+            _ref_ex = perceived_quality_exakt_kurven(D, f, lam, V_arr)
+            ax.plot(V_arr, _ref_ex, color="#777", lw=1.2, ls="-", alpha=0.7,
+                    label="Sphäre photopisch (Referenz, exakt)")
 
         if has_slide:
             ax.plot(V_arr, Qe_slide, color=ACC, lw=2.0, ls="-",
                     label=f"Schieber exakt  S={S_ex_s:.3f}")
-            if L_phot:
-                ax.plot(V_arr, Qn_slide, color=ACC, lw=1.2, ls="--", alpha=0.7,
-                        label=f"Schieber Näherung  S={S_ex_s:.3f}")
+            ax.plot(V_arr, Qn_slide, color=ACC, lw=1.2, ls="--", alpha=0.7,
+                    label=f"Schieber Näherung  S={S_ex_s:.3f}")
 
         if d_pup > 0:
             ax.plot(V_arr, Qp_sph, color=COR, lw=2.4, ls="-.",
@@ -843,16 +857,22 @@ class DiagrammMethoden:
                                       ec="none", alpha=0.8))
                 vorher_q, vorher_off = q, off
 
-        max_abw = float(np.max(np.abs(Qe_sph - Qn_sph)))
+        max_abw = float(np.nanmax(np.abs(_mk(Qe_sph) - _mk(Qn_sph)))) if _q_zeigen else 0.0
+        if _q_zeigen and _V_phot_ende >= V_max_plot - 1e-6:
+            _q_hinweis = "Q̃: photopisch (L_eff ≥ 100 cd/m²)"
+        elif _q_zeigen:
+            _q_hinweis = f"Q̃: photopische Näherung, Abweichungsfläche bis {_V_phot_ende:.0f}× (L_eff ≥ 100 cd/m²)"
+        else:
+            _q_hinweis = "Q̃: photopische Näherung (Objekt dunkler, L_eff < 100 cd/m²)"
         if L_phot:
             L_info = ""
         elif d_pup > 0:
             L_info = (f"\nObjekt L = {L_obj:g} cd/m², am Auge L·min(1,(D/(V·d_p))²)"
                       f"\n  = {L_min_val:.3g} cd/m² bei {V_max_plot:.0f}× (CSF-Spitze ≈ {csf_spitze_cpd(L_min_val):.1f} cpd)"
-                      f"\n(V_krit, V½: photopisch; Q̃-Kurven ausgeblendet)")
+                      f"\n(V_krit, V½: photopisch; {_q_hinweis})")
         else:
             L_info = (f"\nLeuchtdichte L = {L_obj:g} cd/m²: CSF-Spitze ≈ {csf_spitze_cpd(L_obj):.1f} cpd"
-                      f"\n(V_krit, V½: photopisch; Q̃-Kurven ausgeblendet)")
+                      f"\n(V_krit, V½: photopisch; {_q_hinweis})")
         ax.text(0.015, 0.985,
                 f"V_krit (10%-Schwelle, exakt)   = {V_krit:.0f}×   [D/(13·Wb)]\n"
                 f"V_wendepunkt (Näherungsformel) = {V_wende:.0f}×   [V_krit/³√(S²)]\n"
@@ -868,7 +888,7 @@ class DiagrammMethoden:
         ax.set_ylabel(T("ax_qvis"), fontsize=10)
         ax.set_title(
             f"Visuelle Wahrnehmung  —  D={D:.0f}mm  f/{f/D:.1f}"
-            f"  |  S_exakt={S_exakt:.3f}" + (f"  max.Abw.={max_abw:.3f}" if L_phot else "")
+            f"  |  S_exakt={S_exakt:.3f}" + (f"  max.Abw.={max_abw:.3f}" if _q_zeigen else "")
             + (f"  |  Cursor V={V_cur:.0f}×" if V_cur is not None else ""),
             fontsize=9)
         ax.legend(fontsize=8, loc="lower right",
