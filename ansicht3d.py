@@ -18,14 +18,19 @@ _LIGHT = np.array([-0.4, -0.5, 0.8]); _LIGHT /= np.linalg.norm(_LIGHT)
 
 class _Szene:
     def __init__(self):
-        self.polys = []; self.cols = []
+        self.polys = []; self.cols = []; self.edges = []
 
-    def add(self, pts, col, amb=0.45, alpha=1.0):
+    def add(self, pts, col, amb=0.45, alpha=1.0, _fan=False):
         pts = np.array(pts, float)
+        if len(pts) > 4:     # Vieleck als Dreiecksfächer, alle Flächen 4 Ecken (neuere matplotlib-Versionen füllen ungleiche Flächen mit NaN)
+            for i in range(1, len(pts) - 1):
+                self.add([pts[0], pts[i], pts[i + 1], pts[i + 1]], col, amb, alpha, True)
+            return
         n = np.cross(pts[1] - pts[0], pts[2] - pts[0]); nn = np.linalg.norm(n)
         k = amb + (1 - amb) * abs(np.dot(n / nn, _LIGHT)) if nn > 0 else 1
         c = np.array(to_rgb(col)) * k
         self.polys.append(pts); self.cols.append((*np.clip(c, 0, 1), alpha))
+        self.edges.append((0, 0, 0, 0.0 if _fan else 0.12))
 
     def prism(self, c0, u, v, w, col):
         c0, u, v, w = (np.array(x, float) for x in (c0, u, v, w))
@@ -153,7 +158,7 @@ def gitter3d_zeichnen(fig, D, f, ga, g, h, r, ring_b, ring_dick, loch_ring, baua
                  ("Draufsicht", 58, -90, (1, 1, 0.9, 1.4), (0, zo + m["hu"] * 0.9))]
     for i, (titel, el, az, box, zl) in enumerate(ansichten):
         ax = fig.add_subplot(1, 3, i + 1, projection="3d")
-        ax.add_collection3d(Poly3DCollection(S.polys, facecolors=S.cols, edgecolors=(0, 0, 0, 0.12), linewidths=0.2))
+        ax.add_collection3d(Poly3DCollection(S.polys, facecolors=S.cols, edgecolors=S.edges, linewidths=0.2))
         ax.add_collection3d(Poly3DCollection(kegel, facecolors=[(1, 0.88, 0.3, 0.14)] * len(kegel), edgecolors="none"))
         ax.plot([0, A], [0, 0], [zs, zs], "--", color="#e6a700", lw=1.2); ax.plot([A], [0], [zs], "x", color="r", ms=7)
         ax.set_xlim(-ext, ext); ax.set_ylim(-ext, ext); ax.set_zlim(*zl)
