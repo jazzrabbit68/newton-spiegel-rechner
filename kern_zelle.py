@@ -1,5 +1,5 @@
 """Spiegelzelle: Lage der Auflagepunkte (3 / 6 / 9 / 18) und Durchbiegung des Spiegels unter Eigengewicht.
-(neu in v9.0.0)
+(neu in v8.4.0)
 
 Modell: dünne Kirchhoff-Platte (Kreisscheibe, freier Rand, gleichmäßige Dicke, volle Fläche), Eigengewicht senkrecht
 (Spiegel liegt auf dem Rücken, Zenit), Punktlager.  Lösung per Ritz-Verfahren (Chebyshev-Produktbasis, Grad 14).
@@ -24,20 +24,20 @@ G = 9.81
 # Optimierte Geometrie in Bruchteilen des Spiegelradius R (Rechnung mit Grad 20, Defokus abgezogen).
 #  3:  Radius des Auflagekreises
 #  6:  Radius des Punktkreises (Sechseck, 3 Wippen tangential, Punkte je ±30° um den Wippen-Drehpunkt)
-#  9:  3 Dreiecke: Drehpunktradius rp, Umkreisradius rho, Drehung phi (60° = Ecke zur Mitte)
-# 18:  3 Wippen (Drehpunktradius rp, halbe Länge a) mit je 2 Dreiecken (Umkreisradius rho, Drehung phi,
-#      bezogen auf die eigene Radialrichtung des Dreiecks; 60° = Ecke zur Spiegelmitte)
+#  9:  3 gleichschenklige Dreiecke, Spitze zur Mitte: Drehpunktradius rp, Höhe rho (Spitze–Basis), halbe Basis w
+# 18:  3 Wippen (Drehpunktradius rp, halbe Länge a) mit je 2 gleichschenkligen Dreiecken (Höhe rho, halbe Basis w),
+#      Spitze zur Spiegelmitte (bezogen auf die eigene Radialrichtung des Dreiecks)
 OPT = {
     3:  dict(r=0.4014),
     6:  dict(r=0.5729),
-    9:  dict(rp=0.440, rho=0.331, phi=math.pi / 3),
-    18: dict(rp=0.590, a=0.340, rho=0.272, phi=math.pi / 3),
+    9:  dict(rp=0.529, rho=0.392, w=0.386),
+    18: dict(rp=0.569, a=0.329, rho=0.429, w=0.216),
 }
 OPT_OHNE = {   # klassische Werte (ohne Defokus-Abzug)
     3:  dict(r=0.6489),
     6:  dict(r=0.6817),
-    9:  dict(rp=0.500, rho=0.377, phi=math.pi / 3),
-    18: dict(rp=0.590, a=0.340, rho=0.272, phi=math.pi / 3),
+    9:  dict(rp=0.462, rho=0.606, w=0.383),
+    18: dict(rp=0.569, a=0.329, rho=0.429, w=0.216),
 }
 
 
@@ -47,9 +47,20 @@ def _ring(n, r, phi0):
     return np.stack([r * np.cos(a), r * np.sin(a)], 1)
 
 
-def _dreieck(c, rho, ang):
+def _dreieck(c, rho, ang, w=None):
+    """Dreieck um den Schwerpunkt c. Gleichseitig (Umkreisradius rho) oder gleichschenklig:
+    rho = Höhe H (Spitze-Basis), w = halbe Basis; Spitze liegt in Richtung ang."""
+    if w is not None:
+        u = np.array([math.cos(ang), math.sin(ang)]); t = np.array([-u[1], u[0]])
+        return np.array([c + u * 2 * rho / 3, c - u * rho / 3 + t * w, c - u * rho / 3 - t * w])
     return np.array([c + rho * np.array([math.cos(ang + 2 * math.pi * i / 3), math.sin(ang + 2 * math.pi * i / 3)])
                      for i in range(3)])
+
+
+def _tri(c, p, th):
+    if "w" in p:      # gleichschenklig, Spitze zur Mitte (+ Drehung phi0 falls gesetzt)
+        return _dreieck(c, p["rho"], th + math.pi + p.get("phi0", 0.0), p["w"])
+    return _dreieck(c, p["rho"], th + p["phi"])
 
 
 def punkte(n, p):
@@ -73,7 +84,7 @@ def punkte(n, p):
         for k in range(3):
             th = math.pi / 2 + 2 * math.pi * k / 3
             c = p["rp"] * np.array([math.cos(th), math.sin(th)])
-            T = _dreieck(c, p["rho"], th + p["phi"]); pts += list(T); st.append(("dreieck", T, c))
+            T = _tri(c, p, th); pts += list(T); st.append(("dreieck", T, c))
         return np.array(pts), st
     if n == 18:
         pts = []
@@ -83,7 +94,7 @@ def punkte(n, p):
             cs = []
             for s in (-1, 1):
                 c = p["rp"] * er + s * p["a"] * et; cs.append(c)
-                T = _dreieck(c, p["rho"], math.atan2(c[1], c[0]) + p["phi"]); pts += list(T); st.append(("dreieck", T, c))
+                T = _tri(c, p, math.atan2(c[1], c[0])); pts += list(T); st.append(("dreieck", T, c))
             st.append(("wippe", cs[0], cs[1], p["rp"] * er))
         return np.array(pts), st
     raise ValueError("Variante 3, 6, 9 oder 18")
@@ -200,15 +211,20 @@ def zelle_rechner(D_mm, t_mm, n, mat="Borosilikat (Pyrex/Duran)", refokus=True, 
     elif n == 6:
         r = par["r"] * R
         d["masse"] = dict(r=r, rp=r * math.cos(math.pi / 6), wippe=r)            # Sechseck: Seite = r
-    elif n == 9:
-        rho = par["rho"] * R
-        d["masse"] = dict(rp=par["rp"] * R, rho=rho, seite=rho * math.sqrt(3), phi=math.degrees(par["phi"]),
-                          r_innen=abs(par["rp"] - par["rho"]) * R if abs(par["phi"] - math.pi / 3) < 1e-6 else None,
-                          r_aussen=float(pr.max()))
     else:
-        rho = par["rho"] * R
-        d["masse"] = dict(rp=par["rp"] * R, a=par["a"] * R, wippe=2 * par["a"] * R, rho=rho, seite=rho * math.sqrt(3),
-                          phi=math.degrees(par["phi"]), r_aussen=float(pr.max()))
+        T = next(x[1] for x in st if x[0] == "dreieck")
+        L = sorted(float(np.linalg.norm(T[i] - T[(i + 1) % 3])) * R for i in range(3))
+        gl = abs(L[2] - L[0]) < 1e-6 * R
+        m = dict(rp=par["rp"] * R, r_aussen=float(pr.max()), gleichseitig=gl,
+                 basis=L[2] if not gl else L[0], schenkel=L[0] if not gl else L[0])
+        if not gl:     # gleichschenklig: zwei gleiche Schenkel, eine Basis
+            m["schenkel"] = (L[0] + L[1]) / 2 if abs(L[1] - L[0]) < abs(L[2] - L[1]) else (L[1] + L[2]) / 2
+            m["basis"] = L[2] if abs(L[1] - L[0]) < abs(L[2] - L[1]) else L[0]
+        m["hoehe"] = math.sqrt(max(m["schenkel"] ** 2 - (m["basis"] / 2) ** 2, 0.0))
+        m["seite"] = m["schenkel"]
+        if n == 18:
+            m.update(a=par["a"] * R, wippe=2 * par["a"] * R)
+        d["masse"] = m
     return d
 
 
@@ -286,6 +302,14 @@ def zelle_zeichnen(fig, D_mm, t_mm, n, mat="Borosilikat (Pyrex/Duran)", refokus=
     return d
 
 
+def _dz(m):
+    if m["gleichseitig"]:
+        t = f"gleichseitig, Seite {m['seite']:.1f} mm"
+    else:
+        t = f"gleichschenklig, Basis {m['basis']:.1f} mm, Schenkel {m['schenkel']:.1f} mm (Höhe {m['hoehe']:.1f} mm)"
+    return t + f"; Spitze zur Spiegelmitte, äußerster Punkt r = {m['r_aussen']:.1f} mm."
+
+
 def zelle_text(d, t_mm, mat):
     """Maße und Bewertung als Text (mm)."""
     n = d["n"]; m = d["masse"]; R = d["R"]
@@ -298,12 +322,10 @@ def zelle_text(d, t_mm, mat):
         z += [f"Punktkreis: r = {m['r']:.1f} mm ({d['par']['r']:.3f}·R), regelmäßiges Sechseck.",
               f"3 Wippen tangential, Abstand Punkt–Punkt (Wippenlänge) {m['wippe']:.1f} mm, Drehpunkt auf r = {m['rp']:.1f} mm (je 120°)."]
     elif n == 9:
-        z += [f"3 Dreiecke, Drehpunkt (Schwerpunkt) auf r = {m['rp']:.1f} mm bei 90°, 210°, 330°.",
-              f"Umkreisradius {m['rho']:.1f} mm, Seitenlänge {m['seite']:.1f} mm; eine Ecke zeigt zur Spiegelmitte (innerer Punkt r = {m['r_innen']:.1f} mm), "
-              f"die beiden äußeren liegen auf r = {m['r_aussen']:.1f} mm."]
+        z += [f"3 Dreiecke, Drehpunkt (Schwerpunkt) auf r = {m['rp']:.1f} mm bei 90°, 210°, 330°.", _dz(m)]
     else:
         z += [f"3 Wippen, Drehpunkt auf r = {m['rp']:.1f} mm bei 90°, 210°, 330°, Wippenlänge (Dreieck–Dreieck) {m['wippe']:.1f} mm, tangential.",
-              f"Je Wippenende ein Dreieck: Umkreisradius {m['rho']:.1f} mm, Seite {m['seite']:.1f} mm, jeweils eine Ecke zeigt zur Spiegelmitte; äußerster Punkt r = {m['r_aussen']:.1f} mm."]
+              "Je Wippenende ein Dreieck: " + _dz(m)]
     z += ["", f"Durchbiegung (Oberfläche): RMS {d['rms_nm']:.1f} nm → Wellenfront RMS {d['wf_rms_nm']:.1f} nm (λ/{d['wf_lambda']:.0f}), Strehl ≈ {d['strehl']:.3f}.",
           f"zum Vergleich: ohne Refokus-Abzug {d['rms_ohne_nm']:.1f} nm, mit Refokus-Abzug {d['rms_refokus_nm']:.1f} nm.",
           "Gilt für Zenit-Lage (Eigengewicht senkrecht), dünne Platte ohne Schubverformung, vollflächiger Spiegel; Seitenlagerung und Wärmespannungen sind nicht enthalten.",

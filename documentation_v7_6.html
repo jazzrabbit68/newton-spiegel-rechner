@@ -95,8 +95,8 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
   <thead><tr><th>Gruppe</th><th>Inhalt</th><th>Kapitel</th></tr></thead>
   <tbody>
     <tr><td><strong>Grundlagen</strong></td><td>Unterreiter <em>Diagramme</em> (2&times;2-&Uuml;bersicht), <em>Kennwerte</em> und <em>Grenzen</em> (sinnvolle Maximalvergr&ouml;&szlig;erung; V<sub>max</sub> &uuml;ber &Ouml;ffnung und Seeing)</td><td>3, 8.4</td></tr>
-    <tr><td><strong>Bildqualit&auml;t</strong></td><td>Unterreiter <em>Wahrnehmung</em> (Q<sub>vis</sub>(V)), <em>MTF</em>, <em>Vergleich (Beta)</em> (absoluter Vergleich zweier Spiegel)</td><td>4, 5, 6</td></tr>
-    <tr><td><strong>Bauen</strong></td><td>Unterreiter <em>Foucault-Test</em> (Auswertung), <em>Fangspiegel</em> (Mindestgr&ouml;&szlig;e gegen&uuml;ber dem Okularauszug), <em>Blende</em> (Abblenden des Spiegels) und <em>Gitterrohr</em> (Stangenl&auml;nge, 3D-Ansicht)</td><td>7, 8.2, 8.3</td></tr>
+    <tr><td><strong>Bildqualit&auml;t</strong></td><td>Unterreiter <em>Wahrnehmung</em> (Q<sub>vis</sub>(V)), <em>MTF</em>, <em>Blende</em> (Abblenden des Spiegels) und <em>Vergleich (Beta)</em> (absoluter Vergleich zweier Spiegel)</td><td>4, 5, 6, 7.2</td></tr>
+    <tr><td><strong>Bauen</strong></td><td>Unterreiter <em>Foucault-Test</em> (Auswertung), <em>Fangspiegel</em> (Mindestgr&ouml;&szlig;e gegen&uuml;ber dem Okularauszug), <em>Gitterrohr</em> (Stangenl&auml;nge, 3D-Ansicht) und <em>Spiegelzelle</em> (Auflagepunkte 3/6/9/18)</td><td>7, 8.2, 8.3</td></tr>
   </tbody>
 </table>
 
@@ -396,7 +396,7 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
-<h2>7. Bauen: Fangspiegel, Blende und Gitterrohr</h2>
+<h2>7. Bauen: Fangspiegel, Blende, Gitterrohr und Spiegelzelle</h2>
 
 <h3>7.1 Fangspiegel-Mindestgr&ouml;&szlig;e</h3>
 <p>Der Strahlkegel hat den &Ouml;ffnungswinkel D/f. Am Fangspiegel muss er die Strahlen des gesamten Hauptspiegels plus das Bildfeld &uuml;berdecken:</p>
@@ -491,8 +491,8 @@ code { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; backgro
 
 <h3>7.6 Spiegelzelle: Auflagepunkte 3 / 6 / 9 / 18</h3>
 <p>Der Tab <b>Spiegelzelle</b> berechnet, wie der Hauptspiegel gelagert werden sollte, damit er sich unter seinem Eigengewicht m&ouml;glichst wenig verformt. Varianten: <b>3</b> Punkte (Dreieck), <b>6</b> (drei Wippen), <b>9</b> (drei Dreiecke auf den Eckpunkten des Dreiecks) und <b>18</b> (sechs Wippen, jeder Endpunkt durch ein Dreieck ersetzt). Ausgegeben werden Lage und Radius der Punkte, L&auml;ngen der Wippen und Dreiecksseiten (in mm), Durchbiegungskarte, RMS der Fl&auml;che, Wellenfront-RMS und Strehl sowie ein Vergleich aller Varianten.</p>
-<p><b>Modell:</b> d&uuml;nne Kirchhoff-Platte, freier Rand, Eigengewicht bei Zenitstellung, Punktlager (Ritz-Verfahren mit Chebyshev-Basis, Lagerkr&auml;fte als Lagrange-Multiplikatoren). Wippen kippen im Mittelpunkt, Dreiecke im Schwerpunkt, daher tr&auml;gt jeder Punkt das gleiche Gewicht. Von der Restfl&auml;che werden Kolben, Kippung und (Standard) Defokus abgezogen, weil eine Brennweiten&auml;nderung am Okularauszug ausgeglichen werden kann; ohne diesen Abzug ergeben sich die klassischen Werte (3 Punkte 0,645&nbsp;R, 6 Punkte 0,68&nbsp;R), mit Abzug 0,40&nbsp;R bzw. 0,57&nbsp;R. Die optimalen Radien gelten f&uuml;r jede Dicke und jedes Material; diese bestimmen nur die absolute Gr&ouml;&szlig;e der Verformung (&sim; R<sup>4</sup>/t<sup>2</sup>). Als Standarddicke sind 25&nbsp;mm voreingestellt (&uuml;blich bei aktuellen DIY-Spiegeln).</p>
-<p>Bei 18 Punkten zeigt bei allen sechs Dreiecken eine Ecke zur Spiegelmitte (Drehung 60&deg; zur eigenen Radialrichtung); das ist zugleich symmetrisch und mit 0,14&nbsp;nm (14&Prime;, Pyrex) die beste Variante.</p>
+<p><b>Modell:</b> d&uuml;nne Kirchhoff-Platte, freier Rand, Eigengewicht bei Zenitstellung, Punktlager (Ritz-Verfahren mit Chebyshev-Basis, Lagerkr&auml;fte als Lagrange-Multiplikatoren). Wippen kippen im Mittelpunkt, Dreiecke im Schwerpunkt, daher tr&auml;gt jeder Punkt das gleiche Gewicht. Von der Restfl&auml;che werden Kolben, Kippung und (Standard) Defokus abgezogen, weil eine Brennweiten&auml;nderung am Okularauszug ausgeglichen werden kann; ohne diesen Abzug ergeben sich die klassischen Werte (3 Punkte 0,645&nbsp;R, 6 Punkte 0,68&nbsp;R), mit Abzug 0,40&nbsp;R bzw. 0,57&nbsp;R. Die optimalen Radien gelten f&uuml;r jede Dicke und jedes Glas; Dicke und Glas bestimmen nur die absolute Gr&ouml;&szlig;e der Verformung (&sim; R<sup>4</sup>/t<sup>2</sup>). Gerechnet wird mit Borosilikatglas (Pyrex); der Tab dient dem Vergleich der Varianten, nicht der absoluten Genauigkeit. Als Standarddicke sind 25&nbsp;mm voreingestellt (&uuml;blich bei aktuellen DIY-Spiegeln).</p>
+<p>Die Dreiecke (9 und 18 Punkte) sind <b>gleichschenklig</b> mit der Spitze zur Spiegelmitte; Basis und H&ouml;he werden mit optimiert (bei 9 Punkten: breite, flache Dreiecke). Das senkt den Fehler bei 9 Punkten um etwa den Faktor 3,5 und bei 18 Punkten um etwa ein Drittel gegen&uuml;ber gleichseitigen Dreiecken. Bei Refokus-Abzug bleiben 6 Punkte etwas besser als 9; ohne Abzug (klassische Betrachtung) sind 9 Punkte besser als 6.</p>
 <p><b>Grenzen:</b> keine Schubverformung, keine Randauflage (Seitenlagerung), keine Temperaturgradienten, nur Zenitlage. Bei 9 Punkten erzwingen Mindestabst&auml;nde der Dreiecke ein schlechteres Ergebnis als bei 6 Punkten; das ist kein Rechenfehler, sondern eine Folge der Geometrie.</p>
 
 <h2>8. Beschreibung der Tabs</h2>

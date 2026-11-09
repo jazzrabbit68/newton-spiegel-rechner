@@ -1,11 +1,11 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel
 =======================================================================
-Streamlit-Version v9.0.0 (2026-11-08)
-Entspricht newton_spiegel_rechner.py v9.0.0
+Streamlit-Version v8.4.0 (2026-11-08)
+Entspricht newton_spiegel_rechner.py v8.4.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
-  v9.0.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py)
+  v8.4.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py); Blende-Tab jetzt in der Gruppe Bildqualität
   v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"; Web: Wahrnehmungs-Diagramm größer gezeichnet (12×6,6 Zoll) und alle Diagramme mit 130 dpi, dadurch feiner
   v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
   v8.2.0 (2026-11-08) Gitterrohr: maßstäbliche 3D-Ansicht (neues Modul ansicht3d.py; Seite, gedreht, Draufsicht; OAZ zwischen zwei Spinnenbeinen, Streulichtblende aus Fangspiegel-Rechner), Schalter in Web und Desktop
@@ -281,8 +281,8 @@ def main():
 
     st.sidebar.markdown("---")
     _NAV = [("Grundlagen", [("grund", "Diagramme"), ("kenn", "Kennwerte"), ("grenzen", "Grenzen (max. Vergr.)")]),
-            ("Bildqualität", [("wahr", "Wahrnehmung"), ("mtf", "MTF"), ("vergleich", "Vergleich (Beta)")]),
-            ("Bauen", [("messen", "Foucault-Test"), ("bauen", "Fangspiegel"), ("blende", "Blende"), ("gitter", "Gitterrohr"), ("zelle", "Spiegelzelle")]),
+            ("Bildqualität", [("wahr", "Wahrnehmung"), ("mtf", "MTF"), ("blende", "Blende"), ("vergleich", "Vergleich (Beta)")]),
+            ("Bauen", [("messen", "Foucault-Test"), ("bauen", "Fangspiegel"), ("gitter", "Gitterrohr"), ("zelle", "Spiegelzelle")]),
             ("", [("doku", "ℹ️ Dokumentation")])]
     if "nav" not in st.session_state:
         st.session_state["nav"] = "grund"
@@ -878,15 +878,15 @@ def main():
                                                           st.session_state.get("fs_afov", 70)))
 
     if _nav == "zelle":
-        # v9.0.0: Spiegelzelle – Auflagepunkte 3/6/9/18
+        # v8.4.0: Spiegelzelle – Auflagepunkte 3/6/9/18
         st.subheader("Spiegelzelle: Lage der Auflagepunkte")
         st.caption("Spiegel unter Eigengewicht (Zenit), dünne Platte, Punktlager; Wippen und Dreiecke tragen alle Punkte gleich. "
                    "Die Radien sind das berechnete Optimum für kleinste Oberflächenverformung (nach Abzug von Kippung und Brennweitenänderung).")
         zc1, zc2, zc3, zc4 = st.columns(4)
         z_n = int(zc1.radio("Auflagepunkte", [3, 6, 9, 18], index=1, horizontal=True, key="zl_n"))
         z_t = zc2.number_input("Spiegeldicke [mm]", min_value=1.0, value=25.0, step=1.0, key="zl_t")
-        z_mat = zc3.selectbox("Material", list(MATERIALIEN.keys()), key="zl_mat")
-        z_ref = zc4.checkbox("Brennweitenänderung abziehen", value=True, key="zl_ref",
+        z_mat = "Borosilikat (Pyrex/Duran)"   # nur Vergleich der Varianten, ein Glas genügt
+        z_ref = zc3.checkbox("Brennweitenänderung abziehen", value=True, key="zl_ref",
                              help="Aus: klassische Werte (3 Punkte 0,645·R, 6 Punkte 0,68·R). An: Refokussieren ist beim Newton möglich, das Optimum liegt weiter innen.")
         _tz = z_t
         _zp = None
