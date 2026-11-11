@@ -5,7 +5,7 @@ Streamlit-Version v8.4.0 (2026-11-08)
 Entspricht newton_spiegel_rechner.py v8.4.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
-  v8.4.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py); Blende-Tab jetzt in der Gruppe Bildqualität
+  v8.4.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py); Blende-Tab jetzt in der Gruppe Bildqualität; Kennwerte ohne V½; Vergleich übernimmt Okularauszug, Tubus-Ø und Bildfeld aus dem Tab Fangspiegel.
   v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"; Web: Wahrnehmungs-Diagramm größer gezeichnet (12×6,6 Zoll) und alle Diagramme mit 130 dpi, dadurch feiner
   v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
   v8.2.0 (2026-11-08) Gitterrohr: maßstäbliche 3D-Ansicht (neues Modul ansicht3d.py; Seite, gedreht, Draufsicht; OAZ zwischen zwei Spinnenbeinen, Streulichtblende aus Fangspiegel-Rechner), Schalter in Web und Desktop
@@ -318,7 +318,6 @@ def main():
     Vk_exakt   = v_krit_aus_qvis(D, f, lam, rel_schwelle=0.90)
     Wb_s       = _Wb_schieber(D, f, lam, S_slide)
     Vk_exakt_s = v_krit_aus_qvis_von_Wb(D, Wb_s, lam, rel_schwelle=0.90)
-    Vk_halb    = v_halb_exakt(D, f, lam)
     _Q_V = (30.0, 60.0, 100.0, 150.0)
     Qp_30, Qp_60, Qp_100, Qp_150 = (perceived_quality_exakt(D, f, lam, v) for v in _Q_V)
     Qs_30, Qs_60, Qs_100, Qs_150 = (_qvis_schieber(D, f, lam, S_slide, v) for v in _Q_V)
@@ -370,7 +369,6 @@ def main():
     rows += _hdr("Vergr&#246;&#223;erung")
     rows += _row("V_krit N&#228;herung D/(13&#183;Wb)",
                  f"{Vk_naeh:.0f}x &#8594; {Vk_naeh_s:.0f}x", "#534AB7")
-    rows += _row("V&#189; exakt (Halbwertspunkt)", f"{Vk_halb:.0f}x")
     rows += _row("V_krit Blur (geom.)",
                  f"{Vk_blur:.0f}x  &#945;_blur={alpha_blur:.1f}\"" if Vk_blur > 1 else "< 1x - Blur dominiert immer")
     rows += _row("V_krit MTF&#215;CSF >10%",
@@ -398,10 +396,9 @@ def main():
                    help=f"Kugel R = 2f = {_pf['R']:.0f} mm: s = R − √(R² − (D/2)²). Paraboloid: s = D²/(16 f). "
                         f"Unterschied {_pf['diff_um']:.1f} µm.")
         st.markdown("**Wie weit trägt er?**")
-        _k3, _k4 = st.columns(2)
+        _k3, = st.columns(1)
         _k3.metric("V_krit (MTF×CSF >10 %)", _vk_ex_text(Vk_exakt_s),
                    delta=f"Sphäre {_vk_ex_text(Vk_exakt)}" if _gap else None, delta_color="off")
-        _k4.metric("V½ (Halbwertspunkt)", f"{Vk_halb:.0f}×")
         st.markdown("**Wie wirkt er im Bild?**  Q_vis, Paraboloid = 1")
         _qk = st.columns(4)
         for _c, _v, _qs, _qp in zip(_qk, _Q_V, (Qs_30, Qs_60, Qs_100, Qs_150), (Qp_30, Qp_60, Qp_100, Qp_150)):
@@ -798,6 +795,7 @@ def main():
                                    value=10, step=1, key="fs_bild")
         V_fs    = fc4.number_input("Q_vis bei V [×]", min_value=1, value=150,
                                    step=10, key="fs_V")
+        st.session_state["fs_geo"] = (float(buet_v), float(tubus_v), float(bild_v))   # v8.4.0: auch für den Vergleich
         gc1, gc2, gc3, gc4, gc5 = st.columns(5)
         hut_v  = gc1.number_input("Hutring-Ø für Blende [mm] (0 = Tubus-Ø)", min_value=0,
                                   value=0, step=10, key="fs_hut")
@@ -913,21 +911,23 @@ def main():
             _, _, _Wb1, _, _ = _wellenfronten(D, f, lam)
             vS1 = float(_strehl_exakt(_Wb1))
         vS1 = min(max(vS1, 0.05), 1.0)
+        vBu0, vTu0, vBi0 = st.session_state.get("fs_geo", (50.0, 0.0, 10.0))
         vN = f / D
         st.caption(f"**Beta · Q_abs-Vergleich.** Spiegel 1 = Hauptspiegel: D = {vD1:.0f} mm, f/D = {vN:.2f}, "
                    f"S = {vS1:.3f}{' (Schieber)' if S_slide is not None else ''}; Spiegel 2 hat dasselbe f/D; "
-                   f"Fangspiegel automatisch.")
+                   f"Fangspiegel automatisch (Okularauszug {vBu0:.0f} mm, Bildfeld {vBi0:.0f} mm, "
+                   f"Tubus-Ø {'aus Okular' if vTu0 <= 0 else format(vTu0, '.0f') + ' mm'} aus dem Tab Fangspiegel).")
         r1 = st.columns(4)
         vD2 = r1[0].number_input("Spiegel 2: D [mm]", 50, 1500, 200, 10, key="vg_D2")
         vS2 = r1[1].number_input("Spiegel 2: S", 0.10, 1.0, 1.00, 0.01, format="%.2f", key="vg_S2")
         vV  = r1[2].number_input("V [×]", 10, 1000, 200, 10, key="vg_V")
         vSe = r1[3].number_input("Seeing [″] (0 = aus)", 0.0, 6.0, 1.5, 0.1, key="vg_see",
                                  help=ANTONIADI_HINWEIS)
-        r2 = st.columns(4)
+        # v8.4.0: Okularauszug, Tubus-Ø und Bildfeld kommen aus dem Fangspiegel-Tab (Bauen), keine Doppeleingabe
+        vBu, vTu, vBi = st.session_state.get("fs_geo", (50.0, 0.0, 10.0))
+        r2 = st.columns(2)
         vRD = r2[0].number_input("Referenz: idealer D [mm]", 50, 1500, 200, 10, key="vg_refD")
-        vBu = r2[1].number_input("Okularauszug [mm]", 0, 300, 50, 5, key="vg_buet")
-        vBi = r2[2].number_input("Bildfeld [mm]", 0, 60, 10, 1, key="vg_bild")
-        vPu = r2[3].number_input("Augenpupille [mm] (0 = aus)", 0.0, 9.0, 0.0, 0.5, key="vg_pupille",
+        vPu = r2[1].number_input("Augenpupille [mm] (0 = aus)", 0.0, 9.0, 0.0, 0.5, key="vg_pupille",
                                  help="Ist die Austrittspupille D/V größer als die Augenpupille, nutzt das Auge nur "
                                       "die Teilöffnung V·Pupille (blendet das Teleskop ab). Mond 2–3 mm, Planeten "
                                       "3–5 mm, Deep-Sky 6–7 mm.")
@@ -961,7 +961,7 @@ def main():
                 _notiz.append("⚠ Foucault-Fit unzuverlässig (Polynom-Modus, Residuum hoch) — "
                               "Ergebnis optimistisch! Hybrid-Modus (n≥6) verwenden.")
         _p = dict(V=vV, seeing=vSe, refD=vRD, refS=1.0, N=vN, D1=vD1, S1=vS1,
-                  D2=vD2, S2=vS2, lam=lam, buet=vBu, tubus=0.0, bild=vBi, pupille=vPu,
+                  D2=vD2, S2=vS2, lam=lam, buet=vBu, tubus=vTu, bild=vBi, pupille=vPu,
                   wf1=_wf.get("1"), wf2=_wf.get("2"), auge=v_auge, augenmass=v_mass,
                   sph1=sph1, sph2=sph2)
         _sig = {k: v for k, v in _p.items() if k not in ("wf1", "wf2")}
