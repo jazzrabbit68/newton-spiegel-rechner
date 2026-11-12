@@ -1,3 +1,5 @@
+v8.5.0 (2026-11-12) NEU Tab Low-Rider (Bauen): Strahl am Fangspiegel um δ nach unten, Okularauszug tiefer; Fangspiegel (kleine/große Achse, Obstruktion) über der Absenkung der Einblickhöhe, Kurvenschar bei gleicher Einblickhöhe, Vergleich größerer Spiegel (Asphärik, Koma) (neues Modul kern_lowrider.py)
+
 v8.4.0 (2026-11-08) Bildqualität: Blenden-Tab von "Bauen" nach "Bildqualität" verschoben (Desktop und Web); Kennwerte ohne V½; Vergleich übernimmt Okularauszug, Tubus-Ø und Bildfeld aus dem Tab Fangspiegel.
 v8.4.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py)
 
