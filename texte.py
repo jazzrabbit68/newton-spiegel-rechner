@@ -75,7 +75,6 @@ STRINGS = {
     "tab_fangspiegel": {"de": "  Fangspiegel  ",              "en": "  Secondary mirror  "},
     "tab_gitter":      {"de": "  Gitterrohr  ",               "en": "  Truss tube  "},
     "tab_zelle":       {"de": "  Spiegelzelle  ",             "en": "  Mirror cell  "},
-    "tab_lowrider":    {"de": "  Low-Rider  ",                "en": "  Low-rider  "},
     "tab_vergleich":   {"de": "  Vergleich (Beta)  ",         "en": "  Comparison (beta)  "},
     # MTF-Beschriftungen
     "mtf_fokus_lbl":   {"de": "Fokusebene:",     "en": "Focus plane:"},

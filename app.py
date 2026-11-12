@@ -5,7 +5,6 @@ Streamlit-Version v8.4.0 (2026-11-08)
 Entspricht newton_spiegel_rechner.py v8.4.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
-  v8.5.0 (2026-11-12) NEU Tab Low-Rider (Bauen): Strahl am Fangspiegel um δ nach unten, Okularauszug tiefer; Fangspiegel (kleine/große Achse, Obstruktion) über der Absenkung der Einblickhöhe, Kurvenschar bei gleicher Einblickhöhe, Vergleich größerer Spiegel (Asphärik, Koma) (neues Modul kern_lowrider.py)
   v8.4.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py); Blende-Tab jetzt in der Gruppe Bildqualität; Kennwerte ohne V½; Vergleich übernimmt Okularauszug, Tubus-Ø und Bildfeld aus dem Tab Fangspiegel.
   v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"; Web: Wahrnehmungs-Diagramm größer gezeichnet (12×6,6 Zoll) und alle Diagramme mit 130 dpi, dadurch feiner
   v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
@@ -60,7 +59,6 @@ from kern_bau import (fangspiegel_rechner, fangspiegel_skizze, fangspiegel_text,
     fangspiegel_zeichnen, gitterrohr_auto, gitterrohr_freiraum, gitterrohr_stangen, gitterrohr_text,
     gitterrohr_zeichnen, pfeiltiefe, tubus_aus_okular)
 from ansicht3d import gitter3d_zeichnen
-from kern_lowrider import ANSICHTEN as LR_ANSICHTEN, lowrider_text, lowrider_zeichnen
 from kern_zelle import MATERIALIEN, OPT, OPT_OHNE, zelle_rechner, zelle_text, zelle_zeichnen
 from kern_foucault import (foucault_kennzahlen, foucault_wellenfront, foucault_zonen,
     foucault_zonengrenzen)
@@ -284,7 +282,7 @@ def main():
     st.sidebar.markdown("---")
     _NAV = [("Grundlagen", [("grund", "Diagramme"), ("kenn", "Kennwerte"), ("grenzen", "Grenzen (max. Vergr.)")]),
             ("Bildqualität", [("wahr", "Wahrnehmung"), ("mtf", "MTF"), ("blende", "Blende"), ("vergleich", "Vergleich (Beta)")]),
-            ("Bauen", [("messen", "Foucault-Test"), ("bauen", "Fangspiegel"), ("gitter", "Gitterrohr"), ("zelle", "Spiegelzelle"), ("lowrider", "Low-Rider")]),
+            ("Bauen", [("messen", "Foucault-Test"), ("bauen", "Fangspiegel"), ("gitter", "Gitterrohr"), ("zelle", "Spiegelzelle")]),
             ("", [("doku", "ℹ️ Dokumentation")])]
     if "nav" not in st.session_state:
         st.session_state["nav"] = "grund"
@@ -805,7 +803,6 @@ def main():
                                   value=30, step=1, key="fs_fe")
         afov_v = gc3.number_input("Okular-AFOV [°]", min_value=1,
                                   value=70, step=1, key="fs_afov")
-        st.session_state["fs_oku"] = (float(fe_v), float(afov_v))   # v8.5.0: für den Low-Rider-Tab
         oazd_v = gc4.number_input("OAZ-Rohr Innen-Ø [mm]", min_value=1,
                                   value=50, step=1, key="fs_oazd")
         oazl_v = gc5.number_input("OAZ-Rohr Länge [mm]", min_value=1,
@@ -903,28 +900,6 @@ def main():
         _show_cached("fig_zelle", _plot_zelle, (D, _tz, z_n, z_mat, z_ref, lam, str(_zp)))
         _zd = zelle_rechner(D, _tz, z_n, z_mat, z_ref, lam, _zp)
         st.code(zelle_text(_zd, _tz, z_mat), language=None)
-
-    if _nav == "lowrider":
-        # v8.5.0: Low-Rider-Newton – Strahl nach unten, Okularauszug tiefer
-        st.subheader("Low-Rider: Fangspiegel und Einblickhöhe")
-        _lb, _lt, _lbi = st.session_state.get("fs_geo", (50.0, 0.0, 10.0))
-        _lfe, _laf = st.session_state.get("fs_oku", (30.0, 70.0))
-        st.caption("Der Strahl wird am Fangspiegel nicht rechtwinklig, sondern um den Winkel δ nach unten abgelenkt: "
-                   "Der Okularauszug sitzt tiefer, der Fangspiegel wird etwas größer. Okularauszug, Tubus und Bildfeld "
-                   f"kommen aus dem Tab Fangspiegel (jetzt {_lb:.0f} mm / Tubus-Ø {'aus Okular' if _lt <= 0 else format(_lt, '.0f') + ' mm'} / {_lbi:.0f} mm).")
-        lc1, lc2, lc3 = st.columns([2, 2, 1.4])
-        _lan = lc1.radio("Ansicht", LR_ANSICHTEN, horizontal=True, key="lr_an")
-        _lw = lc2.slider("Strahl nach unten δ [°]", 0, 35, 15, 1, key="lr_w")
-        _lDm = lc3.number_input("bis Ø [mm]", min_value=int(D) + 10, max_value=1500,
-                                value=int(max(round(D * 1.43 / 10) * 10, D + 10)), step=10, key="lr_dmax",
-                                disabled=(_lan != LR_ANSICHTEN[2]))
-        _lgeo = dict(buet=_lb, tubus=_lt, bild=_lbi, fe=_lfe, afov=_laf)
-        def _plot_lr():
-            fig = plt.figure(figsize=(12, 5.6)); fig.patch.set_facecolor(BG)
-            lowrider_zeichnen(fig, float(D), float(f), float(_lw), _lan, _lgeo, float(_lDm))
-            return fig
-        _show_cached("fig_lowrider", _plot_lr, (D, f, _lw, _lan, _lDm, _lb, _lt, _lbi, _lfe, _laf))
-        st.code(lowrider_text(float(D), float(f), float(_lw), _lgeo), language=None)
 
     if _nav == "vergleich":
         # v7.2.1: Spiegel 1 = Hauptspiegel (Seitenleiste, S = Schieberwert), f/D vom Hauptspiegel;
