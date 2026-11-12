@@ -917,7 +917,7 @@ def main():
         _lw = lc2.slider("Strahl nach unten δ [°]", 0, 35, 15, 1, key="lr_w")
         _lDm = lc3.number_input("bis Ø [mm]", min_value=int(D) + 10, max_value=1500,
                                 value=int(max(round(D * 1.43 / 10) * 10, D + 10)), step=10, key="lr_dmax",
-                                disabled=(_lan != LR_ANSICHTEN[3]))
+                                disabled=(_lan != LR_ANSICHTEN[2]))
         _lgeo = dict(buet=_lb, tubus=_lt, bild=_lbi, fe=_lfe, afov=_laf)
         def _plot_lr():
             fig = plt.figure(figsize=(12, 5.6)); fig.patch.set_facecolor(BG)

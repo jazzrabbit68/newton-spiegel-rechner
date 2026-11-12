@@ -112,9 +112,6 @@ def lowrider_text(D, f, winkel, geo=None):
                  f"{D ** 4 / (1024 * (d['N_eq'] * D) ** 3) * 1000:.1f} µm statt {l['asph_um']:.1f} µm.")
     z.append(f"Kleinste große Achse (Bauteil) bei etwa {d['g_minmaj']:.0f}°: {d['dmaj_min']:.1f} mm "
              f"(45°: {n['dmaj']:.1f} mm). Die Schattenbreite (kleine Achse) wächst dabei immer.")
-    if D < 13.5 * ZOLL:
-        z.append(f"Hinweis: Bei Spiegeln unter etwa 14″ lohnt der Low-Rider kaum (hier {l['dh'] / 10:.1f} cm tiefer bei "
-                 f"{winkel:.0f}°); die Diagramme zeigen deshalb nur 14–22″.")
     z.append("Annahmen: gleicher seitlicher Fokusabstand, kein Fangspiegel-Versatz, keine Randausleuchtung, "
              "keine Abschattung des schrägen Strahls durch Tubus oder Okularauszug.")
     return "\n".join(z)
@@ -264,47 +261,7 @@ def _ansicht_durchmesser(fig, D, f, D_max, geo, winkel_liste=(0.0, 15.0, 30.0)):
                  f"was kostet der größere Spiegel?", fontsize=11.5)
 
 
-def _ansicht_absenkung(fig, D, f, winkel, geo):
-    """Absenkung der Einblickhöhe in cm: über dem Winkel (verschiedene Ø) und über dem Ø (verschiedene f/D)."""
-    a1, a2 = fig.subplots(1, 2)
-    N = f / D
-    gs = np.linspace(0.0, 35.0, 71)
-    zolls = [14, 16, 18, 20, 22]
-    cm = plt_cmap(len(zolls))
-    for z, c in zip(zolls, cm):
-        Dx = z * ZOLL
-        y = [lr_punkt(Dx, N * Dx, g, geo)["dh"] / 10.0 for g in gs]
-        a1.plot(gs, y, color=c, lw=2.0, label=f"{z}″  (f = {N * Dx:.0f} mm)")
-        a1.plot([winkel], [lr_punkt(Dx, N * Dx, winkel, geo)["dh"] / 10.0], "o", color=c, ms=5)
-    a1.plot([winkel], [lr_punkt(D, f, winkel, geo)["dh"] / 10.0], "o", color="k", ms=9, mfc="none", mew=1.8)
-    a1.axvline(winkel, color="#999", lw=.8, ls=":")
-    a1.set_xlabel("Strahl nach unten δ [°]")
-    a1.set_ylabel("Einblick tiefer um [cm]")
-    a1.set_title(f"Absenkung der Einblickhöhe bei f/{N:.1f} (Kreis = dein Spiegel Ø {D:.0f} mm)", fontsize=10.5)
-    a1.grid(alpha=.3)
-    a1.legend(fontsize=8.5, title="Spiegel", loc="upper left")
-    ws = [10, 15, 20, 30]
-    cm2 = plt_cmap(len(ws), "plasma")
-    zz = np.linspace(13, 24, 23)
-    for w_, c in zip(ws, cm2):
-        y = [lr_punkt(zv * ZOLL, N * zv * ZOLL, w_, geo)["dh"] / 10.0 for zv in zz]
-        a2.plot(zz, y, color=c, lw=2.2, label=f"δ = {w_}°")
-    if 13 <= D / ZOLL <= 24:
-        a2.plot([D / ZOLL], [lr_punkt(D, f, winkel, geo)["dh"] / 10.0], "o", color="k", ms=9, mfc="none", mew=1.8)
-    a2.set_xlabel("Spiegeldurchmesser [Zoll]")
-    a2.set_ylabel("Einblick tiefer um [cm]")
-    a2.set_title("Absenkung über dem Durchmesser (f/D hat kaum Einfluss)", fontsize=10.5)
-    a2.grid(alpha=.3)
-    a2.legend(fontsize=8.5, loc="upper left")
-
-
-def plt_cmap(n, name="viridis"):
-    import matplotlib
-    cmap = matplotlib.colormaps[name]
-    return [cmap(v) for v in np.linspace(0.05, 0.85, n)]
-
-
-ANSICHTEN = ["Fangspiegel", "Absenkung (cm)", "Gleiche Einblickhöhe", "Größerer Spiegel"]
+ANSICHTEN = ["Fangspiegel", "Gleiche Einblickhöhe", "Größerer Spiegel"]
 
 
 def lowrider_zeichnen(fig, D, f, winkel, ansicht, geo=None, D_max=None):
@@ -312,10 +269,8 @@ def lowrider_zeichnen(fig, D, f, winkel, ansicht, geo=None, D_max=None):
     fig.clf()
     geo = _geo(geo)
     if ansicht == ANSICHTEN[1]:
-        _ansicht_absenkung(fig, D, f, winkel, geo)
-    elif ansicht == ANSICHTEN[2]:
         _ansicht_schar(fig, D, f, geo)
-    elif ansicht == ANSICHTEN[3]:
+    elif ansicht == ANSICHTEN[2]:
         _ansicht_durchmesser(fig, D, f, D_max if D_max else 20.0 * ZOLL, geo)
     else:
         _ansicht_fangspiegel(fig, D, f, winkel, geo)
