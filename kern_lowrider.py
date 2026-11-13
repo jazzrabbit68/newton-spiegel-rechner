@@ -22,10 +22,13 @@ import math
 import numpy as np
 from scipy.optimize import brentq
 
-from kern_bau import tubus_aus_okular
+from kern_bau import tubus_aus_okular  # noqa
 
 ZOLL = 25.4
-GEO_STD = dict(buet=50.0, tubus=0.0, bild=10.0, fe=30.0, afov=70.0)
+FORMEN = ["Standard-Ellipse (1,41)", "passend geformt"]
+GEO_STD = dict(buet=50.0, tubus=0.0, bild=10.0, fe=30.0, afov=70.0,
+               form=0.0,      # 0 = Standard-Ellipse (Achsenverhältnis 1,41), 1 = passend zum Winkel geformt
+               dicke=10.0)    # Fangspiegeldicke [mm] = Länge der Randseite; wirkt nur bei Abweichung von 45°
 
 
 def _geo(geo):
@@ -49,12 +52,21 @@ def lr_punkt(D, f, winkel, geo=None):
     A, t = _A(D, f, geo)
     i = math.radians(winkel)
     sec = 1.0 / math.cos(i)
-    dmin = D * A * sec / f + geo["bild"]
+    dmin = D * A * sec / f + geo["bild"]                     # Strahlkegel + Bildfeld = nötige kleine Achse
     einfall = 45.0 - winkel / 2.0
+    ci = math.cos(math.radians(einfall))
+    si = math.sin(math.radians(einfall))
+    dmaj = dmin / ci if geo["form"] >= 0.5 else math.sqrt(2.0) * dmin   # passend / Standard-Ellipse
+    # Schatten in Achsrichtung gesehen: große Achse · cos(Einfall) + Randseite, quer: kleine Achse.
+    # Standard-Fangspiegel sind bei 45° gebohrt: Die Randseite steht bei 45° parallel zur Achse (kein Schatten) und
+    # ragt erst bei Abweichung von 45° herein: t · sin(|45° − Einfall|). Eine passend gebohrte Ellipse hat
+    # bei jedem Winkel eine achsparallele Randseite (kein Randschatten).
+    rand = geo["dicke"] * math.sin(math.radians(abs(45.0 - einfall))) if geo["form"] < 0.5 else 0.0
+    sch_l = dmaj * ci + rand
     return dict(winkel=winkel, A=A, tubus=t, weg=A * sec, zf=f - A * (sec + math.tan(i)),
-                dh=A * (sec + math.tan(i) - 1.0), dmin=dmin,
-                dmaj=dmin / math.cos(math.radians(einfall)), einfall=einfall,
-                obs=dmin / D, zs=f - A * sec, asph_um=D ** 4 / (1024.0 * f ** 3) * 1000.0)
+                dh=A * (sec + math.tan(i) - 1.0), dmin=dmin, dmaj=dmaj, einfall=einfall,
+                sch_l=sch_l, sch_q=dmin, obs=math.sqrt(sch_l * dmin) / D,
+                zs=f - A * sec, asph_um=D ** 4 / (1024.0 * f ** 3) * 1000.0)
 
 
 def lr_f_fuer_hoehe(D, z, winkel, geo=None):
@@ -94,7 +106,9 @@ def lr_rechner(D, f, winkel, geo=None):
 def lowrider_text(D, f, winkel, geo=None):
     d = lr_rechner(D, f, winkel, geo)
     n, l = d["norm"], d["lr"]
+    g_ = _geo(geo)
     z = [f"Low-Rider · Ø {D:.0f} mm · f = {f:.0f} mm (f/{f / D:.2f}) · Strahl {winkel:.0f}° nach unten",
+         f"Fangspiegel: {FORMEN[1] if g_['form'] >= 0.5 else FORMEN[0]}, Dicke {g_['dicke']:.0f} mm (Randseite, wirkt bei Abweichung von 45°)",
          "",
          f"{'':34s}{'45°-Newton':>12s}{'Low-Rider':>12s}",
          f"{'Fokushöhe über Spiegelmitte [mm]':34s}{n['zf']:12.0f}{l['zf']:12.0f}",
@@ -103,15 +117,26 @@ def lowrider_text(D, f, winkel, geo=None):
          f"{'Weg Fangspiegel → Fokus [mm]':34s}{n['weg']:12.0f}{l['weg']:12.0f}",
          f"{'Fangspiegel kleine Achse [mm]':34s}{n['dmin']:12.1f}{l['dmin']:12.1f}",
          f"{'Fangspiegel große Achse [mm]':34s}{n['dmaj']:12.1f}{l['dmaj']:12.1f}",
-         f"{'Obstruktion [% von D]':34s}{n['obs'] * 100:12.1f}{l['obs'] * 100:12.1f}",
+         f"{'Achsenverhältnis':34s}{n['dmaj'] / n['dmin']:12.2f}{l['dmaj'] / l['dmin']:12.2f}",
+         f"{'Schatten in Kipprichtung [mm]':34s}{n['sch_l']:12.1f}{l['sch_l']:12.1f}",
+         f"{'Schatten quer [mm]':34s}{n['sch_q']:12.1f}{l['sch_q']:12.1f}",
+         f"{'Obstruktion (flächengleich) [%]':34s}{n['obs'] * 100:12.2f}{l['obs'] * 100:12.2f}",
          "",
          ]
     if d["N_eq"]:
         z.append(f"Fokushöhe wie ein normaler Newton mit f/{d['N_eq']:.2f} (also "
                  f"{abs(d['N_eq'] - f / D):.2f} Blendenstufen schneller); Parabolisierungstiefe "
                  f"{D ** 4 / (1024 * (d['N_eq'] * D) ** 3) * 1000:.1f} µm statt {l['asph_um']:.1f} µm.")
-    z.append(f"Kleinste große Achse (Bauteil) bei etwa {d['g_minmaj']:.0f}°: {d['dmaj_min']:.1f} mm "
-             f"(45°: {n['dmaj']:.1f} mm). Die Schattenbreite (kleine Achse) wächst dabei immer.")
+    if g_["form"] >= 0.5:
+        z.append(f"Kleinste große Achse (Bauteil) bei etwa {d['g_minmaj']:.0f}°: {d['dmaj_min']:.1f} mm "
+                 f"(45°: {n['dmaj']:.1f} mm). Die Schattenbreite (kleine Achse) wächst dabei immer.")
+    else:
+        pf = lr_punkt(D, f, winkel, dict(geo or {}, form=1.0))
+        z.append(f"Mit passend geformter Ellipse (Achsenverhältnis {pf['dmaj'] / pf['dmin']:.2f}) läge die Obstruktion "
+                 f"bei {pf['obs'] * 100:.2f} % statt {l['obs'] * 100:.2f} %.")
+    if D < 13.5 * ZOLL:
+        z.append(f"Hinweis: Bei Spiegeln unter etwa 14″ lohnt der Low-Rider kaum (hier {l['dh'] / 10:.1f} cm tiefer bei "
+                 f"{winkel:.0f}°); die Diagramme zeigen deshalb nur 14–22″.")
     z.append("Annahmen: gleicher seitlicher Fokusabstand, kein Fangspiegel-Versatz, keine Randausleuchtung, "
              "keine Abschattung des schrägen Strahls durch Tubus oder Okularauszug.")
     return "\n".join(z)
@@ -175,8 +200,11 @@ def _ansicht_fangspiegel(fig, D, f, winkel, geo):
     a2.set_xlabel("Einblickhöhe tiefer als beim 45°-Newton [mm]")
     a2.set_ylabel("Fangspiegel [mm]")
     a2.grid(alpha=.3)
-    ob = a2.secondary_yaxis("right", functions=(lambda y: y / D * 100, lambda q: q * D / 100))
-    ob.set_ylabel("Obstruktion [% von D]")
+    ob = a2.twinx()
+    ob.plot(dh, [p["obs"] * 100 for p in P], color="#2e7d32", lw=1.8, ls="-.", label="Obstruktion (flächengleich)")
+    ob.set_ylabel("Obstruktion [% von D]", color="#2e7d32")
+    ob.tick_params(axis="y", colors="#2e7d32")
+    ob.legend(loc="lower right", fontsize=8.5)
     wk = a2.secondary_xaxis("top", functions=(lambda x: np.interp(x, dh, gs), lambda a: np.interp(a, gs, dh)))
     wk.set_xlabel("Neigung des Strahls nach unten [°]")
     a2.set_title(f"Ø {D:.0f} mm, f/{f / D:.1f}, Okularauszug {_geo(geo)['buet']:.0f} mm, Bildfeld {_geo(geo)['bild']:.0f} mm",
@@ -228,7 +256,7 @@ def _ansicht_schar(fig, D, f, geo, gmax=30.0):
 
 
 def _ansicht_durchmesser(fig, D, f, D_max, geo, winkel_liste=(0.0, 15.0, 30.0)):
-    axs = fig.subplots(1, 4)
+    axs = fig.subplots(2, 2).ravel()
     N0 = f / D
     z0 = lr_punkt(D, f, 0.0, geo)["zf"]
     Ds = np.linspace(D, max(D_max, D * 1.05), 4)
@@ -261,7 +289,47 @@ def _ansicht_durchmesser(fig, D, f, D_max, geo, winkel_liste=(0.0, 15.0, 30.0)):
                  f"was kostet der größere Spiegel?", fontsize=11.5)
 
 
-ANSICHTEN = ["Fangspiegel", "Gleiche Einblickhöhe", "Größerer Spiegel"]
+def _ansicht_absenkung(fig, D, f, winkel, geo):
+    """Absenkung der Einblickhöhe in cm: über dem Winkel (verschiedene Ø) und über dem Ø (verschiedene f/D)."""
+    a1, a2 = fig.subplots(1, 2)
+    N = f / D
+    gs = np.linspace(0.0, 35.0, 71)
+    zolls = [14, 16, 18, 20, 22]
+    cm = plt_cmap(len(zolls))
+    for z, c in zip(zolls, cm):
+        Dx = z * ZOLL
+        y = [lr_punkt(Dx, N * Dx, g, geo)["dh"] / 10.0 for g in gs]
+        a1.plot(gs, y, color=c, lw=2.0, label=f"{z}″  (f = {N * Dx:.0f} mm)")
+        a1.plot([winkel], [lr_punkt(Dx, N * Dx, winkel, geo)["dh"] / 10.0], "o", color=c, ms=5)
+    a1.plot([winkel], [lr_punkt(D, f, winkel, geo)["dh"] / 10.0], "o", color="k", ms=9, mfc="none", mew=1.8)
+    a1.axvline(winkel, color="#999", lw=.8, ls=":")
+    a1.set_xlabel("Strahl nach unten δ [°]")
+    a1.set_ylabel("Einblick tiefer um [cm]")
+    a1.set_title(f"Absenkung der Einblickhöhe bei f/{N:.1f} (Kreis = dein Spiegel Ø {D:.0f} mm)", fontsize=10.5)
+    a1.grid(alpha=.3)
+    a1.legend(fontsize=8.5, title="Spiegel", loc="upper left")
+    ws = [10, 15, 20, 30]
+    cm2 = plt_cmap(len(ws), "plasma")
+    zz = np.linspace(13, 24, 23)
+    for w_, c in zip(ws, cm2):
+        y = [lr_punkt(zv * ZOLL, N * zv * ZOLL, w_, geo)["dh"] / 10.0 for zv in zz]
+        a2.plot(zz, y, color=c, lw=2.2, label=f"δ = {w_}°")
+    if 13 <= D / ZOLL <= 24:
+        a2.plot([D / ZOLL], [lr_punkt(D, f, winkel, geo)["dh"] / 10.0], "o", color="k", ms=9, mfc="none", mew=1.8)
+    a2.set_xlabel("Spiegeldurchmesser [Zoll]")
+    a2.set_ylabel("Einblick tiefer um [cm]")
+    a2.set_title("Absenkung über dem Durchmesser (f/D hat kaum Einfluss)", fontsize=10.5)
+    a2.grid(alpha=.3)
+    a2.legend(fontsize=8.5, loc="upper left")
+
+
+def plt_cmap(n, name="viridis"):
+    import matplotlib
+    cmap = matplotlib.colormaps[name]
+    return [cmap(v) for v in np.linspace(0.05, 0.85, n)]
+
+
+ANSICHTEN = ["Fangspiegel", "Absenkung (cm)", "Gleiche Einblickhöhe", "Größerer Spiegel"]
 
 
 def lowrider_zeichnen(fig, D, f, winkel, ansicht, geo=None, D_max=None):
@@ -269,8 +337,10 @@ def lowrider_zeichnen(fig, D, f, winkel, ansicht, geo=None, D_max=None):
     fig.clf()
     geo = _geo(geo)
     if ansicht == ANSICHTEN[1]:
-        _ansicht_schar(fig, D, f, geo)
+        _ansicht_absenkung(fig, D, f, winkel, geo)
     elif ansicht == ANSICHTEN[2]:
+        _ansicht_schar(fig, D, f, geo)
+    elif ansicht == ANSICHTEN[3]:
         _ansicht_durchmesser(fig, D, f, D_max if D_max else 20.0 * ZOLL, geo)
     else:
         _ansicht_fangspiegel(fig, D, f, winkel, geo)

@@ -1,9 +1,10 @@
 """
 Newton-Teleskop: Kontrast- und Schärfeverlust sphärischer Hauptspiegel  v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"
-  v9.0.0 (2026-11-08)
+  v8.4.0 (2026-11-08)
 ============================================================================================
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
-  v9.0.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py)
+  v8.5.0 (2026-11-12) NEU Tab Low-Rider (Bauen): Strahl am Fangspiegel um δ nach unten, Okularauszug tiefer; Fangspiegel (kleine/große Achse, Obstruktion) über der Absenkung der Einblickhöhe, Kurvenschar bei gleicher Einblickhöhe, Vergleich größerer Spiegel (Asphärik, Koma) (neues Modul kern_lowrider.py); Fangspiegel wahlweise Standard-Ellipse (1,41) oder passend geformt, Fangspiegeldicke (Randseite) in der Obstruktion; Ansicht Absenkung in cm
+  v8.4.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py); Blende-Tab jetzt in der Gruppe Bildqualität; Kennwerte ohne V½; Vergleich übernimmt Okularauszug, Tubus-Ø und Bildfeld aus dem Tab Fangspiegel.
   v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
   v8.2.0 (2026-11-08) Gitterrohr: maßstäbliche 3D-Ansicht (neues Modul ansicht3d.py; Seite, gedreht, Draufsicht; OAZ zwischen zwei Spinnenbeinen, Streulichtblende aus Fangspiegel-Rechner), Schalter in Web und Desktop
   v8.1.0 (2026-11-07) Gitterrohr: Eingabe "Spiegel unter Ring-Oberkante" (Spiegelversatz verkürzt h und Stangenlänge); Prüffälle 8" Zigzag und 14" TripleX
@@ -100,6 +101,7 @@ from kern_bau import (fangspiegel_rechner, fangspiegel_skizze, fangspiegel_text,
     fangspiegel_zeichnen, gitterrohr_auto, gitterrohr_freiraum, gitterrohr_stangen, gitterrohr_text,
     gitterrohr_zeichnen, pfeiltiefe, qvis_kurve_mit_fangspiegel)
 from ansicht3d import gitter3d_zeichnen
+from kern_lowrider import ANSICHTEN as LR_ANSICHTEN, FORMEN as LR_FORMEN, lowrider_text, lowrider_zeichnen
 from kern_zelle import MATERIALIEN, OPT, OPT_OHNE, zelle_rechner, zelle_text, zelle_zeichnen
 from kern_foucault import (foucault_kennzahlen, foucault_wellenfront, foucault_zonen,
     foucault_zonengrenzen)
@@ -269,7 +271,7 @@ class App(DiagrammMethoden, tk.Tk):
         # v7.7.0: Steckbrief (drei Fragen) sichtbar, übrige Karten unter "Details"
         self._karten_steck = [
             ("grp_flaeche",    [("rS_exakt", "rS_exakt"), ("rWb", "rWb"), ("rSag", "rSag")]),
-            ("grp_reichweite", [("rVkrit_exakt", "rVkrit_exakt"), ("rVhalb", "rVhalb")]),
+            ("grp_reichweite", [("rVkrit_exakt", "rVkrit_exakt")]),
             ("grp_qvis",       [("rQp30", "rQp30"), ("rQp60", "rQp60"),
                                 ("rQp100", "rQp100"), ("rQp150", "rQp150")]),
         ]
@@ -301,20 +303,21 @@ class App(DiagrammMethoden, tk.Tk):
             ("_tab_vmax_D",       "tab_vmax_D"),
             ("_tab_wahrnehmung",  "tab_wahrnehmung"),
             ("_tab_mtf",          "tab_mtf"),
+            ("_tab_blende",       "tab_blende"),
             ("_tab_vergleich",    "tab_vergleich"),
             ("_tab_foucault",     "tab_foucault"),
             ("_tab_fangspiegel",  "tab_fangspiegel"),
-            ("_tab_blende",       "tab_blende"),
             ("_tab_gitter",       "tab_gitter"),
             ("_tab_zelle",        "tab_zelle"),
+            ("_tab_lowrider",     "tab_lowrider"),
         ]
         self._tab_keys = [k for _, k in tab_attrs]
         # v7.1.0: Gruppen (oberste Reiter); Gruppen mit mehreren Diagrammen
         # bekommen ein eigenes Unter-Notebook.
         self._tab_gruppen = [
             ("grp_t_grund",     ["tab_grund", "tab_kennwerte", "tab_vmax"]),   # tab_vmax_D teilt sich den Tab (rechte Hälfte)
-            ("grp_t_bild",      ["tab_wahrnehmung", "tab_mtf", "tab_vergleich"]),
-            ("grp_t_bauen",     ["tab_foucault", "tab_fangspiegel", "tab_blende", "tab_gitter", "tab_zelle"]),
+            ("grp_t_bild",      ["tab_wahrnehmung", "tab_mtf", "tab_blende", "tab_vergleich"]),
+            ("grp_t_bauen",     ["tab_foucault", "tab_fangspiegel", "tab_gitter", "tab_zelle", "tab_lowrider"]),
         ]
         self._tab_nb = {}      # tab_key -> (Notebook, Frame)
         self._grp_nb = []      # pro Gruppe: (Gruppen-Frame, Unter-Notebook | None)
@@ -907,10 +910,6 @@ class App(DiagrammMethoden, tk.Tk):
                     _e.bind("<Return>", self._zelle_neu); _e.bind("<FocusOut>", self._zelle_neu)
                     tk.Label(zr, text=_hint, bg=BG, fg="#666", font=("Helvetica", 8)).pack(side="left", padx=(2, 4))
                 zr2 = tk.Frame(frm, bg=BG); zr2.pack(side="top", fill="x", padx=8, pady=(2, 0))
-                tk.Label(zr2, text="Material:", bg=BG, fg="#6a1b9a", font=("Helvetica", 9, "bold")).pack(side="left")
-                self._zl_mat = tk.StringVar(value=list(MATERIALIEN.keys())[0])
-                _cb = ttk.Combobox(zr2, textvariable=self._zl_mat, values=list(MATERIALIEN.keys()), state="readonly", width=26)
-                _cb.pack(side="left", padx=(4, 12)); _cb.bind("<<ComboboxSelected>>", self._zelle_neu)
                 self._zl_ref = tk.BooleanVar(value=True)
                 tk.Checkbutton(zr2, text="Brennweitenänderung abziehen (Refokus)", variable=self._zl_ref, bg=BG, fg="#6a1b9a",
                                activebackground=BG, selectcolor=BG2, font=("Helvetica", 9, "bold"),
@@ -921,6 +920,43 @@ class App(DiagrammMethoden, tk.Tk):
                 canvas = FigureCanvasTkAgg(fig, master=frm)
                 self._zl_text = tk.Text(frm, height=9, bg=BG, fg="#222", font=("Courier", 9), wrap="none", relief="flat")
                 self._zl_text.pack(side="bottom", fill="x", padx=8, pady=(0, 4))
+                canvas.get_tk_widget().pack(fill="both", expand=True)
+                setattr(self, attr, (fig, ax, canvas))
+
+            elif attr == "_tab_lowrider":
+                lr1 = tk.Frame(frm, bg=BG); lr1.pack(side="top", fill="x", padx=8, pady=(6, 0))
+                self._lr_an = tk.StringVar(value=LR_ANSICHTEN[0])
+                tk.Label(lr1, text="Ansicht:", bg=BG, fg="#6a1b9a", font=("Helvetica", 9, "bold")).pack(side="left")
+                for _a in LR_ANSICHTEN:
+                    tk.Radiobutton(lr1, text=_a, value=_a, variable=self._lr_an, bg=BG, fg="#6a1b9a",
+                                   activebackground=BG, selectcolor=BG2, font=("Helvetica", 9),
+                                   command=self._lowrider_neu).pack(side="left", padx=(6, 0))
+                self._lr_w = tk.StringVar(value="15")
+                self._lr_dm = tk.StringVar(value="0")
+                for _lbl, _var, _hint in (("Strahl nach unten δ", self._lr_w, "° (0–35)"),
+                                          ("bis Ø", self._lr_dm, "mm (0 = 1,43·D, nur Ansicht „Größerer Spiegel“)")):
+                    tk.Label(lr1, text=_lbl, bg=BG, fg="#6a1b9a", font=("Helvetica", 9, "bold")).pack(side="left", padx=(14, 3))
+                    _e = tk.Entry(lr1, textvariable=_var, width=6, font=("Helvetica", 9)); _e.pack(side="left")
+                    _e.bind("<Return>", self._lowrider_neu); _e.bind("<FocusOut>", self._lowrider_neu)
+                    tk.Label(lr1, text=_hint, bg=BG, fg="#666", font=("Helvetica", 8)).pack(side="left", padx=(2, 4))
+                lr2 = tk.Frame(frm, bg=BG); lr2.pack(side="top", fill="x", padx=8, pady=(2, 0))
+                self._lr_fo = tk.StringVar(value=LR_FORMEN[0])
+                tk.Label(lr2, text="Fangspiegel:", bg=BG, fg="#6a1b9a", font=("Helvetica", 9, "bold")).pack(side="left")
+                for _f in LR_FORMEN:
+                    tk.Radiobutton(lr2, text=_f, value=_f, variable=self._lr_fo, bg=BG, fg="#6a1b9a",
+                                   activebackground=BG, selectcolor=BG2, font=("Helvetica", 9),
+                                   command=self._lowrider_neu).pack(side="left", padx=(6, 0))
+                self._lr_di = tk.StringVar(value="10")
+                tk.Label(lr2, text="Dicke", bg=BG, fg="#6a1b9a", font=("Helvetica", 9, "bold")).pack(side="left", padx=(14, 3))
+                _e = tk.Entry(lr2, textvariable=self._lr_di, width=5, font=("Helvetica", 9)); _e.pack(side="left")
+                _e.bind("<Return>", self._lowrider_neu); _e.bind("<FocusOut>", self._lowrider_neu)
+                tk.Label(lr2, text="mm (Randseite, wirkt erst beim Kippen aus 45°)", bg=BG, fg="#666", font=("Helvetica", 8)).pack(side="left", padx=(2, 4))
+                fig = plt.figure(figsize=(11.0, 5.0), dpi=96)
+                fig.patch.set_facecolor(BG)
+                ax = fig.add_subplot(1, 1, 1)
+                canvas = FigureCanvasTkAgg(fig, master=frm)
+                self._lr_text = tk.Text(frm, height=14, bg=BG, fg="#222", font=("Courier", 9), wrap="none", relief="flat")
+                self._lr_text.pack(side="bottom", fill="x", padx=8, pady=(0, 4))
                 canvas.get_tk_widget().pack(fill="both", expand=True)
                 setattr(self, attr, (fig, ax, canvas))
 
@@ -1211,6 +1247,8 @@ class App(DiagrammMethoden, tk.Tk):
             self._diagramm_gitter(D, f)
         elif tab_key == "tab_zelle":
             self._diagramm_zelle(D, lam)
+        elif tab_key == "tab_lowrider":
+            self._diagramm_lowrider(D, f)
         elif tab_key == "tab_vergleich":
             self._diagramm_vergleich(lam)
 
@@ -1363,8 +1401,38 @@ class App(DiagrammMethoden, tk.Tk):
             import traceback
             self._zeige_fehler(traceback.format_exc())
 
+    def _lowrider_neu(self, *_):
+        res = getattr(self, "_last_params", None)
+        if res is None:
+            return
+        try:
+            self._diagramm_fuer_tab("tab_lowrider", res)
+        except Exception:
+            import traceback
+            self._zeige_fehler(traceback.format_exc())
+
+    def _diagramm_lowrider(self, D, f):
+        """Low-Rider: Fangspiegel, gleiche Einblickhöhe, größerer Spiegel (neu in v8.5.0)."""
+        fig, ax, canvas = self._tab_lowrider
+        def _zahl(v, std):
+            try:
+                return float(v.get().replace(",", ".").strip())
+            except ValueError:
+                return std
+        w = min(max(_zahl(self._lr_w, 15.0), 0.0), 35.0)
+        dm = _zahl(self._lr_dm, 0.0)
+        dm = dm if dm > D else D * 1.43
+        e = self._fs_eingaben()
+        geo = dict(buet=e["buet"], tubus=e["tubus"], bild=e["bild"], fe=e["fe"], afov=e["afov"],
+                   form=0.0 if self._lr_fo.get() == LR_FORMEN[0] else 1.0,
+                   dicke=min(max(_zahl(self._lr_di, 10.0), 0.0), 40.0))
+        lowrider_zeichnen(fig, float(D), float(f), w, self._lr_an.get(), geo, dm)
+        self._lr_text.config(state="normal"); self._lr_text.delete("1.0", "end")
+        self._lr_text.insert("1.0", lowrider_text(float(D), float(f), w, geo)); self._lr_text.config(state="disabled")
+        canvas.draw_idle()
+
     def _diagramm_zelle(self, D, lam):
-        """Spiegelzelle: Auflagepunkte 3/6/9/18, Durchbiegung, Vergleich (neu in v9.0.0)."""
+        """Spiegelzelle: Auflagepunkte 3/6/9/18, Durchbiegung, Vergleich (neu in v8.4.0)."""
         fig, ax, canvas = self._tab_zelle
         def _zahl(v, std):
             try:
@@ -1374,7 +1442,7 @@ class App(DiagrammMethoden, tk.Tk):
                 return std
         n = int(self._zl_n.get()); t = _zahl(self._zl_t, 25.0)
         t = t if t > 0 else 25.0
-        mat = self._zl_mat.get(); ref = bool(self._zl_ref.get())
+        mat = "Borosilikat (Pyrex/Duran)"; ref = bool(self._zl_ref.get())
         p = None
         if n in (3, 6):
             rr = _zahl(self._zl_r, 0.0)
@@ -1554,9 +1622,8 @@ class App(DiagrammMethoden, tk.Tk):
             text=f"{r['Deff_k']:.1f} → {Deff_k_slide:.1f} mm")
         rv2["rVkrit_naeh"].config(
             text=f"{Vk_naeh:.0f}×  →  {Vk_naeh_s:.0f}×"
-                 f"  |  V½ exakt: {Vk_halb:.0f}×",
+                 ,
             fg=col_naeh)
-        rv2["rVhalb"].config(text=f"{Vk_halb:.0f}×")
         rv2["rVkrit_blur"].config(
             text=(f"{Vk_blur:.0f}×  (α_blur={D**3/(128*f**2)/f*206265:.1f}\"  — unabh. von S)"
                   if Vk_blur > 1 else "< 1×  — Blur dominiert immer"),
@@ -1604,6 +1671,7 @@ class App(DiagrammMethoden, tk.Tk):
             ("_tab_fangspiegel", "tab_fangspiegel"),
             ("_tab_gitter",      "tab_gitter"),
             ("_tab_zelle",       "tab_zelle"),
+            ("_tab_lowrider",    "tab_lowrider"),
             ("_tab_vergleich",   "tab_vergleich"),
         ]]
         startup = not getattr(self, "_first_draw_done", False)

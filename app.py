@@ -5,7 +5,7 @@ Streamlit-Version v8.4.0 (2026-11-08)
 Entspricht newton_spiegel_rechner.py v8.4.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
-  v8.5.0 (2026-11-12) NEU Tab Low-Rider (Bauen): Strahl am Fangspiegel um δ nach unten, Okularauszug tiefer; Fangspiegel (kleine/große Achse, Obstruktion) über der Absenkung der Einblickhöhe, Kurvenschar bei gleicher Einblickhöhe, Vergleich größerer Spiegel (Asphärik, Koma) (neues Modul kern_lowrider.py)
+  v8.5.0 (2026-11-12) NEU Tab Low-Rider (Bauen): Strahl am Fangspiegel um δ nach unten, Okularauszug tiefer; Fangspiegel (kleine/große Achse, Obstruktion) über der Absenkung der Einblickhöhe, Kurvenschar bei gleicher Einblickhöhe, Vergleich größerer Spiegel (Asphärik, Koma) (neues Modul kern_lowrider.py); Fangspiegel wahlweise Standard-Ellipse (1,41) oder passend geformt, Fangspiegeldicke (Randseite) in der Obstruktion; Ansicht Absenkung in cm
   v8.4.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py); Blende-Tab jetzt in der Gruppe Bildqualität; Kennwerte ohne V½; Vergleich übernimmt Okularauszug, Tubus-Ø und Bildfeld aus dem Tab Fangspiegel.
   v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"; Web: Wahrnehmungs-Diagramm größer gezeichnet (12×6,6 Zoll) und alle Diagramme mit 130 dpi, dadurch feiner
   v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
@@ -60,7 +60,7 @@ from kern_bau import (fangspiegel_rechner, fangspiegel_skizze, fangspiegel_text,
     fangspiegel_zeichnen, gitterrohr_auto, gitterrohr_freiraum, gitterrohr_stangen, gitterrohr_text,
     gitterrohr_zeichnen, pfeiltiefe, tubus_aus_okular)
 from ansicht3d import gitter3d_zeichnen
-from kern_lowrider import ANSICHTEN as LR_ANSICHTEN, lowrider_text, lowrider_zeichnen
+from kern_lowrider import ANSICHTEN as LR_ANSICHTEN, FORMEN as LR_FORMEN, lowrider_text, lowrider_zeichnen
 from kern_zelle import MATERIALIEN, OPT, OPT_OHNE, zelle_rechner, zelle_text, zelle_zeichnen
 from kern_foucault import (foucault_kennzahlen, foucault_wellenfront, foucault_zonen,
     foucault_zonengrenzen)
@@ -917,13 +917,20 @@ def main():
         _lw = lc2.slider("Strahl nach unten δ [°]", 0, 35, 15, 1, key="lr_w")
         _lDm = lc3.number_input("bis Ø [mm]", min_value=int(D) + 10, max_value=1500,
                                 value=int(max(round(D * 1.43 / 10) * 10, D + 10)), step=10, key="lr_dmax",
-                                disabled=(_lan != LR_ANSICHTEN[2]))
-        _lgeo = dict(buet=_lb, tubus=_lt, bild=_lbi, fe=_lfe, afov=_laf)
+                                disabled=(_lan != LR_ANSICHTEN[3]))
+        lc4, lc5 = st.columns([3, 1.4])
+        _lfo = lc4.radio("Fangspiegel", LR_FORMEN, horizontal=True, key="lr_form",
+                         help="Im Handel gibt es nur Ellipsen mit Achsenverhältnis 1,41 (für 45°). Beim Low-Rider "
+                              "steht der Spiegel flacher, eine passend geformte Ellipse wäre runder (Sonderanfertigung).")
+        _ldi = lc5.number_input("Fangspiegeldicke [mm]", min_value=0, max_value=40, value=10, step=1, key="lr_dicke",
+                                help="Länge der Randseite. Standard-Spiegel sind bei 45° gebohrt: Die Randseite wirft erst beim Kippen aus 45° einen Schatten (t·sin(δ/2)). Bei passend gebohrter Ellipse entfällt er.")
+        _lgeo = dict(buet=_lb, tubus=_lt, bild=_lbi, fe=_lfe, afov=_laf,
+                     form=0.0 if _lfo == LR_FORMEN[0] else 1.0, dicke=float(_ldi))
         def _plot_lr():
             fig = plt.figure(figsize=(12, 5.6)); fig.patch.set_facecolor(BG)
             lowrider_zeichnen(fig, float(D), float(f), float(_lw), _lan, _lgeo, float(_lDm))
             return fig
-        _show_cached("fig_lowrider", _plot_lr, (D, f, _lw, _lan, _lDm, _lb, _lt, _lbi, _lfe, _laf))
+        _show_cached("fig_lowrider", _plot_lr, (D, f, _lw, _lan, _lDm, _lb, _lt, _lbi, _lfe, _laf, _lfo, _ldi))
         st.code(lowrider_text(float(D), float(f), float(_lw), _lgeo), language=None)
 
     if _nav == "vergleich":
