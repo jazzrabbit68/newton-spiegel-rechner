@@ -127,7 +127,8 @@ def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
                         S: float = 1.0, V: float = 150.0,
                         lam_nm: float = 550.0, hut_mm: float = 0.0,
                         fe_mm: float = 30.0, afov_deg: float = 70.0,
-                        oaz_d_mm: float = 50.0, oaz_l_mm: float = 80.0) -> dict:
+                        oaz_d_mm: float = 50.0, oaz_l_mm: float = 80.0,
+                        iris_mm: float = 0.0, iris_reserve_mm: float = 1.0) -> dict:
     """Fangspiegel-Rechner (neu in v6.12.0).
 
     Minimaler Fangspiegel-Durchmesser (Strahlkegel-Geometrie, identisch zur
@@ -154,6 +155,15 @@ def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
         und abgewickelte Bogenlänge (Zuschnitt).
         B_ok = max(fe·AFOV/57,3; B)
     R_hut = hut_mm/2 (0 = Tubusradius, bei Tubus 0 also der Innen-Ø aus dem Übersichtsokular).
+
+    Irisblende (v8.6.0, iris_mm): Zusätzlicher Blendenring auf der OAZ-Achse zwischen Hutring-Innenkante und dem
+    Strahlengang des Hauptspiegels (Hutring-Ø bleibt fest).  iris_mm = 0: keine Iris; 1: automatische Lage
+    (so weit wie zulässig vom Okular weg, das macht die Hutblende am kleinsten); >= 10: fester Abstand u [mm]
+    von der Feldblende.  Kleinste Öffnung, die das Feld noch zu 100 % durchlässt (Hauptstrahl zur Fangspiegelmitte
+    plus Strahlkegel, Reserve iris_reserve_mm je Seite):
+        r_iris(u) = r_f·(1 − u/A) + u·D/(2f) + Reserve
+    Die steilste Sichtlinie läuft dann über den kleineren Rand aus OAZ-Rohr und Iris.
+    Zulässige Lage: u_min = A − R_hut (Hutring-Innenkante) bis u_max = kleineres von A − d/2 − (r_iris + 5)·D/(2f) − 5 mm (Strahlengang) und A − 0,71·d − 5 mm (vor der Fangspiegel-Ellipse).
 
     Ausleuchtung (v7.7.1): rand = Helligkeit am Rand der Okular-Feldblende mit d_pass, feld100/feld75 =
     Felddurchmesser mit 100 %/75 %, d_rand90/d_rand75 = Fangspiegel für 90 %/75 % am Rand
@@ -195,6 +205,35 @@ def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
 
     m_oaz = (r_t + r_f) / max(oaz_l_mm, 1.0)
     m_keg = 0.5 * D_mm / f_mm
+    iris = None
+    if iris_mm and iris_mm > 0:
+        res = max(float(iris_reserve_mm), 0.0)
+        r_iris = lambda u: r_f * (1.0 - u / A) + u * m_keg + res
+        u_min = max(A - R_h, 5.0)
+        # größtes u, bei dem der Iris-Ring (Öffnung + 5 mm Halterung) den Strahlengang noch nicht berührt
+        u_max = u_min
+        for k in range(0, int(A) + 1):
+            u = float(k)
+            if u < u_min:
+                continue
+            if u <= min(A - dp / 2.0 - (r_iris(u) + 5.0) * m_keg - 5.0, A - dp * 0.7071 - 5.0):
+                u_max = u
+        u_ir = u_max if iris_mm < 10 else float(iris_mm)
+        warn = ""
+        if u_ir > u_max:
+            u_ir, warn = u_max, "Abstand zu groß (Strahlengang): auf Maximum begrenzt"
+        elif u_ir < u_min:
+            u_ir, warn = u_min, "Abstand zu klein (Hutring-Innenkante): auf Minimum begrenzt"
+        r_ir = r_iris(u_ir)
+        m_iris = (r_ir + r_f) / u_ir
+        iris = dict(u=u_ir, d=2.0 * r_ir, u_min=u_min, u_max=u_max, m=m_iris, warn=warn,
+                    wirksam=m_iris < m_oaz, m_oaz_rohr=m_oaz)
+        m_oaz = min(m_oaz, m_iris)       # engste Sichtlinie bestimmt die Hutblende
+        m_ohne = (r_t + r_f) / max(oaz_l_mm, 1.0)
+        v_ohne, _ = _hit(m_ohne, -r_f)
+        v_ohne = max(v_ohne, _hit(m_keg, r_f)[0])
+        iris["d_blende_ohne"] = 2.0 * v_ohne
+        iris["d_bogen_ohne"] = 2.0 * R_h * math.asin(min(v_ohne / R_h, 1.0))
     v_geo, u_geo = _hit(m_oaz, -r_f)
     v_keg, u_keg = _hit(m_keg, r_f)
     v_bl = max(v_geo, v_keg)
@@ -208,7 +247,7 @@ def fangspiegel_rechner(D_mm: float, f_mm: float, buet_mm: float = 50.0,
     return dict(A=A, d_min=d, d_pass=dp, eps=eps, flaeche=eps**2 * 100.0,
                 D_kontrast=D_mm - dp, Q0=q0, Q=q1, Q_verlust=q0 - q1,
                 x_blende=x_bl, B_ok=b_ok, d_geo=d_geo, d_kegel=d_kegel, w_oaz=w_oaz, d_bogen=d_bogen,
-                R_hut=R_h, d_blende=d_bl, oaz_r=r_t, oaz_l=float(oaz_l_mm),
+                R_hut=R_h, d_blende=d_bl, oaz_r=r_t, oaz_l=float(oaz_l_mm), iris=iris,
                 m_oaz=m_oaz, m_keg=m_keg, hit=hit, hit_geo=(u_geo, v_geo),
                 tub=tub,
                 rand=fangspiegel_ausleuchtung(b_ok / 2.0, D_mm, f_mm, A, dp),
@@ -419,6 +458,24 @@ def fangspiegel_zeichnen(ax, D, f, lam, S_u, S_txt, r, V):
     ax.set_ylim(max(0.0, lo - 0.05), 1.03)
 
 
+def _iris_text(r):
+    ir = r.get("iris")
+    if not ir:
+        return ""
+    z = (f"\nIrisblende am inneren Ende des Blendenrohrs: Abstand von der Feldblende {ir['u']:.0f} mm "
+         f"(zulässig {ir['u_min']:.0f}–{ir['u_max']:.0f} mm: von der Hutring-Innenkante bis zum Strahlengang), "
+         f"Öffnung Ø {ir['d']:.1f} mm (Feld 100 %)")
+    if ir["warn"]:
+        z += f" [{ir['warn']}]"
+    if ir["wirksam"]:
+        z += (f"\n   → Hutblende mit Iris: Sehne {r['d_blende']:.0f} mm, Zuschnitt {r['d_bogen_pass']:.0f} mm "
+              f"(ohne Iris {ir['d_blende_ohne']:.0f} / {ir['d_bogen_ohne']:.0f} mm)")
+    else:
+        z += (f"\n   Die Iris ist weiter als das OAZ-Rohr (Ø {2 * r['oaz_r']:.0f} mm, Länge {r['oaz_l']:.0f} mm) "
+              f"und ändert die Hutblende nicht; Abstand vergrößern oder Rohr verlängern.")
+    return z
+
+
 def fangspiegel_text(D, f, S_u, S_txt, r, V):
     return (
         f"D={D:.0f} mm  f={f:.0f} mm (f/{f/D:.1f})   Abstand Fangspiegel–Fokus A = {r['A']:.0f} mm\n"
@@ -437,6 +494,7 @@ def fangspiegel_text(D, f, S_u, S_txt, r, V):
         f"Strahlkegel allein {r['d_kegel']:.0f} mm\n"
         f"   → gebogene Blende: Breite (Sehne) mind. {r['d_blende']:.0f} mm, "
         f"Zuschnitt (Bogenlänge) {r['d_bogen_pass']:.0f} mm"
+        + _iris_text(r)
         + (f"\nTubus aus Übersichtsokular ({r['tub']['B']:.0f} mm Feldblende, wahres Feld {r['tub']['feld_deg']:.2f}°): "
            f"Innen-Ø bei voller Ausleuchtung {r['tub']['d_innen']:.0f} mm (Gittertubus, Wand 0 mm; "
            f"Eingabe Tubus-Ø = 0 verwendet diesen Wert)"
@@ -479,6 +537,13 @@ def fangspiegel_skizze(ax, D, f, r):
     for s in (-1, 1):
         ax.plot([u0, L], [s * rt, s * rt], color="#444", lw=2)
     ax.plot([L, L], [rt, rt + 0.0], color="#444")
+    ir = r.get("iris")
+    if ir:        # Irisblende: zwei Lamellen mit Öffnung Ø ir["d"] im Abstand u
+        ri, ui = ir["d"] / 2.0, ir["u"]
+        for s in (-1, 1):
+            ax.plot([ui, ui], [s * ri, s * (ri + 0.12 * R)], color="#0277bd", lw=3)
+        ax.text(ui, ri + 0.14 * R, f"Iris Ø {ir['d']:.0f}\nu = {ui:.0f}", ha="center",
+                va="bottom", fontsize=7, color="#0277bd")
     ax.plot([0, 0], [-rf, rf], color="#d84315", lw=3)
     ax.text(0, rf + 0.04 * R, "Feldblende", ha="center", va="bottom", fontsize=7,
             color="#d84315")
@@ -493,6 +558,8 @@ def fangspiegel_skizze(ax, D, f, r):
     # steilste Sichtlinie durch das OAZ-Rohr
     m = r["m_oaz"]
     ug = r["hit_geo"][0]
+    if ir and ir["wirksam"]:
+        ug = r["hit"][0]
     for s in (-1, 1):
         ax.plot([0, ug], [-s * rf, -s * rf + s * m * ug], color="#c62828", lw=1.4)
     # Maße

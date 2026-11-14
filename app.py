@@ -810,19 +810,22 @@ def main():
                                   value=50, step=1, key="fs_oazd")
         oazl_v = gc5.number_input("OAZ-Rohr Länge [mm]", min_value=1,
                                   value=80, step=5, key="fs_oazl")
+        iris_v = st.number_input("Irisblende im Blendenrohr: Abstand von der Feldblende [mm] "
+                                 "(0 = ohne, 1 = automatisch, sonst fester Abstand)",
+                                 min_value=0, value=0, step=10, key="fs_iris")
         if S_slide is not None:
             S_fs, S_fs_txt = S_slide, "Schieber"
         else:
             _, _, _Wb_s, _, _ = _wellenfronten(D, f, lam)
             S_fs, S_fs_txt = _strehl_exakt(_Wb_s), "Sphäre"
         r_fs = fangspiegel_rechner(D, f, buet_v, tubus_v, bild_v, S_fs, V_fs, lam,
-                                   hut_v, fe_v, afov_v, oazd_v, oazl_v)
+                                   hut_v, fe_v, afov_v, oazd_v, oazl_v, iris_v)
         _fs_zeilen = [z for z in fangspiegel_text(D, f, S_fs, S_fs_txt, r_fs, V_fs).split("\n")
                       if not z.startswith(("Q_vis bei", "Effektiver Kontrast"))]    # v7.2.6: schlanker
         st.markdown("  \n".join(_fs_zeilen))
         _show_cached("fig_fangspiegel",
                      lambda: plot_fangspiegel(D, f, lam, S_fs, S_fs_txt, r_fs, V_fs),
-                     (D, f, lam, S_fs, buet_v, tubus_v, bild_v, V_fs, hut_v, fe_v, afov_v, oazd_v, oazl_v))
+                     (D, f, lam, S_fs, buet_v, tubus_v, bild_v, V_fs, hut_v, fe_v, afov_v, oazd_v, oazl_v, iris_v))
 
     if _nav == "gitter":
         # v7.8.0: Stangenlänge eines Gitterrohrs
