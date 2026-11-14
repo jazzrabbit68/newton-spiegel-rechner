@@ -5,7 +5,7 @@ Streamlit-Version v8.4.0 (2026-11-08)
 Entspricht newton_spiegel_rechner.py v8.4.0
 
 Änderungshistorie (Kurzfassung, jüngste zuerst; Einzelheiten in CHANGELOG_vollstaendig.txt und in der Doku):
-  v8.5.0 (2026-11-12) NEU Tab Low-Rider (Bauen): Strahl am Fangspiegel um δ nach unten, Okularauszug tiefer; Fangspiegel (kleine/große Achse, Obstruktion) über der Absenkung der Einblickhöhe, Kurvenschar bei gleicher Einblickhöhe, Vergleich größerer Spiegel (Asphärik, Koma) (neues Modul kern_lowrider.py); Fangspiegel wahlweise Standard-Ellipse (1,41) oder passend geformt, Fangspiegeldicke (Randseite) in der Obstruktion; Ansicht Absenkung in cm
+  v8.5.0 (2026-11-12) NEU Tab Low-Rider (Bauen): Strahl am Fangspiegel um δ nach unten, Okularauszug tiefer; Fangspiegel (kleine/große Achse, Obstruktion) über der Absenkung der Einblickhöhe, Kurvenschar bei gleicher Einblickhöhe, Vergleich größerer Spiegel (Asphärik, Koma) (neues Modul kern_lowrider.py); Fangspiegel wahlweise Standard-Ellipse (1,41) oder passend geformt, Fangspiegeldicke (Randseite) in der Obstruktion; Absenkung bezogen auf das Auge (L hinter der Brennebene) statt nur auf die Brennebene; Low-Rider-Tab auf zwei Ansichten gekürzt (Absenkung mit Skizze, größerer Spiegel)
   v8.4.0 (2026-11-08) NEU Spiegelzelle: Auflagepunkte 3/6/9/18 (Dreieck, Wippen, Dreiecke, Wippen mit Dreiecken); optimale Lage, Radien, Wippen-/Dreieckslängen aus Dünnplatten-Rechnung (Eigengewicht im Zenit), Durchbiegungskarte, RMS/Strehl, Variantenvergleich (neues Modul kern_zelle.py); Blende-Tab jetzt in der Gruppe Bildqualität; Kennwerte ohne V½; Vergleich übernimmt Okularauszug, Tubus-Ø und Bildfeld aus dem Tab Fangspiegel.
   v8.3.0 (2026-11-08) Wahrnehmung: Näherung Q̃ immer eingezeichnet (Abweichungsfläche nur photopisch), Objektauswahl reduziert auf Mond / Heller Planet / DSO (hell) / Aus / Frei (volle Liste bleibt bei Max. Vergrößerung und Blende); Kennwerte: "Wie gut ist der Spiegel? · Wie weit trägt er?"; Web: Wahrnehmungs-Diagramm größer gezeichnet (12×6,6 Zoll) und alle Diagramme mit 130 dpi, dadurch feiner
   v8.2.1 (2026-11-08) Wahrnehmung: Näherung Q̃ wird bis zur Vergrößerung gezeigt, bis zu der die Netzhautleuchtdichte photopisch bleibt (statt ganz ausgeblendet); bei dunklen Objekten photopische Referenzkurven (exakt + Q̃)
@@ -917,21 +917,23 @@ def main():
         _lw = lc2.slider("Strahl nach unten δ [°]", 0, 35, 15, 1, key="lr_w")
         _lDm = lc3.number_input("bis Ø [mm]", min_value=int(D) + 10, max_value=1500,
                                 value=int(max(round(D * 1.43 / 10) * 10, D + 10)), step=10, key="lr_dmax",
-                                disabled=(_lan != LR_ANSICHTEN[3]))
-        lc4, lc5 = st.columns([3, 1.4])
+                                disabled=(_lan != LR_ANSICHTEN[1]))
+        lc4, lc5, lc6 = st.columns([3, 1.4, 1.6])
         _lfo = lc4.radio("Fangspiegel", LR_FORMEN, horizontal=True, key="lr_form",
                          help="Im Handel gibt es nur Ellipsen mit Achsenverhältnis 1,41 (für 45°). Beim Low-Rider "
                               "steht der Spiegel flacher, eine passend geformte Ellipse wäre runder (Sonderanfertigung).")
         _ldi = lc5.number_input("Fangspiegeldicke [mm]", min_value=0, max_value=40, value=10, step=1, key="lr_dicke",
                                 help="Länge der Randseite. Standard-Spiegel sind bei 45° gebohrt: Die Randseite wirft erst beim Kippen aus 45° einen Schatten (t·sin(δ/2)). Bei passend gebohrter Ellipse entfällt er.")
+        _lau = lc6.number_input("Auge hinter Brennebene [mm]", min_value=0, max_value=300, value=80, step=10, key="lr_auge",
+                                help="Okularlänge plus Augenabstand: Das Auge sitzt entlang des schrägen Strahls noch tiefer als die Brennebene.")
         _lgeo = dict(buet=_lb, tubus=_lt, bild=_lbi, fe=_lfe, afov=_laf,
-                     form=0.0 if _lfo == LR_FORMEN[0] else 1.0, dicke=float(_ldi))
+                     form=0.0 if _lfo == LR_FORMEN[0] else 1.0, dicke=float(_ldi), auge=float(_lau))
         def _plot_lr():
             fig = plt.figure(figsize=(12, 5.6)); fig.patch.set_facecolor(BG)
             lowrider_zeichnen(fig, float(D), float(f), float(_lw), _lan, _lgeo, float(_lDm))
             return fig
-        _show_cached("fig_lowrider", _plot_lr, (D, f, _lw, _lan, _lDm, _lb, _lt, _lbi, _lfe, _laf, _lfo, _ldi))
-        st.code(lowrider_text(float(D), float(f), float(_lw), _lgeo), language=None)
+        _show_cached("fig_lowrider", _plot_lr, (D, f, _lw, _lan, _lDm, _lb, _lt, _lbi, _lfe, _laf, _lfo, _ldi, _lau))
+        st.code(lowrider_text(float(D), float(f), float(_lw), _lgeo, _lan, float(_lDm)), language=None)
 
     if _nav == "vergleich":
         # v7.2.1: Spiegel 1 = Hauptspiegel (Seitenleiste, S = Schieberwert), f/D vom Hauptspiegel;
